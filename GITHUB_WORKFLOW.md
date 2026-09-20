@@ -26,7 +26,7 @@ git switch -c codex/private-rooms
 # 코드 수정 후
 npm run typecheck
 git status
-git add App.tsx
+git add apps/mobile/src/screens/HomeScreen.tsx
 # 실제 변경한 파일만 추가하거나 VS Code 소스 제어에서 스테이징
 git commit -m "feat: add private room screen"
 git push -u origin codex/private-rooms

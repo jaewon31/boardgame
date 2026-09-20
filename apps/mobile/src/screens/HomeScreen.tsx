@@ -1,9 +1,10 @@
+import type { GameId } from '@boardgame/shared';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-export default function App() {
-  const [game, setGame] = useState<'holdem' | 'seotda'>('holdem');
+export default function HomeScreen() {
+  const [game, setGame] = useState<GameId>('holdem');
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
