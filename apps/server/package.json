@@ -10,6 +10,10 @@
     "test": "node --test test/*.test.ts"
   },
   "dependencies": {
-    "@boardgame/shared": "*"
+    "@boardgame/shared": "*",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }
