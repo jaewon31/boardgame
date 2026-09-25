@@ -10,8 +10,9 @@ interface Props {
   connected: boolean;
   error: string | null;
   onLeave: () => void;
+  onStart: () => void;
 }
-export function LobbyScreen({ room, playerId, connected, error, onLeave }: Props) {
+export function LobbyScreen({ room, playerId, connected, error, onLeave, onStart }: Props) {
   const insets = useSafeAreaInsets();
   const [shareError, setShareError] = useState<string | null>(null);
   async function share() {
@@ -40,7 +41,8 @@ export function LobbyScreen({ room, playerId, connected, error, onLeave }: Props
           {room.hostId === player.id && <Text style={styles.host}>방장</Text>}
         </View>
       ))}
-      <View style={styles.note}><Text style={styles.noteText}>지금은 친구들과 모이는 대기실까지 이용할 수 있어요. 카드 배분과 게임 시작은 다음 업데이트에서 추가됩니다.</Text></View>
+      <View style={styles.note}><Text style={styles.noteText}>{room.game === 'holdem' ? '시작 칩 1,000 · 블라인드 10/20 · 차례당 30초. 2명 이상 접속하면 방장이 시작할 수 있어요.' : '섯다 게임은 준비 중이에요.'}</Text></View>
+      {room.game === 'holdem' && room.hostId === playerId && <ActionButton title="홀덤 시작" onPress={onStart} disabled={!connected || room.players.filter(p => p.connected).length < 2} />}
       <ActionButton title="방 나가기" onPress={onLeave} secondary />
     </ScrollView>
   );

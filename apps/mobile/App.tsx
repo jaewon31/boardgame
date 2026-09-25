@@ -1,3 +1,4 @@
+import { GameScreen } from './src/screens/GameScreen';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useRoom } from './src/hooks/useRoom';
@@ -8,7 +9,7 @@ function Screens() {
   const room = useRoom();
   return <>
     <StatusBar style="light" />
-    {room.room ? <LobbyScreen room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} />
+    {room.room?.holdem ? <GameScreen room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onStart={room.startHand} onReset={room.resetChips} onAct={room.act} /> : room.room ? <LobbyScreen room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onStart={room.startHand} />
       : <HomeScreen onEnter={room.enter} busy={room.status === 'connecting'} error={room.error} />}
   </>;
 }

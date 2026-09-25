@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { EntryRequest } from '@boardgame/shared';
+import type { EntryRequest, PokerAction } from '@boardgame/shared';
 import { RoomClient, type RoomState } from '../services/RoomClient';
 import { getServerUrl } from '../services/serverUrl';
 
@@ -14,6 +14,9 @@ export function useRoom() {
   return {
     ...state,
     enter: (request: EntryRequest) => client.current?.enter(request),
+    startHand: () => client.current?.startHand(),
+    resetChips: () => client.current?.resetChips(),
+    act: (action: PokerAction, amount?: number) => client.current?.act(action, amount),
     leave: () => client.current?.leave(),
   };
 }

@@ -65,7 +65,7 @@ export default function HomeScreen({ onEnter, busy, error }: Props) {
         {(validation || error) && <Text accessibilityRole="alert" style={styles.error}>{validation || error}</Text>}
         <ActionButton title={mode === 'create' ? '우리 방 만들기' : '친구 방 입장하기'} onPress={submit} busy={busy} />
         {busy && <Text style={styles.hint}>방에 연결하고 있어요…</Text>}
-        <Text style={styles.footer}>현재 대기실 입장을 테스트할 수 있어요.{ '\n' }카드 게임은 다음 업데이트에서 만나요.</Text>
+        <Text style={styles.footer}>친구 2~6명이 모이면 홀덤을 시작할 수 있어요.{ '\n' }섯다는 준비 중이에요.</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );

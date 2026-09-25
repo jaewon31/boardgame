@@ -8,6 +8,7 @@ import { createAppServer } from '../src/http.ts';
 import { attachLobby } from '../src/lobby.ts';
 
 type Joined = Extract<ServerMessage, { type: 'joined' }>;
+type RoomMessage = Extract<ServerMessage, { type: 'room' }>;
 
 class Peer {
   socket: WebSocket;
@@ -34,6 +35,60 @@ class Peer {
     return await this.next('joined') as Joined;
   }
 }
+
+test('real sockets enforce game ownership, private cards, stale actions, resume, next hand and reset', async t => {
+  const app = await setup(t);
+  const a = await app.connect(), b = await app.connect();
+  const first = await a.create();
+  b.send({ type: 'join', code: first.room.code, nickname: '친구' });
+  const second = await b.next('joined') as Joined;
+  b.send({ type: 'startHand', previousHandId: null });
+  assert.equal((await b.next('error') as Extract<ServerMessage,{type:'error'}>).recoverable,true);
+  a.send({ type: 'startHand', previousHandId: null });
+  const av = (await a.next('room',m=>m.type==='room' && !!m.room.holdem) as RoomMessage).room.holdem!;
+  const bv = (await b.next('room',m=>m.type==='room' && !!m.room.holdem) as RoomMessage).room.holdem!;
+  assert.equal(av.players[1].cards,null); assert.equal(bv.players[0].cards,null);
+  assert.equal(av.players[0].cards?.length,2); assert.equal('deck' in av,false);
+  b.send({type:'act',handId:av.id,revision:0,action:'fold'});
+  await b.next('error');
+  const c = await app.connect();
+  c.send({type:'join',code:first.room.code,nickname:'늦은친구'});
+  await c.next('error');
+  b.socket.terminate();
+  await a.next('room',m=>m.type==='room' && m.room.players[1]?.connected === false);
+  const resumed=await app.connect();
+  resumed.send({type:'resume',code:first.room.code,token:second.token});
+  const restored=await resumed.next('joined') as Joined;
+  assert.deepEqual(restored.room.holdem?.players[1].cards,bv.players[1].cards);
+  a.send({type:'act',handId:av.id,revision:0,action:'call'});
+  const next=(await resumed.next('room',m=>m.type==='room' && m.room.holdem?.revision===1) as RoomMessage).room.holdem!;
+  a.send({type:'act',handId:av.id,revision:0,action:'fold'});
+  await a.next('error');
+  resumed.send({type:'act',handId:av.id,revision:next.revision,action:'fold'});
+  const end=(await a.next('room',m=>m.type==='room' && m.room.holdem?.street==='complete') as RoomMessage).room.holdem!;
+  assert.equal(end.players.reduce((sum,p)=>sum+p.stack,0),2000);
+  a.send({type:'startHand',previousHandId:end.id});
+  const secondHand=(await a.next('room',m=>m.type==='room' && m.room.holdem?.number===2) as RoomMessage).room.holdem!;
+  assert.equal(secondHand.dealerId,second.playerId);
+  resumed.send({type:'act',handId:secondHand.id,revision:0,action:'fold'});
+  await a.next('room',m=>m.type==='room' && m.room.holdem?.number===2 && m.room.holdem.street==='complete');
+  a.send({type:'resetChips',handId:secondHand.id});
+  await a.next('room',m=>m.type==='room' && !m.room.holdem && m.room.players.length===2);
+  a.send({type:'startHand',previousHandId:null});
+  const reset=(await a.next('room',m=>m.type==='room' && m.room.holdem?.number===3) as RoomMessage).room.holdem!;
+  assert.ok(reset.players.every(p=>p.stack+p.totalBet===1000));
+});
+
+test('server deadline ends an unattended hand and permits a new game', async t => {
+  const app=await setup(t,{turnMs:60});
+  const a=await app.connect(),b=await app.connect();
+  const created=await a.create();
+  b.send({type:'join',code:created.room.code,nickname:'친구'}); await b.next('joined');
+  a.send({type:'startHand',previousHandId:null});
+  const end=(await b.next('room',m=>m.type==='room' && m.room.holdem?.street==='complete') as RoomMessage).room.holdem!;
+  assert.match(end.lastEvent,/시간 초과/);
+  assert.equal(end.players.reduce((s,p)=>s+p.stack,0),2000);
+});
 
 async function setup(t: TestContext, options: Parameters<typeof attachLobby>[1] = {}) {
   const server = createAppServer();

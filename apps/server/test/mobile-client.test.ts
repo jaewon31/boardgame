@@ -5,11 +5,28 @@ import { test, type TestContext } from 'node:test';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { LobbyRoom } from '@boardgame/shared';
 import { RoomClient, type RoomState } from '../../mobile/src/services/RoomClient.ts';
+import { HoldemHand } from '../src/holdem/hand.ts';
 
 const room: LobbyRoom = {
   code: 'ABCD2345', game: 'holdem', hostId: 'me', maxPlayers: 6,
   players: [{ id: 'me', nickname: '나', connected: true }],
 };
+
+test('game commands carry hand version and recoverable errors keep membership', async t => {
+  const hand = new HoldemHand([{ id: 'me', nickname: '나', stack: 1000 }, { id: 'friend', nickname: '친구', stack: 1000 }]);
+  const gameRoom = { ...room, holdem: hand.viewFor('me') };
+  let received: Record<string, unknown> | undefined;
+  const app = await setup(t, (socket, message) => {
+    if (message.type === 'create') socket.send(JSON.stringify({ type: 'joined', room: gameRoom, playerId: 'me', token: 'secret' }));
+    else { received = message; socket.send(JSON.stringify({ type: 'error', code: 'GAME_ERROR', recoverable: true, message: '잘못된 행동' })); }
+  });
+  app.client.enter({type:'create',nickname:'나',game:'holdem'});
+  await app.state.wait(s=>s.status==='connected');
+  app.client.act('raise',100);
+  const state = await app.state.wait(s=>!!s.error);
+  assert.equal(state.status,'connected'); assert.equal(state.room?.code,room.code);
+  assert.deepEqual(received,{type:'act',handId:hand.id,revision:0,action:'raise',amount:100});
+});
 
 function stateObserver() {
   let latest: RoomState | undefined;

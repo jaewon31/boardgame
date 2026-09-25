@@ -1,4 +1,4 @@
-import type { EntryRequest, LobbyRoom, ServerMessage } from '@boardgame/shared';
+import type { ClientMessage, PokerAction, EntryRequest, LobbyRoom, ServerMessage } from '@boardgame/shared';
 
 export interface RoomState {
   status: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
@@ -46,6 +46,18 @@ export class RoomClient {
     this.connect(request);
   }
 
+  private gameCommand(command: ClientMessage) {
+    if (this.state.status !== 'connected' || this.socket?.readyState !== WebSocket.OPEN) return;
+    this.update({ error: null });
+    this.socket.send(JSON.stringify(command));
+  }
+  startHand() { this.gameCommand({ type: 'startHand', previousHandId: this.state.room?.holdem?.id ?? null }); }
+  resetChips() { const hand = this.state.room?.holdem; if (hand) this.gameCommand({ type: 'resetChips', handId: hand.id }); }
+  act(action: PokerAction, amount?: number) {
+    const hand = this.state.room?.holdem;
+    if (hand) this.gameCommand({ type: 'act', handId: hand.id, revision: hand.revision, action, amount });
+  }
+
   private connect(request: EntryRequest | { type: 'resume'; code: string; token: string }) {
     this.disconnect();
     const generation = this.generation;
@@ -82,6 +94,7 @@ export class RoomClient {
       } else if (message.type === 'room' && joined) {
         this.update({ room: message.room });
       } else if (message.type === 'error') {
+        if (message.recoverable && joined) { this.update({ error: message.message }); return; }
         this.disconnect();
         this.session = null;
         this.update({ ...emptyState, error: message.message });
