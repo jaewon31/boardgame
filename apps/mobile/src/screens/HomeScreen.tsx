@@ -1,82 +1,101 @@
-import type { GameId } from '@boardgame/shared';
-import { StatusBar } from 'expo-status-bar';
+import type { EntryRequest, GameId } from '@boardgame/shared';
 import { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActionButton } from '../components/ActionButton';
 
-export default function HomeScreen() {
+interface Props { onEnter: (request: EntryRequest) => void; busy: boolean; error: string | null }
+
+export default function HomeScreen({ onEnter, busy, error }: Props) {
   const [game, setGame] = useState<GameId>('holdem');
+  const [mode, setMode] = useState<'create' | 'join'>('create');
+  const [nickname, setNickname] = useState('');
+  const [code, setCode] = useState('');
+  const [validation, setValidation] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
+  function submit() {
+    const name = nickname.trim().normalize('NFC');
+    if ([...name].length < 1 || [...name].length > 12 || /[\p{Cc}\p{Cf}]/u.test(name)) {
+      setValidation('닉네임은 공백만 입력하지 말고 1~12자로 입력해 주세요.'); return;
+    }
+    if (mode === 'join' && !/^[A-Z2-9]{8}$/.test(code.trim().toUpperCase())) {
+      setValidation('친구에게 받은 8자리 초대 코드를 입력해 주세요.'); return;
+    }
+    setValidation(null);
+    Keyboard.dismiss();
+    onEnter(mode === 'create' ? { type: 'create', nickname: name, game } : { type: 'join', nickname: name, code: code.trim().toUpperCase() });
+  }
   return (
-    <View style={styles.container}>
-      <StatusBar style="light" />
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.brand}>FRIENDS TABLE</Text>
-          <Text style={styles.badge}>개발 중</Text>
-        </View>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 28 }]}>
+        <View style={styles.header}><Text style={styles.brand}>FRIENDS TABLE</Text><Text style={styles.badge}>친구 전용</Text></View>
         <Text style={styles.eyebrow}>우리끼리 즐기는 카드 한 판</Text>
         <Text style={styles.title}>친구들 모이면,{ '\n' }여기가 테이블.</Text>
-        <Text style={styles.subtitle}>홀덤부터 섯다까지.{ '\n' }초대한 친구들과 함께할 우리만의 공간.</Text>
-
-        <View style={styles.table} accessibilityLabel="카드 테이블 일러스트">
-          <View style={styles.card}><Text style={styles.blackSuit}>A</Text><Text style={styles.largeSuit}>♠</Text></View>
-          <View style={[styles.card, styles.secondCard]}><Text style={styles.redSuit}>A</Text><Text style={[styles.largeSuit, styles.redSuit]}>♥</Text></View>
-          <View style={styles.chip}><Text style={styles.chipText}>FT</Text></View>
-          <Text style={styles.tableCaption}>GOOD FRIENDS. GREAT HANDS.</Text>
-        </View>
-
-        <Text style={styles.sectionTitle}>어떤 게임을 할까요?</Text>
-        <View style={styles.gameRow}>
-          {([{ id: 'holdem', symbol: '♠', name: '텍사스 홀덤', detail: '두 장의 패, 다섯 장의 공통 카드' }, { id: 'seotda', symbol: '花', name: '섯다', detail: '짧고 짜릿한 한 판' }] as const).map((item) => (
-            <Pressable key={item.id} onPress={() => setGame(item.id)} accessibilityRole="radio" accessibilityState={{ checked: game === item.id }} style={[styles.game, game === item.id && styles.selectedGame]}>
-              <Text style={styles.gameSymbol}>{item.symbol}</Text>
-              <Text style={styles.gameName}>{item.name}</Text>
-              <Text style={styles.gameDetail}>{item.detail}</Text>
-              <Text style={[styles.selection, game === item.id && styles.selectedText]}>{game === item.id ? '선택됨 ✓' : '선택하기'}</Text>
+        <View style={styles.hero}><Text style={styles.suits}>♠  ♥  ♣  ♦</Text><Text style={styles.heroCaption}>GOOD FRIENDS. GREAT HANDS.</Text></View>
+        <View accessibilityRole="tablist" style={styles.tabs}>
+          {([{ id: 'create', label: '새 방 만들기' }, { id: 'join', label: '코드로 입장' }] as const).map(tab => (
+            <Pressable key={tab.id} disabled={busy} accessibilityRole="tab" accessibilityState={{ selected: mode === tab.id }}
+              onPress={() => { setMode(tab.id); setValidation(null); }} style={[styles.tab, mode === tab.id && styles.activeTab]}>
+              <Text style={[styles.tabText, mode === tab.id && styles.activeTabText]}>{tab.label}</Text>
             </Pressable>
           ))}
         </View>
-        <View style={styles.notice}>
-          <Text style={styles.noticeTitle}>{game === 'holdem' ? '텍사스 홀덤' : '섯다'} 테이블을 준비하고 있어요</Text>
-          <Text style={styles.noticeBody}>지금은 앱의 첫 화면입니다. 비공개 방과 실시간 플레이는 다음 단계에서 연결합니다.</Text>
-        </View>
-        <Text style={styles.footer}>친구와 함께할 다음 한 판을 위해.</Text>
+        <Text style={styles.label}>친구들에게 보일 닉네임</Text>
+        <TextInput accessibilityLabel="닉네임" value={nickname} onChangeText={text => { setNickname(text); setValidation(null); }} editable={!busy}
+          placeholder="닉네임 1~12자" placeholderTextColor="#7F9287" maxLength={24} autoCorrect={false} autoCapitalize="none"
+          style={styles.input} returnKeyType="done" onSubmitEditing={submit} />
+        {mode === 'create' ? <>
+          <Text style={styles.label}>어떤 게임을 할까요?</Text>
+          <View style={styles.gameRow}>
+            {([{ id: 'holdem', symbol: '♠', name: '텍사스 홀덤' }, { id: 'seotda', symbol: '花', name: '섯다' }] as const).map(item => (
+              <Pressable key={item.id} disabled={busy} onPress={() => setGame(item.id)} accessibilityRole="radio" accessibilityState={{ checked: game === item.id }} style={[styles.game, game === item.id && styles.selectedGame]}>
+                <Text style={styles.gameSymbol}>{item.symbol}</Text><Text style={styles.gameName}>{item.name}</Text>
+                <Text style={styles.selection}>{game === item.id ? '선택됨 ✓' : '선택하기'}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.hint}>최대 6명 · 초대 코드가 있는 친구만 입장할 수 있어요.</Text>
+        </> : <>
+          <Text style={styles.label}>초대 코드</Text>
+          <TextInput accessibilityLabel="초대 코드" value={code} onChangeText={text => { setCode(text.toUpperCase().replace(/\s/g, '')); setValidation(null); }}
+            editable={!busy} placeholder="예: AB3D5FGH" placeholderTextColor="#7F9287" maxLength={8} autoCapitalize="characters" autoCorrect={false}
+            style={[styles.input, styles.codeInput]} returnKeyType="go" onSubmitEditing={submit} />
+          <Text style={styles.hint}>친구가 공유한 8자리 코드를 입력해 주세요.</Text>
+        </>}
+        {(validation || error) && <Text accessibilityRole="alert" style={styles.error}>{validation || error}</Text>}
+        <ActionButton title={mode === 'create' ? '우리 방 만들기' : '친구 방 입장하기'} onPress={submit} busy={busy} />
+        {busy && <Text style={styles.hint}>방에 연결하고 있어요…</Text>}
+        <Text style={styles.footer}>현재 대기실 입장을 테스트할 수 있어요.{ '\n' }카드 게임은 다음 업데이트에서 만나요.</Text>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#101C18',
-  },
-  content: { paddingHorizontal: 24, paddingTop: Platform.OS === 'ios' ? 64 : 52, paddingBottom: 40, width: '100%', maxWidth: 560, alignSelf: 'center' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 },
+  container: { flex: 1, backgroundColor: '#101C18' },
+  content: { paddingHorizontal: 24, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 },
   brand: { color: '#F2E8CE', fontSize: 15, fontWeight: '800', letterSpacing: 2 },
   badge: { color: '#C3CEBF', backgroundColor: '#26372E', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, fontSize: 11 },
-  eyebrow: { color: '#C2B583', fontSize: 12, marginBottom: 12 },
-  title: { color: '#FAF6E9', fontSize: 32, fontWeight: '800', lineHeight: 44, letterSpacing: -1 },
-  subtitle: { color: '#A8B6AD', fontSize: 14, lineHeight: 23, marginTop: 14 },
-  table: { height: 208, backgroundColor: '#1D3A2D', borderRadius: 100, borderWidth: 1, borderColor: '#3C5841', marginTop: 30, marginBottom: 30, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
-  card: { backgroundColor: '#F6F0DE', height: 110, width: 78, borderRadius: 10, padding: 10, transform: [{ rotate: '-13deg' }], marginTop: -15 },
-  secondCard: { marginLeft: -12, transform: [{ rotate: '12deg' }], marginTop: -5 },
-  blackSuit: { color: '#193227', fontSize: 23, fontWeight: '800' },
-  redSuit: { color: '#B24B3F', fontSize: 23, fontWeight: '800' },
-  largeSuit: { fontSize: 42, color: '#193227', textAlign: 'center' },
-  chip: { position: 'absolute', right: 45, bottom: 41, backgroundColor: '#D5BD7F', borderColor: '#F9E8B5', borderWidth: 4, borderStyle: 'dashed', borderRadius: 25, width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  chipText: { color: '#4F4328', fontWeight: '900', fontSize: 12 },
-  tableCaption: { position: 'absolute', bottom: 17, color: '#A1B39C', fontSize: 9, letterSpacing: 2 },
-  sectionTitle: { color: '#F6F0DE', fontSize: 18, fontWeight: '700', marginBottom: 15 },
+  eyebrow: { color: '#C2B583', fontSize: 12, marginBottom: 10 },
+  title: { color: '#FAF6E9', fontSize: 30, fontWeight: '800', lineHeight: 41, letterSpacing: -1 },
+  hero: { backgroundColor: '#1D3A2D', borderRadius: 50, padding: 16, alignItems: 'center', marginVertical: 22, borderWidth: 1, borderColor: '#3C5841' },
+  suits: { color: '#DDC88F', fontSize: 28, letterSpacing: 5 },
+  heroCaption: { color: '#A1B39C', fontSize: 9, letterSpacing: 2, marginTop: 7 },
+  tabs: { flexDirection: 'row', backgroundColor: '#1B2B22', borderRadius: 14, padding: 4, marginBottom: 6 },
+  tab: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 11 },
+  activeTab: { backgroundColor: '#3A4A35' },
+  tabText: { color: '#A8B6AD', fontSize: 14, fontWeight: '600' },
+  activeTabText: { color: '#F5EBD1' },
+  label: { color: '#DEDCCB', fontSize: 13, fontWeight: '600', marginTop: 18, marginBottom: 10 },
+  input: { color: '#FAF6E9', backgroundColor: '#1B2B22', borderWidth: 1, borderColor: '#435548', borderRadius: 12, paddingHorizontal: 15, paddingVertical: 13, minHeight: 50, fontSize: 16 },
+  codeInput: { letterSpacing: 3 },
   gameRow: { flexDirection: 'row', gap: 12 },
   game: { flex: 1, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#34453B', backgroundColor: '#19271F' },
   selectedGame: { borderColor: '#D5BD7F', backgroundColor: '#29382A' },
-  gameSymbol: { color: '#D5BD7F', fontSize: 26, marginBottom: 12 },
-  gameName: { color: '#FAF6E9', fontSize: 15, fontWeight: '700', marginBottom: 7 },
-  gameDetail: { color: '#B2BFB4', fontSize: 11, lineHeight: 17, minHeight: 34 },
-  selection: { color: '#A8B6AD', fontSize: 12, marginTop: 16 },
-  selectedText: { color: '#E6D097' },
-  notice: { marginTop: 22, padding: 17, backgroundColor: '#1B2B23', borderRadius: 14 },
-  noticeTitle: { color: '#DEDCCB', fontWeight: '600', fontSize: 13, marginBottom: 7 },
-  noticeBody: { color: '#A8B6AD', fontSize: 12, lineHeight: 20 },
-  footer: { textAlign: 'center', color: '#93A498', fontSize: 11, marginTop: 26 },
+  gameSymbol: { color: '#D5BD7F', fontSize: 25, marginBottom: 8 },
+  gameName: { color: '#FAF6E9', fontSize: 15, fontWeight: '700' },
+  selection: { color: '#D5BD7F', fontSize: 11, marginTop: 10 },
+  hint: { color: '#A8B6AD', fontSize: 11, lineHeight: 18, marginVertical: 14 },
+  error: { color: '#FFC09E', fontSize: 13, lineHeight: 21, marginBottom: 14 },
+  footer: { textAlign: 'center', color: '#93A498', fontSize: 11, lineHeight: 18, marginTop: 20 },
 });
