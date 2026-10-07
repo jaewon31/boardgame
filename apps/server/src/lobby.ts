@@ -39,6 +39,7 @@ function parseMessage(raw: string): ClientMessage | null {
   try { value = JSON.parse(raw); } catch { return null; }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
+  if (v.type === 'ping' && Number.isSafeInteger(v.id) && Number(v.id) >= 0) return { type: 'ping', id: Number(v.id) };
   if (v.type === 'startHand' && (v.previousHandId === null || typeof v.previousHandId === 'string')) return { type: 'startHand', previousHandId: v.previousHandId };
   if (v.type === 'revealCards' && typeof v.handId === 'string') return { type: 'revealCards', handId: v.handId };
   if (v.type === 'resetChips' && typeof v.handId === 'string') return { type: 'resetChips', handId: v.handId };
@@ -137,6 +138,11 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       }
       const input = isBinary ? null : parseMessage(data.toString());
       if (!input) { fail('INVALID_REQUEST', '닉네임(1~12자)과 8자리 초대 코드를 확인해 주세요.'); return; }
+      if (input.type === 'ping') {
+        if (!membership) { fail('SESSION_EXPIRED', '방에 다시 입장해 주세요.'); return; }
+        send(socket, { type: 'pong', id: input.id });
+        return;
+      }
       if (input.type === 'leave') {
         if (membership) {
           const { room, member } = membership;

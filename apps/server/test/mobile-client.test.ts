@@ -12,6 +12,39 @@ const room: LobbyRoom = {
   players: [{ id: 'me', nickname: '나', connected: true }],
 };
 
+test('unresponsive OPEN socket is replaced and the same seat resumes', async t => {
+  let resumes=0;
+  const app=await setup(t,(socket,message)=>{
+    if(message.type==='ping') {
+      if(resumes) socket.send(JSON.stringify({type:'pong',id:message.id}));
+      return; // Keep the first transport open without answering application messages.
+    }
+    if(message.type==='resume'){resumes++;assert.equal(message.token,'secret');}
+    socket.send(JSON.stringify({type:'joined',room,playerId:'me',token:'secret'}));
+  },{heartbeatMs:20,heartbeatTimeoutMs:100,retryMs:10});
+  app.client.enter({type:'create',nickname:'나',game:'holdem'});
+  await app.state.wait(s=>s.status==='connected');
+  await app.state.wait(s=>s.status==='reconnecting');
+  const restored=await app.state.wait(s=>s.status==='connected');
+  assert.equal(resumes,1); assert.equal(restored.playerId,'me');
+  await new Promise(resolve=>setTimeout(resolve,240));
+  assert.equal(resumes,1); assert.equal(app.state.current()?.status,'connected');
+});
+
+test('wrong heartbeat IDs do not conceal a dead session; leave cancels recovery', async t => {
+  let requests=0;
+  const app=await setup(t,(socket,message)=>{
+    if(message.type==='ping'){socket.send(JSON.stringify({type:'pong',id:-1}));return;}
+    if(message.type==='leave')return;
+    requests++; socket.send(JSON.stringify({type:'joined',room,playerId:'me',token:'secret'}));
+  },{heartbeatMs:20,heartbeatTimeoutMs:100,retryMs:150});
+  app.client.enter({type:'create',nickname:'나',game:'holdem'});
+  await app.state.wait(s=>s.status==='reconnecting');
+  app.client.leave();
+  await new Promise(resolve=>setTimeout(resolve,220));
+  assert.equal(requests,1); assert.equal(app.state.current()?.status,'idle');
+});
+
 test('game commands carry hand version and recoverable errors keep membership', async t => {
   const hand = new HoldemHand([{ id: 'me', nickname: '나', stack: 1000 }, { id: 'friend', nickname: '친구', stack: 1000 }]);
   const gameRoom = { ...room, holdem: hand.viewFor('me') };
@@ -47,12 +80,12 @@ function stateObserver() {
   };
 }
 
-async function setup(t: TestContext, handler: (socket: WebSocket, message: Record<string, unknown>) => void) {
+async function setup(t: TestContext, handler: (socket: WebSocket, message: Record<string, unknown>) => void, timing: ConstructorParameters<typeof RoomClient>[2] = {}) {
   const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
   wss.on('connection', socket => socket.on('message', raw => handler(socket, JSON.parse(raw.toString()))));
   await once(wss, 'listening');
   const state = stateObserver();
-  const client = new RoomClient(`ws://127.0.0.1:${(wss.address() as AddressInfo).port}`, state.notify);
+  const client = new RoomClient(`ws://127.0.0.1:${(wss.address() as AddressInfo).port}`, state.notify, timing);
   t.after(async () => {
     client.dispose();
     for (const socket of wss.clients) socket.terminate();

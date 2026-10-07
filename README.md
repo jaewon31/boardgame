@@ -91,6 +91,18 @@ Android Studio Device Manager의 Pixel_7을 실행할 수 있습니다.
 
 ## 실제 휴대폰 두 대로 확인
 
+### 에뮬레이터 두 대에서 연결이 끊길 때
+
+가상 네트워크 주소 `10.0.2.2`에서 반복 끊김이 생기면 각 기기의 ADB 포트 연결을 사용합니다.
+`apps/mobile/.env.local`에 `EXPO_PUBLIC_GAME_SERVER_URL=ws://127.0.0.1:3000/lobby`를 설정하고 Expo를 다시 실행한 뒤, 두 에뮬레이터를 켜고 저장소 루트에서 `npm.cmd run android:devices`를 실행합니다.
+이 명령은 연결된 기기마다 Expo 8082와 게임 서버 3000 포트를 연결하고 앱을 엽니다. 에뮬레이터를 껐다 켜면 다시 실행합니다.
+다른 Expo 포트는 `npm.cmd run android:devices -- -Port 8083`처럼 지정할 수 있습니다.
+앱은 5초마다 서버에 응답을 요청하고 15초간 응답이 없으면 연결을 교체합니다. 화면으로 돌아올 때도 연결을 검사합니다.
+
+실제 휴대폰을 Wi-Fi로 테스트할 때는 `.env.local`의 localhost 설정을 지우거나 아래의 PC LAN 주소로 바꿔야 합니다. `.env.local`은 `.env`보다 우선합니다.
+
+### 같은 Wi-Fi의 휴대폰
+
 1. PC와 휴대폰 두 대를 같은 Wi-Fi에 연결합니다.
 2. PC에서 `ipconfig`로 Wi-Fi의 IPv4 주소를 확인합니다.
 3. `apps/mobile/.env.example`을 같은 폴더의 `.env`로 복사하고 다음 값을 지정합니다.

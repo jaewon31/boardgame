@@ -10,6 +10,16 @@ import { attachLobby } from '../src/lobby.ts';
 type Joined = Extract<ServerMessage, { type: 'joined' }>;
 type RoomMessage = Extract<ServerMessage, { type: 'room' }>;
 
+test('application heartbeat requires membership and does not change room state', async t => {
+  const app=await setup(t), peer=await app.connect();
+  peer.send({type:'ping',id:1});
+  const denied=await peer.next('error');
+  assert.equal(denied.type==='error' && denied.code,'SESSION_EXPIRED');
+  await peer.create();
+  peer.send({type:'ping',id:2});
+  assert.deepEqual(await peer.next('pong'),{type:'pong',id:2});
+});
+
 test('only the authenticated loser can reveal and the reveal survives reconnection', async t => {
   const app=await setup(t);
   const a=await app.connect(), b=await app.connect();
