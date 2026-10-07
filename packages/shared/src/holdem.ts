@@ -9,6 +9,7 @@ export interface HandPlayer {
   folded: boolean;
   allIn: boolean;
   cards: Card[] | null;
+  revealed: boolean;
 }
 export interface LegalActions {
   canCheck: boolean;
@@ -34,6 +35,7 @@ export interface HoldemView {
   actorId: string | null;
   deadline: number | null;
   legal: LegalActions | null;
+  canReveal: boolean;
   lastEvent: string;
   payouts: { playerId: string; amount: number; handName: string }[];
   refunds: { playerId: string; amount: number }[];

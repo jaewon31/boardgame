@@ -15,6 +15,7 @@ export function useRoom() {
     ...state,
     enter: (request: EntryRequest) => client.current?.enter(request),
     startHand: () => client.current?.startHand(),
+    revealCards: (handId: string) => client.current?.revealCards(handId),
     resetChips: () => client.current?.resetChips(),
     act: (action: PokerAction, amount?: number) => client.current?.act(action, amount),
     leave: () => client.current?.leave(),

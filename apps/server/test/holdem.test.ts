@@ -6,6 +6,37 @@ import { HoldemHand } from '../src/holdem/hand.ts';
 const seeds = (...stacks: number[]) => stacks.map((stack, i) => ({ id: String(i), nickname: `p${i}`, stack }));
 const deck = (...first: Card[]) => [...first, ...newDeck().filter(c => !first.includes(c))];
 const score = (s: string) => evaluate(s.split(' ') as Card[]).score;
+
+test('showdown losers stay secret until their own reveal; winners show automatically', () => {
+  const h = new HoldemHand(seeds(100,100,100), { deck: deck('13s','12s','14s','13h','12h','14h','9c','2c','4d','7h','10c','8s','11c','3d') });
+  assert.throws(() => h.revealCards('0'));
+  checkDown(h);
+  const before = h.viewFor('spectator');
+  assert.deepEqual(before.players.map(p=>p.revealed), [true,false,false]);
+  assert.deepEqual(before.players.map(p=>p.cards?.length ?? 0), [2,0,0]);
+  assert.equal(h.viewFor('1').canReveal,true);
+  assert.equal(h.viewFor('0').canReveal,false);
+  assert.equal(h.viewFor('spectator').canReveal,false);
+  assert.equal(h.viewFor('1').players[1].cards?.length,2);
+  assert.throws(()=>h.revealCards('spectator'));
+  const payouts=before.payouts, stacks=before.players.map(p=>p.stack);
+  h.revealCards('1');
+  assert.equal(h.viewFor('2').players[1].cards?.length,2);
+  assert.equal(h.viewFor('0').players[2].cards,null);
+  assert.equal(h.viewFor('1').canReveal,false);
+  const revision=h.revision;
+  h.revealCards('1'); assert.equal(h.revision,revision);
+  assert.deepEqual(h.viewFor('0').payouts,payouts);
+  assert.deepEqual(h.viewFor('0').players.map(p=>p.stack),stacks);
+});
+
+test('folded hands and fold wins cannot reveal; a new hand starts with private cards', () => {
+  const h=new HoldemHand(seeds(100,100));
+  h.act('0','fold');
+  assert.throws(()=>h.revealCards('0')); assert.throws(()=>h.revealCards('1'));
+  const next=new HoldemHand(seeds(100,100));
+  assert.ok(next.viewFor('spectator').players.every(p=>!p.revealed && p.cards===null));
+});
 function checkDown(hand: HoldemHand) {
   for (let i = 0; !hand.complete && i < 100; i++) {
     const id = hand.actorId!;
@@ -38,7 +69,7 @@ test('heads-up order, blind option, private cards, all streets and chip conserva
   assert.equal(h.actorId, '1');
   checkDown(h);
   assert.equal(h.viewFor('0').board.length, 5);
-  assert.ok(h.viewFor('0').players.every(p => p.cards?.length === 2));
+  assert.ok(h.viewFor('0').players.every(p => p.id === '0' || p.revealed ? p.cards?.length === 2 : p.cards === null));
   assert.equal(h.players.reduce((s, p) => s + p.stack, 0), 2000);
 });
 test('fold win returns unmatched chips without exposing opponent cards', () => {

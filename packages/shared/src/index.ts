@@ -31,6 +31,7 @@ export type ClientMessage = EntryRequest
   | { type: 'resume'; code: string; token: string }
   | { type: 'leave' }
   | { type: 'startHand'; previousHandId: string | null }
+  | { type: 'revealCards'; handId: string }
   | { type: 'resetChips'; handId: string }
   | { type: 'act'; handId: string; revision: number; action: PokerAction; amount?: number };
 

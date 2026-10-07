@@ -10,6 +10,37 @@ import { attachLobby } from '../src/lobby.ts';
 type Joined = Extract<ServerMessage, { type: 'joined' }>;
 type RoomMessage = Extract<ServerMessage, { type: 'room' }>;
 
+test('only the authenticated loser can reveal and the reveal survives reconnection', async t => {
+  const app=await setup(t);
+  const a=await app.connect(), b=await app.connect();
+  const first=await a.create();
+  b.send({type:'join',code:first.room.code,nickname:'친구'});
+  const second=await b.next('joined') as Joined;
+  a.send({type:'startHand',previousHandId:null});
+  const started=(await a.next('room',m=>m.type==='room' && !!m.room.holdem) as RoomMessage).room.holdem!;
+  b.send({type:'revealCards',handId:started.id}); await b.next('error');
+  a.send({type:'act',handId:started.id,revision:0,action:'allIn'});
+  await b.next('room',m=>m.type==='room' && m.room.holdem?.revision===1);
+  b.send({type:'act',handId:started.id,revision:1,action:'call'});
+  const end=(await a.next('room',m=>m.type==='room' && m.room.holdem?.street==='complete') as RoomMessage).room.holdem!;
+  const loser=end.players.find(p=>!p.revealed);
+  if (!loser) { assert.ok(end.players.every(p=>p.cards?.length===2)); return; } // Split pots reveal both winners.
+  const loserPeer=loser.id===first.playerId?a:b;
+  const winnerPeer=loserPeer===a?b:a;
+  const winnerId=loserPeer===a?second.playerId:first.playerId;
+  winnerPeer.send({type:'revealCards',handId:started.id,playerId:loser.id});
+  const unchanged=(await winnerPeer.next('room',m=>m.type==='room' && m.room.holdem?.street==='complete' && m.room.holdem.revision===end.revision) as RoomMessage).room.holdem!;
+  assert.equal(unchanged.players.find(p=>p.id===loser.id)?.cards,null);
+  loserPeer.send({type:'revealCards',handId:'old-hand'}); await loserPeer.next('error');
+  loserPeer.send({type:'revealCards',handId:started.id});
+  const shown=(await winnerPeer.next('room',m=>m.type==='room' && m.room.holdem?.revision===end.revision+1) as RoomMessage).room.holdem!;
+  assert.equal(shown.players.find(p=>p.id===loser.id)?.cards?.length,2);
+  const restored=await app.connect();
+  restored.send({type:'resume',code:first.room.code,token:winnerId===first.playerId?first.token:second.token});
+  const resumed=await restored.next('joined') as Joined;
+  assert.equal(resumed.room.holdem?.players.find(p=>p.id===loser.id)?.cards?.length,2);
+});
+
 class Peer {
   socket: WebSocket;
   private queue: ServerMessage[] = [];

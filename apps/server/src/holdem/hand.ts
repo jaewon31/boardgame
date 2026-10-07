@@ -32,6 +32,7 @@ export class HoldemHand {
   private street: HoldemView['street'] = 'preflop';
   private actorIndex = -1;
   private showdown = false;
+  private revealed = new Set<string>();
   revision = 0;
   deadline: number | null = null;
   private lastEvent = '개인 패를 배분하고 블라인드를 냈습니다.';
@@ -218,16 +219,33 @@ export class HoldemHand {
   }
   private distance(p: Seat) { return (this.players.indexOf(p) - this.dealerIndex - 1 + this.players.length) % this.players.length; }
 
+  canReveal(id: string) {
+    const player = this.players.find(p => p.id === id);
+    return this.complete && this.showdown && !!player && !player.folded && !this.isRevealed(id);
+  }
+  private isRevealed(id: string) {
+    return this.showdown && (this.revealed.has(id) || this.payouts.some(p => p.playerId === id));
+  }
+  revealCards(id: string) {
+    if (this.isRevealed(id)) return;
+    if (!this.canReveal(id)) throw new Error('쇼다운에 참여한 자신의 패만 공개할 수 있어요.');
+    this.revealed.add(id);
+    this.revision++;
+    this.lastEvent = this.players.find(p => p.id === id)!.nickname + ': 패 공개';
+  }
+
   viewFor(id: string): HoldemView {
     return {
       id: this.id, number: this.number, revision: this.revision, street: this.street,
       dealerId: this.players[this.dealerIndex].id, smallBlindId: this.players[this.smallBlindIndex].id,
       bigBlindId: this.players[this.bigBlindIndex].id, smallBlind: this.smallBlind, bigBlind: this.bigBlind,
       board: [...this.board], actorId: this.actorId, deadline: this.deadline, legal: this.legalFor(id),
+      canReveal: this.canReveal(id),
       pot: this.players.reduce((sum, p) => sum + p.totalBet, 0), lastEvent: this.lastEvent,
       players: this.players.map(p => ({ id: p.id, nickname: p.nickname, stack: p.stack, roundBet: p.roundBet,
         totalBet: p.totalBet, folded: p.folded, allIn: p.stack === 0 && !p.folded,
-        cards: p.id === id || (this.showdown && !p.folded) ? [...p.hole] : null })),
+        revealed: this.isRevealed(p.id),
+        cards: p.id === id || this.isRevealed(p.id) ? [...p.hole] : null })),
       payouts: this.payouts.map(p => ({ ...p })), refunds: this.refunds.map(p => ({ ...p })),
       pots: this.pots.map(p => ({ ...p, winnerIds: [...p.winnerIds] })),
     };

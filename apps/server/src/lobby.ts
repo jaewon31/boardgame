@@ -40,6 +40,7 @@ function parseMessage(raw: string): ClientMessage | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
   if (v.type === 'startHand' && (v.previousHandId === null || typeof v.previousHandId === 'string')) return { type: 'startHand', previousHandId: v.previousHandId };
+  if (v.type === 'revealCards' && typeof v.handId === 'string') return { type: 'revealCards', handId: v.handId };
   if (v.type === 'resetChips' && typeof v.handId === 'string') return { type: 'resetChips', handId: v.handId };
   if (v.type === 'act' && typeof v.handId === 'string' && Number.isSafeInteger(v.revision)
     && ['fold', 'check', 'call', 'raise', 'allIn'].includes(String(v.action))
@@ -147,12 +148,15 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         socket.close(1000, 'Left room');
         return;
       }
-      if (input.type === 'startHand' || input.type === 'act' || input.type === 'resetChips') {
+      if (input.type === 'startHand' || input.type === 'act' || input.type === 'resetChips' || input.type === 'revealCards') {
         try {
           if (!membership || membership.member.socket !== socket) throw new Error('먼저 방에 입장해 주세요.');
           const { room, member } = membership;
           if (room.game !== 'holdem') throw new Error('홀덤 방에서만 시작할 수 있어요.');
-          if (input.type === 'act') {
+          if (input.type === 'revealCards') {
+            if (!room.hand || room.hand.id !== input.handId) throw new Error('이미 끝난 판의 패는 공개할 수 없어요.');
+            room.hand.revealCards(member.id);
+          } else if (input.type === 'act') {
             if (!room.hand || room.hand.id !== input.handId || room.hand.revision !== input.revision) throw new Error('게임 상태가 바뀌었어요. 현재 차례를 확인해 주세요.');
             room.hand.act(member.id, input.action, input.amount);
           } else {
