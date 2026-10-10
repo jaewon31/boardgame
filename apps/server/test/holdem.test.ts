@@ -37,8 +37,10 @@ test('folded hands and fold wins cannot reveal; a new hand starts with private c
   const next=new HoldemHand(seeds(100,100));
   assert.ok(next.viewFor('spectator').players.every(p=>!p.revealed && p.cards===null));
 });
+function drainRunout(hand: HoldemHand) { for (let i=0;hand.viewFor('spectator').runout && i<10;i++) hand.timeout(); }
 function checkDown(hand: HoldemHand) {
   for (let i = 0; !hand.complete && i < 100; i++) {
+    if (hand.viewFor('spectator').runout) { hand.timeout(); continue; }
     const id = hand.actorId!;
     hand.act(id, hand.legalFor(id)!.canCheck ? 'check' : 'call');
   }
@@ -97,6 +99,7 @@ test('different all-in stacks create main/side pots and refund unmatched excess'
   // Deal B,C,A twice; A=aces, B=kings, C=queens, dry board.
   const h = new HoldemHand(seeds(50, 100, 200), { deck: deck('13s','12s','14s','13h','12h','14h','9c','2c','4d','7h','10c','8s','11c','3d') });
   h.act('0', 'allIn'); h.act('1', 'allIn'); h.act('2', 'call');
+  drainRunout(h);
   const v = h.viewFor('0');
   assert.ok(h.complete);
   assert.deepEqual(v.pots, [{ amount: 150, winnerIds: ['0'] }, { amount: 100, winnerIds: ['1'] }]);
@@ -112,6 +115,7 @@ test('shared board splits pot; odd chip starts left of dealer', () => {
 });
 test('short blind runs out, timeout folds/checks, and departure preserves other turn clock', () => {
   const short = new HoldemHand(seeds(1000,5));
+  drainRunout(short);
   assert.ok(short.complete);
   assert.equal(short.viewFor('0').pot,10);
   const h = new HoldemHand(seeds(1000,1000,1000));
@@ -131,6 +135,7 @@ test('500 varied hands never create chips, reveal hidden cards or get stuck', ()
     const total=players.reduce((s,p)=>s+p.stack,0);
     const h=new HoldemHand(players,{dealerIndex:next()%players.length});
     for(let turn=0;!h.complete && turn<300;turn++) {
+      if (h.viewFor('spectator').runout) { h.timeout(); continue; }
       const id=h.actorId!, legal=h.legalFor(id)!;
       const v=h.viewFor(id);
       assert.ok(v.players.filter(p=>p.id!==id).every(p=>p.cards===null));

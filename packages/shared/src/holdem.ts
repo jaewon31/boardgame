@@ -19,7 +19,16 @@ export interface LegalActions {
   maxRaiseTo: number;
   canAllIn: boolean;
 }
+export interface RunoutView {
+  phase: 'dealing' | 'squeezing';
+  nextStreet: 'flop' | 'turn' | 'river' | 'showdown';
+  deadline: number;
+  playerId: string | null;
+  // Only the selected player receives this card before public river revelation.
+  card: Card | null;
+}
 export interface HoldemView {
+  runout?: RunoutView | null;
   id: string;
   number: number;
   revision: number;

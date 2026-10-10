@@ -61,6 +61,7 @@ export class RoomClient {
     this.socket.send(JSON.stringify(command));
   }
   startHand() { this.gameCommand({ type: 'startHand', previousHandId: this.state.room?.holdem?.id ?? null }); }
+  revealRiver(handId: string) { this.gameCommand({ type: 'revealRiver', handId }); }
   revealCards(handId: string) { this.gameCommand({ type: 'revealCards', handId }); }
   resetChips() { const hand = this.state.room?.holdem; if (hand) this.gameCommand({ type: 'resetChips', handId: hand.id }); }
   act(action: PokerAction, amount?: number) {

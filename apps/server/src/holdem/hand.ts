@@ -13,7 +13,7 @@ interface Seat {
   actedAt: number | null;
 }
 export interface PlayerSeed { id: string; nickname: string; stack: number }
-interface Options { dealerIndex?: number; deck?: Card[]; turnMs?: number; number?: number }
+interface Options { runoutMs?: number; riverSqueezeMs?: number; dealerIndex?: number; deck?: Card[]; turnMs?: number; number?: number }
 
 export class HoldemHand {
   readonly id = randomUUID();
@@ -26,6 +26,9 @@ export class HoldemHand {
   readonly bigBlind = 20;
   private deck: Card[];
   private turnMs: number;
+  private runoutMs: number;
+  private riverSqueezeMs: number;
+  private runout: NonNullable<HoldemView['runout']> | null = null;
   private board: Card[] = [];
   private currentBet = 20;
   private fullRaise = 20;
@@ -49,6 +52,8 @@ export class HoldemHand {
     this.dealerIndex = options.dealerIndex ?? 0;
     if (!Number.isInteger(this.dealerIndex) || this.dealerIndex < 0 || this.dealerIndex >= seeds.length) throw new Error('Invalid dealer');
     this.turnMs = options.turnMs ?? 30_000;
+    this.runoutMs = options.runoutMs ?? 2_000;
+    this.riverSqueezeMs = options.riverSqueezeMs ?? 15_000;
     this.number = options.number ?? 1;
     this.players = seeds.map(p => ({ ...p, hole: [], roundBet: 0, totalBet: 0, folded: false, actedAt: null }));
     this.smallBlindIndex = seeds.length === 2 ? this.dealerIndex : this.next(this.dealerIndex);
@@ -130,6 +135,7 @@ export class HoldemHand {
   }
 
   timeout() {
+    if (this.runout) { this.advanceRunout(); return; }
     if (!this.actorId) return;
     const id = this.actorId;
     this.act(id, this.legalFor(id)!.canCheck ? 'check' : 'fold');
@@ -137,6 +143,11 @@ export class HoldemHand {
   }
 
   depart(id: string) {
+    // Once betting is locked, every live hand keeps showdown eligibility.
+    if (this.runout) {
+      if (this.runout.phase === 'squeezing' && this.runout.playerId === id) this.publishRiver();
+      return;
+    }
     const index = this.players.findIndex(p => p.id === id);
     const p = this.players[index];
     if (!p || this.complete || p.folded || p.stack === 0) return; // All-in hands remain eligible.
@@ -166,6 +177,7 @@ export class HoldemHand {
     this.actorIndex = -1;
     this.deadline = null;
     if (this.street === 'river') { this.finish(true); return; }
+    if (aloneMatched) { this.queueRunout(); return; }
     this.draw(); // burn
     if (this.street === 'preflop') { this.board.push(this.draw(), this.draw(), this.draw()); this.street = 'flop'; }
     else { this.board.push(this.draw()); this.street = this.street === 'flop' ? 'turn' : 'river'; }
@@ -175,7 +187,60 @@ export class HoldemHand {
     this.advance(this.dealerIndex);
   }
 
+  private queueRunout() {
+    const nextStreet = this.street === 'preflop' ? 'flop' : this.street === 'flop' ? 'turn' : this.street === 'turn' ? 'river' : 'showdown';
+    this.actorIndex = -1;
+    this.deadline = Date.now() + this.runoutMs;
+    this.runout = { phase: 'dealing', nextStreet, deadline: this.deadline, playerId: null, card: null };
+    this.lastEvent = nextStreet === 'showdown' ? '리버 공개 · 결과를 확인합니다.' : '베팅 종료 · 공용 카드를 차례로 공개합니다.';
+  }
+  private advanceRunout() {
+    const pending = this.runout!;
+    if (pending.phase === 'squeezing') { this.publishRiver(); return; }
+    if (pending.nextStreet === 'showdown') { this.revision++; this.finish(true); return; }
+    this.draw(); // Exactly one burn for each street, including the privately held river.
+    if (pending.nextStreet === 'river') {
+      const river = this.draw();
+      const scores = this.live().map(p => ({ player: p, score: evaluate([...p.hole, ...this.board]).score }));
+      const best = Math.max(...scores.map(p => p.score));
+      // Use the TURN board only. Never select based on the hidden river or final result.
+      const trailing = scores.filter(p => p.score < best).sort((a,b) => this.distance(a.player) - this.distance(b.player));
+      if (trailing.length) {
+        this.deadline = Date.now() + this.riverSqueezeMs;
+        this.runout = { phase: 'squeezing', nextStreet: 'river', deadline: this.deadline, playerId: trailing[0].player.id, card: river };
+        this.lastEvent = trailing[0].player.nickname + '님이 리버 카드를 확인하고 있어요.';
+        this.revision++;
+        return;
+      }
+      this.board.push(river);
+      this.street = 'river';
+    } else if (pending.nextStreet === 'flop') {
+      this.board.push(this.draw(), this.draw(), this.draw()); this.street = 'flop';
+    } else { this.board.push(this.draw()); this.street = 'turn'; }
+    for (const p of this.players) { p.roundBet = 0; p.actedAt = null; }
+    this.currentBet = 0;
+    this.fullRaise = this.bigBlind;
+    this.revision++;
+    this.queueRunout();
+  }
+  revealRiver(id: string) {
+    if (this.runout?.phase !== 'squeezing' || this.runout.playerId !== id) throw new Error('지정된 플레이어만 이번 리버를 공개할 수 있어요.');
+    this.publishRiver();
+  }
+  private publishRiver() {
+    if (this.runout?.phase !== 'squeezing' || !this.runout.card) return;
+    this.board.push(this.runout.card);
+    this.street = 'river';
+    for (const p of this.players) p.roundBet = 0;
+    this.revision++;
+    this.queueRunout();
+  }
+  skipDisconnectedSqueeze(connectedIds: string[]) {
+    if (this.runout?.phase === 'squeezing' && !connectedIds.includes(this.runout.playerId!)) this.publishRiver();
+  }
+
   private finish(showdown: boolean) {
+    this.runout = null;
     this.showdown = showdown;
     this.street = 'complete';
     this.actorIndex = -1;
@@ -241,6 +306,7 @@ export class HoldemHand {
       bigBlindId: this.players[this.bigBlindIndex].id, smallBlind: this.smallBlind, bigBlind: this.bigBlind,
       board: [...this.board], actorId: this.actorId, deadline: this.deadline, legal: this.legalFor(id),
       canReveal: this.canReveal(id),
+      runout: this.runout ? { ...this.runout, card: this.runout.playerId === id ? this.runout.card : null } : null,
       pot: this.players.reduce((sum, p) => sum + p.totalBet, 0), lastEvent: this.lastEvent,
       players: this.players.map(p => ({ id: p.id, nickname: p.nickname, stack: p.stack, roundBet: p.roundBet,
         totalBet: p.totalBet, folded: p.folded, allIn: p.stack === 0 && !p.folded,

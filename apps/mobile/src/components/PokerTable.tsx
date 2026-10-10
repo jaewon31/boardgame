@@ -1,6 +1,6 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { HandPlayer, HoldemView, LobbyRoom } from '@boardgame/shared';
-import { PlayingCard, SqueezeHand } from './PokerCards';
+import { PlayingCard } from './PokerCards';
 
 function Seat({ player, hand, room, seconds }: { player: HandPlayer; hand: HoldemView; room: LobbyRoom; seconds: number }) {
   const active = player.id === hand.actorId;
@@ -53,7 +53,8 @@ export function PokerTable({ room, playerId, seconds, connected, onReveal, width
     </View>
     {me && <View style={[styles.hero, { top: fieldHeight + 3 }]}>
       <View style={styles.heroHeader}><Text style={styles.heroName}>{me.nickname} <Text style={styles.you}>YOU</Text> {me.id === hand.dealerId ? 'Ⓓ' : ''}</Text><Text style={styles.heroStack}>● {me.stack.toLocaleString()}</Text></View>
-      {hand.canReveal ? <SqueezeHand key={hand.id} cards={me.cards ?? []} disabled={!connected} onReveal={() => onReveal(hand.id)} /> : <View style={styles.heroCards}>{[0, 1].map(i => <View key={i} style={{ transform: [{ rotate: i === 0 ? '-7deg' : '7deg' }] }}><PlayingCard card={me.cards?.[i]} width={44} delay={i * 100} /></View>)}</View>}
+      {<View style={styles.heroCards}>{[0, 1].map(i => <View key={i} style={{ transform: [{ rotate: i === 0 ? '-7deg' : '7deg' }] }}><PlayingCard card={me.cards?.[i]} width={44} delay={i * 100} /></View>)}</View>}
+      {hand.canReveal && <Pressable accessibilityRole="button" disabled={!connected} onPress={() => onReveal(hand.id)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={styles.heroStatus}>내 패 모두에게 공개</Text></Pressable>}
       {!hand.canReveal && <Text style={styles.heroStatus}>{me.folded ? '이번 판 폴드' : hand.street === 'complete' ? me.revealed ? '모두에게 공개된 패' : '나만 볼 수 있는 패' : `${hand.actorId === me.id ? `내 차례 · ${seconds}초` : '나만 볼 수 있는 패'}  ·  베팅 ${me.roundBet}`}</Text>}
     </View>}
   </View>;

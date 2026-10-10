@@ -59,6 +59,9 @@ test('game commands carry hand version and recoverable errors keep membership', 
   const state = await app.state.wait(s=>!!s.error);
   assert.equal(state.status,'connected'); assert.equal(state.room?.code,room.code);
   assert.deepEqual(received,{type:'act',handId:hand.id,revision:0,action:'raise',amount:100});
+  app.client.revealRiver(hand.id);
+  await app.state.wait(s=>!!s.error);
+  assert.deepEqual(received,{type:'revealRiver',handId:hand.id});
 });
 
 function stateObserver() {

@@ -28,6 +28,8 @@ interface Room {
 }
 interface LobbyOptions {
   nextHandMs?: number;
+  runoutMs?: number;
+  riverSqueezeMs?: number;
   turnMs?: number;
   reconnectMs?: number;
   heartbeatMs?: number;
@@ -44,6 +46,7 @@ function parseMessage(raw: string): ClientMessage | null {
   const v = value as Record<string, unknown>;
   if (v.type === 'ping' && Number.isSafeInteger(v.id) && Number(v.id) >= 0) return { type: 'ping', id: Number(v.id) };
   if (v.type === 'startHand' && (v.previousHandId === null || typeof v.previousHandId === 'string')) return { type: 'startHand', previousHandId: v.previousHandId };
+  if (v.type === 'revealRiver' && typeof v.handId === 'string') return { type: 'revealRiver', handId: v.handId };
   if (v.type === 'revealCards' && typeof v.handId === 'string') return { type: 'revealCards', handId: v.handId };
   if (v.type === 'resetChips' && typeof v.handId === 'string') return { type: 'resetChips', handId: v.handId };
   if (v.type === 'act' && typeof v.handId === 'string' && Number.isSafeInteger(v.revision)
@@ -101,7 +104,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     let dealerIndex = players.findIndex(p => p.seat > room.dealerSeat);
     if (dealerIndex < 0) dealerIndex = 0;
     room.hand = new HoldemHand(players.map(p => ({ id: p.id, nickname: p.nickname, stack: p.stack })),
-      { dealerIndex, number: ++room.handNumber, turnMs: options.turnMs });
+      { dealerIndex, number: ++room.handNumber, turnMs: options.turnMs, runoutMs: options.runoutMs, riverSqueezeMs: options.riverSqueezeMs });
     room.dealerSeat = players[dealerIndex].seat;
     return true;
   }
@@ -124,6 +127,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
   }
   function syncGame(room: Room) {
     clearTimeout(room.turnTimer);
+    room.hand?.skipDisconnectedSqueeze(room.players.filter(p => p.socket).map(p => p.id));
     if (room.hand) {
       for (const p of room.hand.players) {
         const member = room.players.find(m => m.id === p.id);
@@ -192,12 +196,15 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         socket.close(1000, 'Left room');
         return;
       }
-      if (input.type === 'startHand' || input.type === 'act' || input.type === 'resetChips' || input.type === 'revealCards') {
+      if (input.type === 'startHand' || input.type === 'act' || input.type === 'resetChips' || input.type === 'revealCards' || input.type === 'revealRiver') {
         try {
           if (!membership || membership.member.socket !== socket) throw new Error('먼저 방에 입장해 주세요.');
           const { room, member } = membership;
           if (room.game !== 'holdem') throw new Error('홀덤 방에서만 시작할 수 있어요.');
-          if (input.type === 'revealCards') {
+          if (input.type === 'revealRiver') {
+            if (!room.hand || room.hand.id !== input.handId) throw new Error('이미 지난 판의 리버입니다.');
+            room.hand.revealRiver(member.id);
+          } else if (input.type === 'revealCards') {
             if (!room.hand || room.hand.id !== input.handId) throw new Error('이미 끝난 판의 패는 공개할 수 없어요.');
             room.hand.revealCards(member.id);
           } else if (input.type === 'act') {
@@ -271,8 +278,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       member.socket = undefined;
       member.expiry = setTimeout(() => remove(room, member), reconnectMs);
       member.expiry.unref();
-      scheduleNextHand(room);
-      broadcast(room);
+      syncGame(room);
     });
   });
 

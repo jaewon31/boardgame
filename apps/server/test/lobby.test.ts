@@ -133,7 +133,7 @@ test('server deadline ends an unattended hand and permits a new game', async t =
 
 async function setup(t: TestContext, options: Parameters<typeof attachLobby>[1] = {}) {
   const server = createAppServer();
-  const lobby = attachLobby(server, options);
+  const lobby = attachLobby(server, { runoutMs: 5, riverSqueezeMs: 10, ...options });
   const peers: Peer[] = [];
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -412,4 +412,42 @@ test('a busted player is not dealt another hand and may still reveal after the m
     return;
   }
   assert.fail('Eight consecutive all-in split pots did not produce a busted player');
+});
+
+test('real sockets receive paced streets and keep the river private across session replacement', async t => {
+  const app=await setup(t,{runoutMs:40,riverSqueezeMs:1500});
+  const a=await app.connect(),b=await app.connect();
+  const first=await a.create();
+  b.send({type:'join',code:first.room.code,nickname:'친구'});
+  const second=await b.next('joined') as Joined;
+  a.send({type:'startHand',previousHandId:null});
+  const hand=(await a.next('room',m=>m.type==='room' && !!m.room.holdem) as RoomMessage).room.holdem!;
+  a.send({type:'act',handId:hand.id,revision:0,action:'allIn'});
+  await b.next('room',m=>m.type==='room' && m.room.holdem?.revision===1);
+  b.send({type:'act',handId:hand.id,revision:1,action:'call'});
+  for(const count of [0,3,4]) {
+    const state=(await a.next('room',m=>m.type==='room' && m.room.holdem?.board.length===count && !!m.room.holdem.runout) as RoomMessage).room;
+    assert.equal(state.holdem!.payouts.length,0); assert.equal(state.nextHandAt,null);
+  }
+  const av=(await a.next('room',m=>m.type==='room' && (m.room.holdem?.runout?.phase==='squeezing' || m.room.holdem?.street==='river')) as RoomMessage).room.holdem!;
+  const bv=(await b.next('room',m=>m.type==='room' && m.room.holdem?.revision===av.revision) as RoomMessage).room.holdem!;
+  if(av.runout?.phase!=='squeezing') {
+    assert.equal(av.board.length,5); assert.deepEqual(av.board,bv.board); return; // A tied turn has no trailer.
+  }
+  const ownerIsA=av.runout.playerId===first.playerId;
+  const owner=ownerIsA?a:b, other=ownerIsA?b:a;
+  const privateView=ownerIsA?av:bv, publicView=ownerIsA?bv:av;
+  assert.ok(privateView.runout?.card); assert.equal(publicView.runout?.card,null);
+  assert.equal(publicView.board.length,4);
+  other.send({type:'revealRiver',handId:hand.id}); await other.next('error');
+  owner.send({type:'revealRiver',handId:'old-hand'}); await owner.next('error');
+  const replacement=await app.connect();
+  replacement.send({type:'resume',code:first.room.code,token:ownerIsA?first.token:second.token});
+  const restored=(await replacement.next('joined') as Joined).room.holdem!;
+  assert.equal(restored.runout?.card,privateView.runout?.card);
+  assert.equal(restored.runout?.deadline,privateView.runout?.deadline);
+  replacement.send({type:'revealRiver',handId:hand.id});
+  const visible=(await other.next('room',m=>m.type==='room' && m.room.holdem?.street==='river') as RoomMessage).room.holdem!;
+  assert.equal(visible.board[4],privateView.runout?.card); assert.equal(visible.payouts.length,0);
+  await other.next('room',m=>m.type==='room' && m.room.holdem?.street==='complete');
 });
