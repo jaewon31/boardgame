@@ -20,6 +20,8 @@ export interface LobbyRoom {
   hostId: string;
   maxPlayers: number;
   holdem?: HoldemView;
+  nextHandAt?: number | null;
+  fundedPlayers?: number;
   players: LobbyPlayer[];
 }
 

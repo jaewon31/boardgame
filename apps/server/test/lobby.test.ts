@@ -78,7 +78,7 @@ class Peer {
 }
 
 test('real sockets enforce game ownership, private cards, stale actions, resume, next hand and reset', async t => {
-  const app = await setup(t);
+  const app = await setup(t, { nextHandMs: 300 });
   const a = await app.connect(), b = await app.connect();
   const first = await a.create();
   b.send({ type: 'join', code: first.room.code, nickname: '친구' });
@@ -108,7 +108,7 @@ test('real sockets enforce game ownership, private cards, stale actions, resume,
   resumed.send({type:'act',handId:av.id,revision:next.revision,action:'fold'});
   const end=(await a.next('room',m=>m.type==='room' && m.room.holdem?.street==='complete') as RoomMessage).room.holdem!;
   assert.equal(end.players.reduce((sum,p)=>sum+p.stack,0),2000);
-  a.send({type:'startHand',previousHandId:end.id});
+
   const secondHand=(await a.next('room',m=>m.type==='room' && m.room.holdem?.number===2) as RoomMessage).room.holdem!;
   assert.equal(secondHand.dealerId,second.playerId);
   resumed.send({type:'act',handId:secondHand.id,revision:0,action:'fold'});
@@ -312,4 +312,104 @@ test('malformed JSON, binary messages and excessive requests are rejected', asyn
   const limited = await peer.next('error', m => m.type === 'error' && m.code === 'RATE_LIMITED');
   assert.equal(limited.type, 'error');
   assert.equal((await closed)[0], 1008);
+});
+
+test('automatic rounds preserve chips, rotate dealer, and cannot be skipped by the host', async t => {
+  const app=await setup(t,{nextHandMs:100});
+  const a=await app.connect(), b=await app.connect();
+  const first=await a.create();
+  b.send({type:'join',code:first.room.code,nickname:'친구'});
+  const second=await b.next('joined') as Joined;
+  a.send({type:'startHand',previousHandId:null});
+  let hand=(await a.next('room',m=>m.type==='room' && m.room.holdem?.number===1) as RoomMessage).room.holdem!;
+  for(let n=1;n<=3;n++) {
+    const actor=hand.actorId===first.playerId?a:b;
+    actor.send({type:'act',handId:hand.id,revision:hand.revision,action:'fold'});
+    const result=(await a.next('room',m=>m.type==='room' && m.room.holdem?.id===hand.id && m.room.holdem.street==='complete') as RoomMessage).room;
+    assert.ok(result.nextHandAt);
+    assert.equal(result.fundedPlayers,2);
+    assert.equal(result.holdem!.players.reduce((sum,p)=>sum+p.stack,0),2000);
+    if(n===1) {
+      a.send({type:'startHand',previousHandId:hand.id});
+      await a.next('error');
+    }
+    hand=(await a.next('room',m=>m.type==='room' && m.room.holdem?.number===n+1) as RoomMessage).room.holdem!;
+    assert.equal(hand.dealerId,n%2===1?second.playerId:first.playerId);
+    assert.equal(hand.players.reduce((sum,p)=>sum+p.stack+p.totalBet,0),2000);
+  }
+});
+
+test('countdown pauses when a funded player disconnects and resumes after reconnect', async t => {
+  const app=await setup(t,{nextHandMs:120,reconnectMs:2000});
+  const a=await app.connect(),b=await app.connect();
+  const first=await a.create();
+  b.send({type:'join',code:first.room.code,nickname:'친구'});
+  const second=await b.next('joined') as Joined;
+  a.send({type:'startHand',previousHandId:null});
+  const hand=(await a.next('room',m=>m.type==='room' && !!m.room.holdem) as RoomMessage).room.holdem!;
+  a.send({type:'act',handId:hand.id,revision:0,action:'fold'});
+  await a.next('room',m=>m.type==='room' && !!m.room.nextHandAt);
+  b.socket.terminate();
+  const paused=(await a.next('room',m=>m.type==='room' && m.room.players[1]?.connected === false) as RoomMessage).room;
+  assert.equal(paused.nextHandAt,null);
+  await new Promise(r=>setTimeout(r,180));
+  const resumed=await app.connect();
+  resumed.send({type:'resume',code:first.room.code,token:second.token});
+  const state=(await resumed.next('joined') as Joined).room;
+  assert.equal(state.holdem?.number,1);
+  assert.ok(state.nextHandAt);
+  await a.next('room',m=>m.type==='room' && m.room.holdem?.number===2);
+});
+
+test('one remaining player cancels the countdown and reset cannot leave a stray timer', async t => {
+  const app=await setup(t,{nextHandMs:120});
+  const a=await app.connect(),b=await app.connect();
+  const first=await a.create();
+  b.send({type:'join',code:first.room.code,nickname:'친구'}); await b.next('joined');
+  a.send({type:'startHand',previousHandId:null});
+  const hand=(await a.next('room',m=>m.type==='room' && !!m.room.holdem) as RoomMessage).room.holdem!;
+  a.send({type:'act',handId:hand.id,revision:0,action:'fold'});
+  await a.next('room',m=>m.type==='room' && !!m.room.nextHandAt);
+  b.send({type:'leave'}); await b.next('left');
+  const stopped=(await a.next('room',m=>m.type==='room' && m.room.players.length===1 && !!m.room.holdem) as RoomMessage).room;
+  assert.equal(stopped.nextHandAt,null); assert.equal(stopped.fundedPlayers,1);
+  a.send({type:'resetChips',handId:hand.id});
+  await a.next('room',m=>m.type==='room' && !m.room.holdem);
+  await new Promise(r=>setTimeout(r,180));
+  const c=await app.connect();
+  c.send({type:'join',code:first.room.code,nickname:'새친구'});
+  assert.equal((await c.next('joined') as Joined).room.holdem,undefined);
+});
+
+test('a busted player is not dealt another hand and may still reveal after the match ends', async t => {
+  const app=await setup(t,{nextHandMs:50});
+  const a=await app.connect(),b=await app.connect();
+  const first=await a.create();
+  b.send({type:'join',code:first.room.code,nickname:'친구'});
+  const second=await b.next('joined') as Joined;
+  a.send({type:'startHand',previousHandId:null});
+  for(let number=1;number<=8;number++) {
+    const hand=(await a.next('room',m=>m.type==='room' && m.room.holdem?.number===number && m.room.holdem.street!=='complete') as RoomMessage).room.holdem!;
+    const actor=hand.actorId===first.playerId?a:b;
+    const other=actor===a?b:a;
+    actor.send({type:'act',handId:hand.id,revision:0,action:'allIn'});
+    const raised=(await other.next('room',m=>m.type==='room' && m.room.holdem?.id===hand.id && m.room.holdem.revision===1) as RoomMessage).room.holdem!;
+    other.send({type:'act',handId:hand.id,revision:raised.revision,action:'call'});
+    const end=(await a.next('room',m=>m.type==='room' && m.room.holdem?.id===hand.id && m.room.holdem.street==='complete') as RoomMessage).room;
+    const loser=end.holdem!.players.find(p=>p.stack===0);
+    if(!loser) continue; // A tied board keeps both players in the automatic match.
+    assert.equal(end.fundedPlayers,1);
+    assert.equal(end.nextHandAt,null);
+    const loserPeer=loser.id===first.playerId?a:b;
+    loserPeer.send({type:'revealCards',handId:hand.id});
+    const shown=(await a.next('room',m=>m.type==='room' && m.room.holdem?.id===hand.id && m.room.holdem.revision===end.holdem!.revision+1) as RoomMessage).room;
+    assert.equal(shown.holdem!.players.find(p=>p.id===loser.id)?.cards?.length,2);
+    assert.equal(shown.nextHandAt,null);
+    await new Promise(r=>setTimeout(r,100));
+    const restored=await app.connect();
+    restored.send({type:'resume',code:first.room.code,token:second.token});
+    assert.equal((await restored.next('joined') as Joined).room.holdem?.id,hand.id);
+    return;
+  }
+  assert.fail('Eight consecutive all-in split pots did not produce a busted player');
 });
