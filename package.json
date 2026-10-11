@@ -10,6 +10,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
+    "android:devices": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/open-android.ps1",
     "start": "npm run start --workspace=@boardgame/mobile --",
     "android": "npm run android --workspace=@boardgame/mobile --",
     "ios": "npm run ios --workspace=@boardgame/mobile --",

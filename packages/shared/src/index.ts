@@ -20,6 +20,8 @@ export interface LobbyRoom {
   hostId: string;
   maxPlayers: number;
   holdem?: HoldemView;
+  nextHandAt?: number | null;
+  fundedPlayers?: number;
   players: LobbyPlayer[];
 }
 
@@ -28,9 +30,12 @@ export type EntryRequest =
   | { type: 'join'; nickname: string; code: string };
 
 export type ClientMessage = EntryRequest
+  | { type: 'ping'; id: number }
   | { type: 'resume'; code: string; token: string }
   | { type: 'leave' }
   | { type: 'startHand'; previousHandId: string | null }
+  | { type: 'revealCards'; handId: string }
+  | { type: 'revealRiver'; handId: string }
   | { type: 'resetChips'; handId: string }
   | { type: 'act'; handId: string; revision: number; action: PokerAction; amount?: number };
 
@@ -38,6 +43,7 @@ export type ErrorCode = 'INVALID_REQUEST' | 'ROOM_NOT_FOUND' | 'ROOM_FULL'
   | 'NICKNAME_TAKEN' | 'SESSION_EXPIRED' | 'ALREADY_JOINED' | 'RATE_LIMITED' | 'SERVER_FULL' | 'GAME_ERROR';
 
 export type ServerMessage =
+  | { type: 'pong'; id: number }
   | { type: 'joined'; room: LobbyRoom; playerId: string; token: string }
   | { type: 'room'; room: LobbyRoom }
   | { type: 'left' }

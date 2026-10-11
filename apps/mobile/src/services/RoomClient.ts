@@ -9,7 +9,13 @@ export interface RoomState {
 const emptyState: RoomState = { status: 'idle', room: null, playerId: null, error: null };
 
 // Keep networking separate from React so reconnect and cancellation can be tested.
+export interface ConnectionTiming { heartbeatMs?: number; heartbeatTimeoutMs?: number; retryMs?: number }
 export class RoomClient {
+  private heartbeat: ReturnType<typeof setInterval> | undefined;
+  private lastPong = 0;
+  private pendingPing: number | null = null;
+  private pingSequence = 0;
+  private timing: Required<ConnectionTiming>;
   private socket: WebSocket | null = null;
   private generation = 0;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -20,7 +26,8 @@ export class RoomClient {
   private endpoint: string;
   private notify: (state: RoomState) => void;
 
-  constructor(endpoint: string, notify: (state: RoomState) => void) {
+  constructor(endpoint: string, notify: (state: RoomState) => void, timing: ConnectionTiming = {}) {
+    this.timing = { heartbeatMs: timing.heartbeatMs ?? 5000, heartbeatTimeoutMs: timing.heartbeatTimeoutMs ?? 15000, retryMs: timing.retryMs ?? 1000 };
     this.endpoint = endpoint;
     this.notify = notify;
   }
@@ -31,6 +38,8 @@ export class RoomClient {
   }
   private disconnect() {
     this.generation++;
+    clearInterval(this.heartbeat);
+    this.pendingPing = null;
     clearTimeout(this.retryTimer);
     clearTimeout(this.timeout);
     const socket = this.socket;
@@ -52,10 +61,26 @@ export class RoomClient {
     this.socket.send(JSON.stringify(command));
   }
   startHand() { this.gameCommand({ type: 'startHand', previousHandId: this.state.room?.holdem?.id ?? null }); }
+  revealRiver(handId: string) { this.gameCommand({ type: 'revealRiver', handId }); }
+  revealCards(handId: string) { this.gameCommand({ type: 'revealCards', handId }); }
   resetChips() { const hand = this.state.room?.holdem; if (hand) this.gameCommand({ type: 'resetChips', handId: hand.id }); }
   act(action: PokerAction, amount?: number) {
     const hand = this.state.room?.holdem;
     if (hand) this.gameCommand({ type: 'act', handId: hand.id, revision: hand.revision, action, amount });
+  }
+
+  // Native sockets can stay OPEN after an emulator snapshot or a network black hole.
+  // Require an application-level response, not just the transport's readyState.
+  checkConnection() {
+    if (this.state.status !== 'connected') return;
+    if (Date.now() - this.lastPong >= this.timing.heartbeatTimeoutMs || this.socket?.readyState !== WebSocket.OPEN) {
+      this.connectionLost();
+      return;
+    }
+    if (this.pendingPing !== null) return;
+    this.pendingPing = ++this.pingSequence;
+    try { this.socket.send(JSON.stringify({ type: 'ping', id: this.pendingPing })); }
+    catch { this.connectionLost(); }
   }
 
   private connect(request: EntryRequest | { type: 'resume'; code: string; token: string }) {
@@ -85,9 +110,14 @@ export class RoomClient {
       if (generation !== this.generation) return;
       let message: ServerMessage;
       try { message = JSON.parse(String(event.data)); } catch { return; }
-      if (message.type === 'joined') {
+      if (message.type === 'pong' && joined) {
+        if (message.id === this.pendingPing) { this.lastPong = Date.now(); this.pendingPing = null; }
+      } else if (message.type === 'joined') {
         clearTimeout(this.timeout);
         joined = true;
+        this.lastPong = Date.now();
+        clearInterval(this.heartbeat);
+        this.heartbeat = setInterval(() => this.checkConnection(), this.timing.heartbeatMs);
         this.retryUntil = 0;
         this.session = { code: message.room.code, token: message.token };
         this.update({ status: 'connected', room: message.room, playerId: message.playerId, error: null });
@@ -115,6 +145,7 @@ export class RoomClient {
   }
 
   private connectionLost() {
+    this.disconnect();
     if (!this.session) {
       this.update({ ...emptyState, error: '서버에 연결하지 못했어요. 게임 서버 실행과 같은 Wi-Fi 연결을 확인해 주세요.' });
       return;
@@ -128,7 +159,7 @@ export class RoomClient {
     clearTimeout(this.retryTimer);
     this.retryTimer = setTimeout(() => {
       if (this.session) this.connect({ type: 'resume', ...this.session });
-    }, 1_000);
+    }, this.timing.retryMs);
   }
 
   leave() {

@@ -1,80 +1,96 @@
+import { RiverSqueeze } from '../components/RiverSqueeze';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Card, LobbyRoom, PokerAction } from '@boardgame/shared';
+import type { LobbyRoom, PokerAction } from '@boardgame/shared';
+import { PokerTable } from '../components/PokerTable';
 import { ActionButton } from '../components/ActionButton';
 
 interface Props {
   room: LobbyRoom; playerId: string | null; connected: boolean; error: string | null;
-  onLeave: () => void; onStart: () => void; onReset: () => void;
+  onRevealRiver: (handId: string) => void;
+  onLeave: () => void; onReset: () => void; onReveal: (handId: string) => void;
   onAct: (action: PokerAction, amount?: number) => void;
 }
 const streets = { preflop: '프리플롭', flop: '플롭', turn: '턴', river: '리버', complete: '결과' };
-function Cards({ cards, count = 2 }: { cards: Card[] | null; count?: number }) {
-  return <View style={styles.cards}>{Array.from({ length: count }, (_, i) => {
-    const card = cards?.[i];
-    const rank = card ? Number(card.slice(0, -1)) : 0;
-    const suit = card?.slice(-1);
-    const label = card ? `${({ 11: 'J', 12: 'Q', 13: 'K', 14: 'A' } as Record<number, string>)[rank] ?? rank}${({ s: '♠', h: '♥', d: '♦', c: '♣' } as Record<string, string>)[suit!]}` : '◆';
-    return <View key={i} style={[styles.card, !card && styles.back]}><Text accessibilityLabel={card ? label : '비공개 카드'} style={[styles.face, (suit === 'h' || suit === 'd') && styles.red, !card && styles.hidden]}>{label}</Text></View>;
-  })}</View>;
-}
-export function GameScreen({ room, playerId, connected, error, onLeave, onStart, onReset, onAct }: Props) {
+export function GameScreen({ room, playerId, connected, error, onLeave, onReset, onAct, onReveal, onRevealRiver }: Props) {
   const hand = room.holdem!;
   const insets = useSafeAreaInsets();
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const [now, setNow] = useState(Date.now());
   const [amount, setAmount] = useState('');
-  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(timer); }, []);
-  useEffect(() => { setAmount(String(hand.legal?.minRaiseTo ?? 20)); }, [hand.id, hand.revision, hand.legal?.minRaiseTo]);
+  const [panel, setPanel] = useState<'raise' | 'result' | null>(null);
+  const [page, setPage] = useState(0);
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 250); return () => clearInterval(timer); }, []);
+  useEffect(() => { setAmount(String(hand.legal?.minRaiseTo ?? 20)); setPanel(null); setPage(0); }, [hand.id, hand.revision, hand.legal?.minRaiseTo]);
   const legal = hand.legal;
+  const runout = hand.runout;
+  const runoutSeconds = runout ? Math.max(0, Math.ceil((runout.deadline - now) / 1000)) : 0;
+  const squeezeName = hand.players.find(p => p.id === runout?.playerId)?.nickname;
+  const nextLabel = runout?.nextStreet === 'showdown' ? '결과 확인' : runout ? streets[runout.nextStreet] + ' 공개' : '';
   const done = hand.street === 'complete';
-  const host = room.hostId === playerId;
+  const ended = done && (room.fundedPlayers ?? 2) < 2;
   const actor = hand.players.find(p => p.id === hand.actorId);
+  const me = hand.players.find(p => p.id === playerId);
   const seconds = hand.deadline ? Math.max(0, Math.ceil((hand.deadline - now) / 1000)) : 0;
+  const nextSeconds = room.nextHandAt ? Math.max(0, Math.ceil((room.nextHandAt - now) / 1000)) : 0;
   const raiseTo = Number(amount);
   const validRaise = !!legal && /^\d+$/.test(amount) && Number.isSafeInteger(raiseTo) && raiseTo <= legal.maxRaiseTo && (raiseTo >= legal.minRaiseTo || raiseTo === legal.maxRaiseTo);
-  function leave() { Alert.alert('방에서 나갈까요?', '진행 중인 패는 폴드되고, 이 자리의 칩을 이어서 사용할 수 없어요. 이미 올인한 패는 정산까지 유지됩니다.', [{ text: '취소', style: 'cancel' }, { text: '나가기', style: 'destructive', onPress: onLeave }]); }
-  return <ScrollView style={styles.screen} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 24 }]}>
-    <Text style={styles.meta}>FRIENDS TABLE · {room.code} · {connected ? '연결됨' : '재연결 중'}</Text>
-    <Text style={styles.title}>홀덤 #{hand.number} · {streets[hand.street]}</Text>
-    <Text style={styles.muted}>블라인드 {hand.smallBlind}/{hand.bigBlind} · 가상 칩</Text>
-    <View style={styles.table}>
-      <Text style={styles.pot}>{done ? '정산한 팟' : '팟'} {hand.pot.toLocaleString()}</Text>
-      <Cards cards={hand.board} count={5} />
-      <Text style={styles.event}>{hand.lastEvent}</Text>
-      {!done && <Text style={styles.turn}>{actor?.nickname}님 차례 · {seconds}초</Text>}
+  const name = (id: string) => hand.players.find(p => p.id === id)?.nickname ?? '퇴장한 친구';
+  const results = [
+    ...hand.payouts.map(p => `${name(p.playerId)} · ${p.handName} · +${p.amount}`),
+    ...hand.refunds.map(p => `${name(p.playerId)} · 미성립 베팅 ${p.amount} 반환`),
+    ...hand.pots.map((p, i) => `${i ? `사이드 팟 ${i}` : '메인 팟'} ${p.amount} · ${p.winnerIds.map(name).join(', ')}`),
+  ];
+  const status = !connected ? '연결 복구 중…' : done ? ended ? '경기 종료' : room.nextHandAt ? `${nextSeconds}초 후 다음 판` : '접속 중인 플레이어 2명 대기' : runout ? runout.phase === 'squeezing' ? `${squeezeName}님 리버 째기 · ${runoutSeconds}초` : `${nextLabel} · ${runoutSeconds}초` : legal ? '● 내 차례' : actor ? `${actor.nickname}님 차례 · ${seconds}초` : '관전 중';
+  function leave() { Alert.alert('방에서 나갈까요?', '진행 중인 패는 폴드되고 이 자리의 칩을 잃어요.', [{ text: '취소', style: 'cancel' }, { text: '나가기', style: 'destructive', onPress: onLeave }]); }
+  return <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View style={styles.header}><View><Text style={styles.meta}>{room.code} · {hand.smallBlind}/{hand.bigBlind}</Text><Text style={styles.title}>홀덤 #{hand.number} · {streets[hand.street]}</Text></View><Pressable accessibilityRole="button" onPress={leave} style={styles.link}><Text style={styles.text}>나가기 ↗</Text></Pressable></View>
+    <View style={styles.ribbon}><Text numberOfLines={1} style={styles.gold}>{status}</Text></View>
+    <View style={styles.table} onLayout={e => setSize(e.nativeEvent.layout)}>
+      {size.width > 0 && size.height > 0 && <PokerTable room={room} playerId={playerId} width={size.width} height={size.height} seconds={seconds} connected={connected} onReveal={onReveal} />}
     </View>
-    {hand.players.map(p => <View key={p.id} style={[styles.player, hand.actorId === p.id && styles.active]}>
-      <View style={styles.row}><Text style={styles.name}>{p.nickname}{p.id === playerId ? ' (나)' : ''} {p.id === hand.dealerId ? 'Ⓓ' : ''} {p.id === hand.smallBlindId ? 'SB' : p.id === hand.bigBlindId ? 'BB' : ''}</Text><Text style={styles.chips}>{p.stack.toLocaleString()} 칩</Text></View>
-      <View style={styles.row}><Cards cards={p.cards} /><Text style={styles.muted}>{p.folded ? '폴드' : !done && p.allIn ? '올인' : `이번 라운드 ${p.roundBet}`} {!room.players.find(m => m.id === p.id)?.connected ? '· 연결 끊김' : ''}</Text></View>
-    </View>)}
-    {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    {legal && <View style={styles.controls}>
-      <Text style={styles.turn}>내 차례예요</Text>
-      <View style={styles.row}><ActionButton title="폴드" onPress={() => onAct('fold')} disabled={!connected} secondary /><ActionButton title={legal.canCheck ? '체크' : `${legal.callAmount} 콜`} onPress={() => onAct(legal.canCheck ? 'check' : 'call')} disabled={!connected} /></View>
-      {legal.canRaise && <><Text style={styles.muted}>이번 라운드 총 베팅액 · 최소 {legal.minRaiseTo}, 최대 {legal.maxRaiseTo}</Text><TextInput accessibilityLabel="레이즈 총 금액" value={amount} onChangeText={setAmount} keyboardType="number-pad" style={styles.input} /><ActionButton title={`${amount || '0'}까지 레이즈`} onPress={() => onAct('raise', raiseTo)} disabled={!connected || !validRaise} /></>}
-      <ActionButton title="올인" onPress={() => Alert.alert('올인할까요?', '남은 칩을 모두 베팅합니다.', [{ text: '취소', style: 'cancel' }, { text: '올인', onPress: () => onAct('allIn') }])} disabled={!connected || !legal.canAllIn} secondary />
-      <Text style={styles.muted}>시간이 지나면 체크가 가능할 때 체크, 아니면 폴드합니다.</Text>
-    </View>}
-    {done && <View style={styles.controls}>
-      <Text style={styles.title}>이번 판 결과</Text>
-      {hand.payouts.map(p => <Text key={p.playerId} style={styles.turn}>{hand.players.find(m => m.id === p.playerId)?.nickname} · {p.handName} · {p.amount} 칩 수령</Text>)}
-      {hand.refunds.map((p, i) => <Text key={i} style={styles.muted}>{hand.players.find(m => m.id === p.playerId)?.nickname} · 미성립 베팅 {p.amount} 반환</Text>)}
-      {hand.pots.length > 1 && hand.pots.map((p, i) => <Text key={i} style={styles.muted}>{i === 0 ? '메인 팟' : `사이드 팟 ${i}`} {p.amount} · {p.winnerIds.map(id => hand.players.find(m => m.id === id)?.nickname).join(', ')}</Text>)}
-      {host ? <><ActionButton title="다음 판 시작" onPress={onStart} disabled={!connected} /><ActionButton title="모두 1,000칩으로 새로 시작" secondary disabled={!connected} onPress={() => Alert.alert('칩을 초기화할까요?', '방에 있는 모든 친구의 칩이 1,000개로 바뀝니다.', [{ text: '취소', style: 'cancel' }, { text: '초기화', onPress: onReset }])} /></> : <Text style={styles.muted}>방장이 다음 판을 시작할 수 있어요.</Text>}
-    </View>}
-    {!legal && !done && <Text style={styles.muted}>{hand.players.some(p => p.id === playerId) ? '친구의 행동을 기다리는 중이에요.' : '다음 판에 참여할 수 있어요.'}</Text>}
-    <ActionButton title="방 나가기" onPress={leave} secondary />
-  </ScrollView>;
+    <View style={styles.footer}>
+      <Pressable accessibilityRole="button" accessibilityLabel="게임 알림 자세히 보기" onPress={() => Alert.alert('게임 알림', error || hand.lastEvent)}><Text numberOfLines={1} style={error ? styles.error : styles.event}>{error || hand.lastEvent}</Text></Pressable>
+      {legal ? <>
+        <View style={styles.row}>
+          <Pressable accessibilityRole="button" disabled={!connected} style={[styles.action, styles.foldAction, !connected && styles.disabled]} onPress={() => onAct('fold')}><Text style={styles.actionText}>폴드</Text></Pressable>
+          <Pressable accessibilityRole="button" disabled={!connected} style={[styles.action, styles.callAction, !connected && styles.disabled]} onPress={() => onAct(legal.canCheck ? 'check' : 'call')}><Text style={styles.actionText}>{legal.canCheck ? '체크' : '콜'}</Text>{!legal.canCheck && <Text style={styles.actionAmount}>{legal.callAmount.toLocaleString()}</Text>}</Pressable>
+          <Pressable accessibilityRole="button" disabled={!connected || (!legal.canRaise && !legal.canAllIn)} style={[styles.action, styles.raiseAction, (!connected || (!legal.canRaise && !legal.canAllIn)) && styles.disabled]} onPress={() => setPanel('raise')}><Text style={styles.actionText}>베팅</Text><Text style={styles.actionAmount}>레이즈 / 올인</Text></Pressable>
+        </View>
+      </> : done ? <>
+        <Text numberOfLines={1} style={styles.text}>{ended ? '칩이 남은 플레이어가 승리했어요.' : me?.stack === 0 ? '칩을 모두 잃었어요. 다음 판부터 관전합니다.' : hand.canReveal ? '내 패 공개는 선택 · 공개 버튼으로 친구에게 보여주세요.' : '칩이 남은 플레이어끼리 자동으로 계속해요.'}</Text>
+        <View style={styles.row}><View style={styles.grow}><ActionButton compact title="결과 자세히" secondary onPress={() => setPanel('result')} /></View>{ended && room.hostId === playerId && <View style={styles.grow}><ActionButton compact title="새 경기 준비" disabled={!connected} onPress={() => Alert.alert('새 경기를 준비할까요?', '모두 1,000칩으로 대기실에 돌아갑니다.', [{ text: '취소', style: 'cancel' }, { text: '준비', onPress: onReset }])} /></View>}</View>
+      </> : <Text style={styles.text}>{runout ? runout.phase === 'squeezing' ? '리버를 확인하는 중이에요. 잠시 기다려 주세요.' : '베팅이 끝났어요. 공용 카드를 순서대로 공개합니다.' : !me ? '관전 중 · 칩이 없으면 다음 판에 참여하지 않아요.' : me.folded ? '폴드했어요. 다음 판은 자동으로 시작됩니다.' : '친구의 행동을 기다리는 중이에요.'}</Text>}
+    </View>
+    {runout?.phase === 'squeezing' && runout.playerId === playerId && runout.card && <RiverSqueeze key={hand.id} card={runout.card} deadline={runout.deadline} connected={connected} onReveal={() => onRevealRiver(hand.id)} />}
+    <Modal visible={panel !== null} transparent animationType="fade" onRequestClose={() => setPanel(null)}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
+        <View style={styles.panel}>
+          <View style={styles.row}><Text style={styles.title}>{panel === 'raise' ? '베팅 금액' : '이번 판 결과'}</Text><Pressable accessibilityRole="button" onPress={() => setPanel(null)} style={styles.link}><Text style={styles.gold}>닫기 ✕</Text></Pressable></View>
+          {panel === 'raise' && legal && <>
+            <View style={styles.row}>{[legal.minRaiseTo, Math.max(legal.minRaiseTo, Math.min(legal.maxRaiseTo, Math.ceil(hand.pot / 2))), Math.max(legal.minRaiseTo, Math.min(legal.maxRaiseTo, hand.pot))].map((value, i) => <Pressable key={i} accessibilityRole="button" onPress={() => setAmount(String(value))} style={styles.preset}><Text style={styles.text}>{['최소', '½ 팟', '팟'][i]} {value}</Text></Pressable>)}</View>
+            <Text style={styles.text}>라운드 총액 · 최소 {legal.minRaiseTo} / 최대 {legal.maxRaiseTo}</Text>
+            <TextInput accessibilityLabel="레이즈 총 금액" value={amount} onChangeText={setAmount} keyboardType="number-pad" maxLength={9} style={styles.input} />
+            <View style={styles.row}><View style={styles.grow}><ActionButton compact disabled={!connected || !legal.canAllIn} secondary title="올인" onPress={() => Alert.alert('올인할까요?', '남은 칩을 모두 베팅합니다.', [{ text: '취소', style: 'cancel' }, { text: '올인', onPress: () => { setPanel(null); onAct('allIn'); } }])} /></View><View style={styles.grow}>
+            <ActionButton compact title={`${amount || '0'}까지 레이즈`} onPress={() => { setPanel(null); onAct('raise', raiseTo); }} disabled={!connected || !legal.canRaise || !validRaise} /></View></View>
+          </>}
+          {panel === 'result' && <>
+            {results.slice(page * 3, page * 3 + 3).map((line, i) => <Text key={i} style={styles.result}>{line}</Text>)}
+            <View style={styles.row}><View style={styles.grow}><ActionButton compact title="이전" secondary disabled={page === 0} onPress={() => setPage(p => p - 1)} /></View><Text style={styles.text}>{page + 1}/{Math.max(1, Math.ceil(results.length / 3))}</Text><View style={styles.grow}><ActionButton compact title="다음" secondary disabled={(page + 1) * 3 >= results.length} onPress={() => setPage(p => p + 1)} /></View></View>
+          </>}
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  </View>;
 }
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#101C18' }, content: { paddingHorizontal: 20, width: '100%', maxWidth: 600, alignSelf: 'center', gap: 12 },
-  meta: { color: '#D5BD7F', fontSize: 11 }, title: { color: '#FAF6E9', fontWeight: '800', fontSize: 23 }, muted: { color: '#B2C4B8', fontSize: 12, lineHeight: 20, flexShrink: 1 },
-  table: { backgroundColor: '#254E39', borderRadius: 24, padding: 20, alignItems: 'center', gap: 14 }, pot: { color: '#F5DE99', fontSize: 22, fontWeight: '800' },
-  cards: { flexDirection: 'row', gap: 5 }, card: { backgroundColor: '#FFF7E4', borderRadius: 6, width: 43, height: 56, justifyContent: 'center', alignItems: 'center' }, back: { backgroundColor: '#36564A', borderWidth: 1, borderColor: '#72917F' },
-  face: { color: '#192620', fontSize: 21, fontWeight: '800' }, red: { color: '#B73536' }, hidden: { color: '#A8C7B3' },
-  player: { backgroundColor: '#1A2B22', borderRadius: 14, padding: 12, gap: 10, borderWidth: 1, borderColor: '#304338' }, active: { borderColor: '#E1C571', borderWidth: 2 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 }, name: { color: '#FAF6E9', fontWeight: '700', flexShrink: 1 }, chips: { color: '#E1C571', fontWeight: '700' },
-  event: { color: '#D8E4DB', fontSize: 13 }, turn: { color: '#F4D57C', fontSize: 14, fontWeight: '700', lineHeight: 23 }, controls: { gap: 12, backgroundColor: '#1A2B22', padding: 16, borderRadius: 16 },
-  input: { backgroundColor: '#101C18', color: '#FAF6E9', padding: 14, borderRadius: 8, fontSize: 18, borderColor: '#647565', borderWidth: 1 }, error: { color: '#FFC09E', lineHeight: 22 },
+  action: { flex: 1, height: 54, borderRadius: 6, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FFFFFF18' }, foldAction: { backgroundColor: '#364047' }, callAction: { backgroundColor: '#226354' }, raiseAction: { backgroundColor: '#A53D39' }, actionText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' }, actionAmount: { color: '#FFFFFFCC', fontSize: 11, marginTop: 2 }, disabled: { opacity: .4 }, screen: { flex: 1, backgroundColor: '#0D171D' }, header: { paddingHorizontal: 16, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  meta: { color: '#D5BD7F', fontSize: 10 }, title: { color: '#FAF6E9', fontSize: 18, fontWeight: '800' }, link: { padding: 12, minHeight: 44, justifyContent: 'center' },
+  ribbon: { paddingHorizontal: 16, paddingVertical: 6, backgroundColor: '#1A302D' }, gold: { color: '#F4D57C', fontSize: 13, fontWeight: '700' },
+  table: { flex: 1, minHeight: 0, marginHorizontal: 12, maxWidth: 560, width: 'auto' }, footer: { paddingHorizontal: 12, paddingVertical: 6, gap: 6, backgroundColor: '#172A2D' },
+  event: { color: '#D8E4DB', fontSize: 12, textAlign: 'center', minHeight: 18 }, error: { color: '#FFC09E', fontSize: 12 }, text: { color: '#B2C4B8', fontSize: 12 },
+  row: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'space-between' }, grow: { flex: 1 },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000B', paddingHorizontal: 16 }, panel: { width: '100%', maxWidth: 480, backgroundColor: '#172A2D', padding: 12, borderRadius: 18, gap: 10 },
+  preset: { flex: 1, minHeight: 44, backgroundColor: '#34483E', borderRadius: 10, justifyContent: 'center', alignItems: 'center' }, input: { backgroundColor: '#101C18', color: '#FAF6E9', padding: 10, borderRadius: 8, fontSize: 18, minHeight: 44, borderColor: '#647565', borderWidth: 1 }, result: { color: '#E8DBB9', fontSize: 13, lineHeight: 20 },
 });

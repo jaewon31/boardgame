@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import type { EntryRequest, PokerAction } from '@boardgame/shared';
 import { RoomClient, type RoomState } from '../services/RoomClient';
@@ -9,12 +10,15 @@ export function useRoom() {
   useEffect(() => {
     const connection = new RoomClient(getServerUrl(), setState);
     client.current = connection;
-    return () => { connection.dispose(); client.current = null; };
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') connection.checkConnection(); });
+    return () => { subscription.remove(); connection.dispose(); client.current = null; };
   }, []);
   return {
     ...state,
     enter: (request: EntryRequest) => client.current?.enter(request),
     startHand: () => client.current?.startHand(),
+    revealRiver: (handId: string) => client.current?.revealRiver(handId),
+    revealCards: (handId: string) => client.current?.revealCards(handId),
     resetChips: () => client.current?.resetChips(),
     act: (action: PokerAction, amount?: number) => client.current?.act(action, amount),
     leave: () => client.current?.leave(),
