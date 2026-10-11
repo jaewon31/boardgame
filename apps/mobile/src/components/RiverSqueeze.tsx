@@ -48,16 +48,19 @@ export function RiverSqueeze({ card, deadline, connected, onReveal }: Props) {
     onPanResponderTerminationRequest: () => false,
     onPanResponderTerminate: reset,
   })).current;
-  const depth = progress * 140;
-  const edge = progress * 240;
-  // The upper squeeze covers the corner indices until the last part of the drag,
-  // so the central pips can be inspected separately from the rank at the corner.
-  const margin = 22 * Math.max(0, 1 - Math.max(0, progress - .75) / .25);
+  // Reflect the printed underside across the moving crease. The lifted piece
+  // occupies a new position; no front texture is painted through a hole in the back.
+  const fold = progress * (mode === 'top' ? 68 : 112);
+  const flap = mode === 'top'
+    ? `M0 ${fold} Q50 ${fold - 4 * progress} 100 ${fold} L100 ${fold * 2} Q50 ${fold * 2 + 3 * progress} 0 ${fold * 2}Z`
+    : `M0 ${fold} L${fold} 0 L${fold} ${fold}Z`;
+  const back = mode === 'top' ? `M0 ${fold}H100V140H0Z` : `M0 ${fold}L${fold} 0H100V140H0Z`;
+  const reflection = mode === 'top' ? `matrix(-1 0 0 -1 100 ${fold * 2})` : `matrix(-1 0 0 -1 ${fold} ${fold})`;
   const seconds = Math.max(0, Math.ceil((deadline - now) / 1000));
   function choose(value: typeof mode) { if (pending) return; motion.stopAnimation(); motion.setValue(0); setMode(value); }
   return <Modal visible statusBarTranslucent navigationBarTranslucent animationType="fade" presentationStyle="fullScreen" onRequestClose={reveal}>
     <View style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
-      <View style={styles.header}><View><Text style={styles.eyebrow}>THE RIVER</Text><Text style={styles.title}>마지막 한 장</Text></View><Text style={styles.clock}>{seconds}초</Text></View>
+      <View style={styles.header}><View><Text style={styles.eyebrow}>RIVER</Text><Text style={styles.title}>리버 카드</Text></View><Text style={styles.clock}>{seconds}초</Text></View>
       <Text style={styles.caption}>{!connected ? '연결 복구 중 · 시간이 지나면 자동 공개돼요.' : '턴 기준으로 뒤지고 있어요. 리버를 직접 확인하세요.'}</Text>
       <View style={styles.modes}>
         <Pressable accessibilityRole="button" accessibilityState={{ selected: mode === 'top', disabled: pending }} disabled={pending} style={[styles.mode, mode === 'top' && styles.selected]} onPress={() => choose('top')}><Text style={styles.modeText}>↓ 위에서 · 무늬</Text></Pressable>
@@ -69,17 +72,27 @@ export function RiverSqueeze({ card, deadline, connected, onReveal }: Props) {
             <Svg width={cardWidth} height={cardWidth * 1.4} viewBox="0 0 100 140">
               <Defs>
                 <ClipPath id="riverCard"><Rect x={.5} y={.5} width={99} height={139} rx={6} /></ClipPath>
-                <ClipPath id="peek" key={`${mode}-${progress.toFixed(3)}`}>{mode === 'top' ? <Rect x={margin} y={0} width={100 - margin * 2} height={depth} /> : <Path d={`M0 0H${edge}L0 ${edge}Z`} />}</ClipPath>
-                <LinearGradient id="fold" x1="0" y1="0" x2="0" y2="1"><Stop offset="0" stopColor="#FFFDF7" /><Stop offset="50%" stopColor="#E1D8C7" /><Stop offset="1" stopColor="#A5967A" /></LinearGradient>
+                <ClipPath id="backRemaining" key={`back-${mode}-${progress.toFixed(3)}`}><Path d={back} /></ClipPath>
+                <ClipPath id="turnedFlap" key={`flap-${mode}-${progress.toFixed(3)}`}><Path d={flap} /></ClipPath>
+                <LinearGradient id="curlLight" x1="0%" y1="0%" x2={mode === 'top' ? '0%' : '100%'} y2="100%">
+                  <Stop offset={mode === 'top' ? '0%' : '50%'} stopColor="#131B23" stopOpacity={.48} />
+                  <Stop offset={mode === 'top' ? '24%' : '62%'} stopColor="#FFFFFF" stopOpacity={.08} />
+                  <Stop offset="70%" stopColor="#FFFFFF" stopOpacity={.04} />
+                  <Stop offset="100%" stopColor="#8A8C89" stopOpacity={.32} />
+                </LinearGradient>
               </Defs>
-              <CardDrawing back />
-              <G clipPath="url(#riverCard)">
-                <G key={`${mode}-${progress.toFixed(3)}`} clipPath="url(#peek)"><CardDrawing card={card} /></G>
-                {progress > 0 && progress < .99 && (mode === 'top' ? <G>
-                  <Rect x={margin} y={Math.max(0, depth - 3)} width={100 - margin * 2} height={3} fill="#000" opacity={.2} />
-                  <Path d={`M${margin} ${depth}Q50 ${depth + (reduced ? 0 : 6)} ${100 - margin} ${depth}V${depth + 7}H${margin}Z`} fill="url(#fold)" />
-                </G> : <G><Path d={`M0 ${edge}L${edge} 0L${edge + 8} 0L0 ${edge + 8}Z`} fill="url(#fold)" /><Path d={`M0 ${edge}L${edge} 0`} stroke="#776951" strokeWidth={.6} opacity={.6} /></G>)}
-              </G>
+              {pending ? <CardDrawing card={card} /> : <G clipPath="url(#riverCard)">
+                <G key={`back-${mode}-${progress.toFixed(3)}`} clipPath="url(#backRemaining)"><CardDrawing back /></G>
+                {progress > 0 && <>
+                  <Path d={flap} fill="#000" opacity={.22} transform="translate(1 3)" />
+                  <Path d={flap} fill="#000" opacity={.15} transform="translate(0 1.5)" />
+                  <G key={`face-${mode}-${progress.toFixed(3)}`} clipPath="url(#turnedFlap)">
+                    <G transform={reflection}><CardDrawing card={card} /></G>
+                    <Path d={flap} fill="url(#curlLight)" />
+                  </G>
+                  <Path d={mode === 'top' ? `M0 ${fold * 2}Q50 ${fold * 2 + 3 * progress} 100 ${fold * 2}` : `M${fold} 0V${fold}H0`} fill="none" stroke="#FFFDF2" strokeWidth={.6} />
+                </>}
+              </G>}
             </Svg>
           </View>
         </View>}
@@ -92,8 +105,8 @@ export function RiverSqueeze({ card, deadline, connected, onReveal }: Props) {
 }
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#071B17', paddingHorizontal: 16 }, header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  eyebrow: { color: '#CEAE6E', fontSize: 10, letterSpacing: 3 }, title: { color: '#FFF6E4', fontSize: 24, fontWeight: '800' }, clock: { color: '#EAD39E', fontSize: 20, fontWeight: '700' },
-  caption: { color: '#9EBAB0', fontSize: 11, marginVertical: 8 }, modes: { flexDirection: 'row', gap: 8 }, mode: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 12, borderWidth: 1, borderColor: '#355B50' }, selected: { backgroundColor: '#325348', borderColor: '#D3B778' }, modeText: { color: '#F5E7C7', fontSize: 13, fontWeight: '700' },
+  eyebrow: { color: '#CEAE6E', fontSize: 10, letterSpacing: 3 }, title: { color: '#FFF6E4', fontSize: 20, fontWeight: '800' }, clock: { color: '#EAD39E', fontSize: 20, fontWeight: '700' },
+  caption: { color: '#9EBAB0', fontSize: 11, marginVertical: 8 }, modes: { flexDirection: 'row', gap: 8 }, mode: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 6, borderWidth: 1, borderColor: '#355B50' }, selected: { backgroundColor: '#325348', borderColor: '#D3B778' }, modeText: { color: '#F5E7C7', fontSize: 13, fontWeight: '700' },
   stage: { flex: 1, minHeight: 0, justifyContent: 'center', alignItems: 'center' }, hint: { color: '#F2E4C2', textAlign: 'center', fontSize: 12 }, fine: { color: '#9EBAB0', textAlign: 'center', fontSize: 10, marginTop: 4 },
   publish: { minHeight: 44, backgroundColor: '#DCC58D', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 8 }, publishText: { color: '#19372E', fontWeight: '800', fontSize: 14 },
 });

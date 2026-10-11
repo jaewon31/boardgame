@@ -45,7 +45,7 @@ export function GameScreen({ room, playerId, connected, error, onLeave, onReset,
   const status = !connected ? '연결 복구 중…' : done ? ended ? '경기 종료' : room.nextHandAt ? `${nextSeconds}초 후 다음 판` : '접속 중인 플레이어 2명 대기' : runout ? runout.phase === 'squeezing' ? `${squeezeName}님 리버 째기 · ${runoutSeconds}초` : `${nextLabel} · ${runoutSeconds}초` : legal ? '● 내 차례' : actor ? `${actor.nickname}님 차례 · ${seconds}초` : '관전 중';
   function leave() { Alert.alert('방에서 나갈까요?', '진행 중인 패는 폴드되고 이 자리의 칩을 잃어요.', [{ text: '취소', style: 'cancel' }, { text: '나가기', style: 'destructive', onPress: onLeave }]); }
   return <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-    <View style={styles.header}><View><Text style={styles.meta}>FRIENDS TABLE · {room.code}</Text><Text style={styles.title}>홀덤 #{hand.number} · {streets[hand.street]}</Text></View><Pressable accessibilityRole="button" onPress={leave} style={styles.link}><Text style={styles.text}>나가기 ↗</Text></Pressable></View>
+    <View style={styles.header}><View><Text style={styles.meta}>{room.code} · {hand.smallBlind}/{hand.bigBlind}</Text><Text style={styles.title}>홀덤 #{hand.number} · {streets[hand.street]}</Text></View><Pressable accessibilityRole="button" onPress={leave} style={styles.link}><Text style={styles.text}>나가기 ↗</Text></Pressable></View>
     <View style={styles.ribbon}><Text numberOfLines={1} style={styles.gold}>{status}</Text></View>
     <View style={styles.table} onLayout={e => setSize(e.nativeEvent.layout)}>
       {size.width > 0 && size.height > 0 && <PokerTable room={room} playerId={playerId} width={size.width} height={size.height} seconds={seconds} connected={connected} onReveal={onReveal} />}
@@ -53,8 +53,11 @@ export function GameScreen({ room, playerId, connected, error, onLeave, onReset,
     <View style={styles.footer}>
       <Pressable accessibilityRole="button" accessibilityLabel="게임 알림 자세히 보기" onPress={() => Alert.alert('게임 알림', error || hand.lastEvent)}><Text numberOfLines={1} style={error ? styles.error : styles.event}>{error || hand.lastEvent}</Text></Pressable>
       {legal ? <>
-        <View style={styles.row}><View style={styles.grow}><ActionButton compact title="폴드" onPress={() => onAct('fold')} disabled={!connected} secondary /></View><View style={styles.grow}><ActionButton compact title={legal.canCheck ? '체크' : `${legal.callAmount} 콜`} onPress={() => onAct(legal.canCheck ? 'check' : 'call')} disabled={!connected} /></View></View>
-        <View style={styles.row}><View style={styles.grow}><ActionButton compact title="레이즈" onPress={() => setPanel('raise')} disabled={!connected || !legal.canRaise} secondary /></View><View style={styles.grow}><ActionButton compact title="올인" onPress={() => Alert.alert('올인할까요?', '남은 칩을 모두 베팅합니다.', [{ text: '취소', style: 'cancel' }, { text: '올인', onPress: () => onAct('allIn') }])} disabled={!connected || !legal.canAllIn} secondary /></View></View>
+        <View style={styles.row}>
+          <Pressable accessibilityRole="button" disabled={!connected} style={[styles.action, styles.foldAction, !connected && styles.disabled]} onPress={() => onAct('fold')}><Text style={styles.actionText}>폴드</Text></Pressable>
+          <Pressable accessibilityRole="button" disabled={!connected} style={[styles.action, styles.callAction, !connected && styles.disabled]} onPress={() => onAct(legal.canCheck ? 'check' : 'call')}><Text style={styles.actionText}>{legal.canCheck ? '체크' : '콜'}</Text>{!legal.canCheck && <Text style={styles.actionAmount}>{legal.callAmount.toLocaleString()}</Text>}</Pressable>
+          <Pressable accessibilityRole="button" disabled={!connected || (!legal.canRaise && !legal.canAllIn)} style={[styles.action, styles.raiseAction, (!connected || (!legal.canRaise && !legal.canAllIn)) && styles.disabled]} onPress={() => setPanel('raise')}><Text style={styles.actionText}>베팅</Text><Text style={styles.actionAmount}>레이즈 / 올인</Text></Pressable>
+        </View>
       </> : done ? <>
         <Text numberOfLines={1} style={styles.text}>{ended ? '칩이 남은 플레이어가 승리했어요.' : me?.stack === 0 ? '칩을 모두 잃었어요. 다음 판부터 관전합니다.' : hand.canReveal ? '내 패 공개는 선택 · 공개 버튼으로 친구에게 보여주세요.' : '칩이 남은 플레이어끼리 자동으로 계속해요.'}</Text>
         <View style={styles.row}><View style={styles.grow}><ActionButton compact title="결과 자세히" secondary onPress={() => setPanel('result')} /></View>{ended && room.hostId === playerId && <View style={styles.grow}><ActionButton compact title="새 경기 준비" disabled={!connected} onPress={() => Alert.alert('새 경기를 준비할까요?', '모두 1,000칩으로 대기실에 돌아갑니다.', [{ text: '취소', style: 'cancel' }, { text: '준비', onPress: onReset }])} /></View>}</View>
@@ -64,12 +67,13 @@ export function GameScreen({ room, playerId, connected, error, onLeave, onReset,
     <Modal visible={panel !== null} transparent animationType="fade" onRequestClose={() => setPanel(null)}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
         <View style={styles.panel}>
-          <View style={styles.row}><Text style={styles.title}>{panel === 'raise' ? '레이즈 금액' : '이번 판 결과'}</Text><Pressable accessibilityRole="button" onPress={() => setPanel(null)} style={styles.link}><Text style={styles.gold}>닫기 ✕</Text></Pressable></View>
+          <View style={styles.row}><Text style={styles.title}>{panel === 'raise' ? '베팅 금액' : '이번 판 결과'}</Text><Pressable accessibilityRole="button" onPress={() => setPanel(null)} style={styles.link}><Text style={styles.gold}>닫기 ✕</Text></Pressable></View>
           {panel === 'raise' && legal && <>
             <View style={styles.row}>{[legal.minRaiseTo, Math.max(legal.minRaiseTo, Math.min(legal.maxRaiseTo, Math.ceil(hand.pot / 2))), Math.max(legal.minRaiseTo, Math.min(legal.maxRaiseTo, hand.pot))].map((value, i) => <Pressable key={i} accessibilityRole="button" onPress={() => setAmount(String(value))} style={styles.preset}><Text style={styles.text}>{['최소', '½ 팟', '팟'][i]} {value}</Text></Pressable>)}</View>
             <Text style={styles.text}>라운드 총액 · 최소 {legal.minRaiseTo} / 최대 {legal.maxRaiseTo}</Text>
             <TextInput accessibilityLabel="레이즈 총 금액" value={amount} onChangeText={setAmount} keyboardType="number-pad" maxLength={9} style={styles.input} />
-            <ActionButton compact title={`${amount || '0'}까지 레이즈`} onPress={() => { setPanel(null); onAct('raise', raiseTo); }} disabled={!connected || !validRaise} />
+            <View style={styles.row}><View style={styles.grow}><ActionButton compact disabled={!connected || !legal.canAllIn} secondary title="올인" onPress={() => Alert.alert('올인할까요?', '남은 칩을 모두 베팅합니다.', [{ text: '취소', style: 'cancel' }, { text: '올인', onPress: () => { setPanel(null); onAct('allIn'); } }])} /></View><View style={styles.grow}>
+            <ActionButton compact title={`${amount || '0'}까지 레이즈`} onPress={() => { setPanel(null); onAct('raise', raiseTo); }} disabled={!connected || !legal.canRaise || !validRaise} /></View></View>
           </>}
           {panel === 'result' && <>
             {results.slice(page * 3, page * 3 + 3).map((line, i) => <Text key={i} style={styles.result}>{line}</Text>)}
@@ -81,7 +85,7 @@ export function GameScreen({ room, playerId, connected, error, onLeave, onReset,
   </View>;
 }
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#0B1820' }, header: { paddingHorizontal: 16, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  action: { flex: 1, height: 54, borderRadius: 6, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FFFFFF18' }, foldAction: { backgroundColor: '#364047' }, callAction: { backgroundColor: '#226354' }, raiseAction: { backgroundColor: '#A53D39' }, actionText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' }, actionAmount: { color: '#FFFFFFCC', fontSize: 11, marginTop: 2 }, disabled: { opacity: .4 }, screen: { flex: 1, backgroundColor: '#0D171D' }, header: { paddingHorizontal: 16, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   meta: { color: '#D5BD7F', fontSize: 10 }, title: { color: '#FAF6E9', fontSize: 18, fontWeight: '800' }, link: { padding: 12, minHeight: 44, justifyContent: 'center' },
   ribbon: { paddingHorizontal: 16, paddingVertical: 6, backgroundColor: '#1A302D' }, gold: { color: '#F4D57C', fontSize: 13, fontWeight: '700' },
   table: { flex: 1, minHeight: 0, marginHorizontal: 12, maxWidth: 560, width: 'auto' }, footer: { paddingHorizontal: 12, paddingVertical: 6, gap: 6, backgroundColor: '#172A2D' },
