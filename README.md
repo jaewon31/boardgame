@@ -158,3 +158,7 @@ export:mobile은 Android/iOS JavaScript·에셋 번들 검사이며 APK/IPA 빌�
 형상관리 방식은 [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md)를 참고하세요.
 
 입장·6인 대기실·게임 화면은 스크롤 없이 조작하도록 구성했습니다. 테이블은 남은 화면 높이에 맞추고, 레이즈는 키보드를 피하는 별도 창, 상세 결과는 3항목씩 이전/다음으로 확인합니다. Android 360×640 및 Pixel_7 기본 크기에서 확인했습니다. iOS는 번들 검증만 했으며 실제 기기 확인은 필요합니다.
+
+## 비공개 배포 준비
+
+서버 영구 저장, 앱 재실행 복구, HTTPS 중계와 설치용 앱 빌드 절차는 [배포 안내](docs/private-beta-deployment.md)를 참고하세요. 첫 배포에서는 홀덤만 제공합니다.

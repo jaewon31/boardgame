@@ -94,7 +94,9 @@ test('real sockets enforce game ownership, private cards, stale actions, resume,
   await b.next('error');
   const c = await app.connect();
   c.send({type:'join',code:first.room.code,nickname:'늦은친구'});
-  await c.next('error');
+  const late=await c.next('joined') as Joined;
+  assert.equal(late.room.holdem?.players.some(p=>p.id===late.playerId),false);
+  c.send({type:'leave'}); await c.next('left');
   b.socket.terminate();
   await a.next('room',m=>m.type==='room' && m.room.players[1]?.connected === false);
   const resumed=await app.connect();
@@ -203,7 +205,7 @@ test('server validates names and games and disallows duplicate names and repeate
     assert.equal(error.type === 'error' && error.code, 'INVALID_REQUEST');
   }
   const created = await a.create('Alice');
-  a.send({ type: 'create', nickname: 'Another', game: 'seotda' });
+  a.send({ type: 'create', nickname: 'Another', game: 'holdem' });
   const already = await a.next('error');
   assert.equal(already.type === 'error' && already.code, 'ALREADY_JOINED');
   const b = await app.connect();
@@ -287,7 +289,7 @@ test('last departure deletes room and released capacity can create a new room', 
   const a = await app.connect();
   const created = await a.create();
   const b = await app.connect();
-  b.send({ type: 'create', nickname: '친구', game: 'seotda' });
+  b.send({ type: 'create', nickname: '친구', game: 'holdem' });
   const full = await b.next('error');
   assert.equal(full.type === 'error' && full.code, 'SERVER_FULL');
   a.send({ type: 'leave' });
@@ -295,9 +297,9 @@ test('last departure deletes room and released capacity can create a new room', 
   b.send({ type: 'join', code: created.room.code, nickname: '친구' });
   const missing = await b.next('error');
   assert.equal(missing.type === 'error' && missing.code, 'ROOM_NOT_FOUND');
-  b.send({ type: 'create', nickname: '친구', game: 'seotda' });
+  b.send({ type: 'create', nickname: '친구', game: 'holdem' });
   const next = await b.next('joined') as Joined;
-  assert.equal(next.room.game, 'seotda');
+  assert.equal(next.room.game, 'holdem');
 });
 
 test('malformed JSON, binary messages and excessive requests are rejected', async t => {

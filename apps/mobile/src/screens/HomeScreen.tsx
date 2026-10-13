@@ -4,9 +4,9 @@ import { Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton } from '../components/ActionButton';
 
-interface Props { onEnter: (request: EntryRequest) => void; busy: boolean; error: string | null }
+interface Props { onEnter: (request: EntryRequest) => void; busy: boolean; error: string | null; onCancel?: () => void }
 
-export default function HomeScreen({ onEnter, busy, error }: Props) {
+export default function HomeScreen({ onEnter, busy, error, onCancel }: Props) {
   const [game, setGame] = useState<GameId>('holdem');
   const [mode, setMode] = useState<'create' | 'join'>('create');
   const [nickname, setNickname] = useState('');
@@ -50,7 +50,7 @@ export default function HomeScreen({ onEnter, busy, error }: Props) {
         {mode === 'create' ? <>
           {!tight && <Text style={styles.label}>어떤 게임을 할까요?</Text>}
           <View style={styles.gameRow}>
-            {([{ id: 'holdem', symbol: '♠', name: '텍사스 홀덤' }, { id: 'seotda', symbol: '花', name: '섯다' }] as const).map(item => (
+            {([{ id: 'holdem', symbol: '♠', name: '텍사스 홀덤' }] as const).map(item => (
               <Pressable key={item.id} disabled={busy} onPress={() => setGame(item.id)} accessibilityRole="radio" accessibilityState={{ checked: game === item.id }} style={[styles.game, tight && { minHeight: 44, justifyContent: 'center' }, game === item.id && styles.selectedGame]}>
                 <Text style={styles.gameName}>{item.symbol} {item.name}</Text>
                 {!tight && <Text style={styles.selection}>{game === item.id ? '선택됨 ✓' : '선택하기'}</Text>}
@@ -67,8 +67,9 @@ export default function HomeScreen({ onEnter, busy, error }: Props) {
         </>}
         {(validation || error) && <Text accessibilityRole="alert" style={styles.error}>{validation || error}</Text>}
         <ActionButton compact title={mode === 'create' ? '우리 방 만들기' : '친구 방 입장하기'} onPress={submit} busy={busy} />
+        {busy && onCancel && <ActionButton compact title="연결 취소" secondary onPress={onCancel} />}
         {busy && !tight && <Text style={styles.hint}>방에 연결하고 있어요…</Text>}
-        {!compact && <Text style={styles.footer}>친구 2~6명이 모이면 홀덤을 시작할 수 있어요.{ '\n' }섯다는 준비 중이에요.</Text>}
+        {!compact && <Text style={styles.footer}>친구 2~6명이 모이면 홀덤을 시작할 수 있어요.{ '\n' }가상 칩으로 즐기는 친구 전용 게임입니다.</Text>}
       </View>
     </KeyboardAvoidingView>
   );

@@ -1,0 +1,37 @@
+name: Verify server image
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build server container
+        run: docker build -t boardgame-test .
+      - name: Check health and restart with persistent volume
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker volume create boardgame-test-data
+          docker run -d --name boardgame-test -p 127.0.0.1:3300:3000 -v boardgame-test-data:/data boardgame-test
+          trap 'docker logs boardgame-test; docker rm -f boardgame-test; docker volume rm boardgame-test-data' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3300/health; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3300/health
+          docker restart boardgame-test
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3300/health; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3300/health
+      - name: Validate proxy configuration
+        run: |
+          GAME_DOMAIN=game.example.com docker compose config --quiet
+          docker run --rm -e GAME_DOMAIN=game.example.com -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile

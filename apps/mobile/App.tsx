@@ -10,7 +10,7 @@ function Screens() {
   return <>
     <StatusBar style="light" />
     {room.room?.holdem ? <GameScreen room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onReset={room.resetChips} onAct={room.act} onReveal={room.revealCards} onRevealRiver={room.revealRiver} /> : room.room ? <LobbyScreen room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onStart={room.startHand} />
-      : <HomeScreen onEnter={room.enter} busy={room.status === 'connecting'} error={room.error} />}
+      : <HomeScreen onCancel={room.leave} onEnter={room.enter} busy={room.status === 'connecting' || room.status === 'reconnecting'} error={room.error} />}
   </>;
 }
 export default function App() {

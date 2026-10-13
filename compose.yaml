@@ -1,0 +1,38 @@
+services:
+  server:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      STATE_DB_PATH: /data/boardgame.sqlite
+      TRUSTED_PROXY_IPS: 172.30.50.2
+    volumes:
+      - game-data:/data
+    networks:
+      game:
+        ipv4_address: 172.30.50.3
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      GAME_DOMAIN: ${GAME_DOMAIN:?Set GAME_DOMAIN to your public DNS name}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      game:
+        ipv4_address: 172.30.50.2
+volumes:
+  game-data:
+  caddy-data:
+  caddy-config:
+networks:
+  game:
+    ipam:
+      config:
+        - subnet: 172.30.50.0/24

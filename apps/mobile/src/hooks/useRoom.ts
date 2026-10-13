@@ -1,3 +1,4 @@
+import { createSessionStore } from '../services/sessionStore';
 import { AppState } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import type { EntryRequest, PokerAction } from '@boardgame/shared';
@@ -8,8 +9,10 @@ export function useRoom() {
   const [state, setState] = useState<RoomState>({ status: 'idle', room: null, playerId: null, error: null });
   const client = useRef<RoomClient | null>(null);
   useEffect(() => {
-    const connection = new RoomClient(getServerUrl(), setState);
+    const endpoint = getServerUrl();
+    const connection = new RoomClient(endpoint, setState, {}, createSessionStore(endpoint));
     client.current = connection;
+    void connection.restore();
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') connection.checkConnection(); });
     return () => { subscription.remove(); connection.dispose(); client.current = null; };
   }, []);

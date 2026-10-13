@@ -66,6 +66,25 @@ export class HoldemHand {
     this.advance(this.bigBlindIndex);
   }
 
+  // Server-only durable state. Never send this object to a client.
+  checkpoint() {
+    return structuredClone({ version: 1 as const, id: this.id, number: this.number, players: this.players, dealerIndex: this.dealerIndex, smallBlindIndex: this.smallBlindIndex, bigBlindIndex: this.bigBlindIndex, smallBlind: this.smallBlind, bigBlind: this.bigBlind, deck: this.deck, turnMs: this.turnMs, runoutMs: this.runoutMs, riverSqueezeMs: this.riverSqueezeMs, runout: this.runout, board: this.board, currentBet: this.currentBet, fullRaise: this.fullRaise, street: this.street, actorIndex: this.actorIndex, showdown: this.showdown, revision: this.revision, deadline: this.deadline, lastEvent: this.lastEvent, payouts: this.payouts, refunds: this.refunds, pots: this.pots, revealed: [...this.revealed] });
+  }
+  static restore(saved: ReturnType<HoldemHand['checkpoint']>) {
+    if (saved.version !== 1 || !Array.isArray(saved.players) || saved.players.length < 2 || saved.players.length > 6
+      || !Array.isArray(saved.deck) || !Array.isArray(saved.board) || !Array.isArray(saved.revealed)
+      || !Number.isSafeInteger(saved.revision) || typeof saved.id !== 'string') throw new Error('Invalid hand checkpoint');
+    const hand = Object.create(HoldemHand.prototype) as HoldemHand;
+    Object.assign(hand, structuredClone({ id: saved.id, number: saved.number, players: saved.players, dealerIndex: saved.dealerIndex, smallBlindIndex: saved.smallBlindIndex, bigBlindIndex: saved.bigBlindIndex, smallBlind: saved.smallBlind, bigBlind: saved.bigBlind, deck: saved.deck, turnMs: saved.turnMs, runoutMs: saved.runoutMs, riverSqueezeMs: saved.riverSqueezeMs, runout: saved.runout, board: saved.board, currentBet: saved.currentBet, fullRaise: saved.fullRaise, street: saved.street, actorIndex: saved.actorIndex, showdown: saved.showdown, revision: saved.revision, deadline: saved.deadline, lastEvent: saved.lastEvent, payouts: saved.payouts, refunds: saved.refunds, pots: saved.pots }));
+    hand.revealed = new Set(saved.revealed);
+    return hand;
+  }
+  recoverClock(now: number) {
+    if (this.complete) return;
+    this.deadline = now + 30_000;
+    if (this.runout) this.runout.deadline = this.deadline;
+  }
+
   get complete() { return this.street === 'complete'; }
   get actorId() { return this.actorIndex < 0 ? null : this.players[this.actorIndex].id; }
   private next(index: number) { return (index + 1) % this.players.length; }

@@ -61,7 +61,7 @@ export function GameScreen({ room, playerId, connected, error, onLeave, onReset,
       </> : done ? <>
         <Text numberOfLines={1} style={styles.text}>{ended ? '칩이 남은 플레이어가 승리했어요.' : me?.stack === 0 ? '칩을 모두 잃었어요. 다음 판부터 관전합니다.' : hand.canReveal ? '내 패 공개는 선택 · 공개 버튼으로 친구에게 보여주세요.' : '칩이 남은 플레이어끼리 자동으로 계속해요.'}</Text>
         <View style={styles.row}><View style={styles.grow}><ActionButton compact title="결과 자세히" secondary onPress={() => setPanel('result')} /></View>{ended && room.hostId === playerId && <View style={styles.grow}><ActionButton compact title="새 경기 준비" disabled={!connected} onPress={() => Alert.alert('새 경기를 준비할까요?', '모두 1,000칩으로 대기실에 돌아갑니다.', [{ text: '취소', style: 'cancel' }, { text: '준비', onPress: onReset }])} /></View>}</View>
-      </> : <Text style={styles.text}>{runout ? runout.phase === 'squeezing' ? '리버를 확인하는 중이에요. 잠시 기다려 주세요.' : '베팅이 끝났어요. 공용 카드를 순서대로 공개합니다.' : !me ? '관전 중 · 칩이 없으면 다음 판에 참여하지 않아요.' : me.folded ? '폴드했어요. 다음 판은 자동으로 시작됩니다.' : '친구의 행동을 기다리는 중이에요.'}</Text>}
+      </> : <Text style={styles.text}>{runout ? runout.phase === 'squeezing' ? '리버를 확인하는 중이에요. 잠시 기다려 주세요.' : '베팅이 끝났어요. 공용 카드를 순서대로 공개합니다.' : !me ? '입장 완료 · 칩이 있으면 다음 판부터 참여합니다.' : me.folded ? '폴드했어요. 다음 판은 자동으로 시작됩니다.' : '친구의 행동을 기다리는 중이에요.'}</Text>}
     </View>
     {runout?.phase === 'squeezing' && runout.playerId === playerId && runout.card && <RiverSqueeze key={hand.id} card={runout.card} deadline={runout.deadline} connected={connected} onReveal={() => onRevealRiver(hand.id)} />}
     <Modal visible={panel !== null} transparent animationType="fade" onRequestClose={() => setPanel(null)}>
