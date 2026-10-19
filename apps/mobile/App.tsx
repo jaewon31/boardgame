@@ -1,3 +1,5 @@
+import { useAccount } from './src/hooks/useAccount';
+import { AccountScreen } from './src/screens/AccountScreen';
 import { useGameAudio } from './src/hooks/useGameAudio';
 import { useEffect, useState } from 'react';
 import { Alert, Linking } from 'react-native';
@@ -11,6 +13,8 @@ import { LobbyScreen } from './src/screens/LobbyScreen';
 
 function Screens() {
   const room = useRoom();
+  const account = useAccount();
+  const [accountOpen,setAccountOpen] = useState(false);
   const audio = useGameAudio(room.room?.holdem ?? null, room.playerId, room.status === 'connected');
   const [incoming,setIncoming] = useState<string | null>(null);
   const [invite,setInvite] = useState<{code:string} | undefined>();
@@ -31,10 +35,11 @@ function Screens() {
     ]);
     else setInvite({code});
   },[incoming,room.status,room.room?.code]);
+  if(accountOpen && !room.room) return <AccountScreen account={account} onClose={()=>setAccountOpen(false)} />;
   return <>
     <StatusBar style="light" />
     {room.room?.holdem ? <GameScreen audio={audio} room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onReset={room.resetChips} onAct={room.act} onReveal={room.revealCards} onRevealRiver={room.revealRiver} /> : room.room ? <LobbyScreen room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onStart={room.startHand} onSettings={room.updateSettings} />
-      : <HomeScreen invite={invite} onCancel={room.leave} onEnter={room.enter} busy={room.status === 'connecting' || room.status === 'reconnecting'} error={room.error} />}
+      : <HomeScreen accountName={account.profile?.display_name} onAccount={()=>setAccountOpen(true)} invite={invite} onCancel={room.leave} onEnter={room.enter} busy={room.status === 'connecting' || room.status === 'reconnecting'} error={room.error} />}
   </>;
 }
 export default function App() {
