@@ -1,3 +1,9 @@
+import { saveReview, reviewFor } from './holdem/review.ts';
+import type { SavedReview } from './holdem/review.ts';
+import { DEFAULT_SETTINGS, validRoomSettings } from '@boardgame/shared';
+import type { RoomSettings, DailyResult } from '@boardgame/shared';
+import { clientIp } from './network.ts';
+import type { StateStore } from './stateStore.ts';
 import { HoldemHand } from './holdem/hand.ts';
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
@@ -11,9 +17,16 @@ interface Member {
   stack: number;
   seat: number;
   socket?: WebSocket;
+  expiresAt?: number;
   expiry?: ReturnType<typeof setTimeout>;
 }
 interface Room {
+  reviews?: SavedReview[];
+  settings: RoomSettings;
+  daily: { date: string; players: DailyResult[] };
+  scoredHandId?: string;
+  startingStacks?: Record<string, number>;
+
   code: string;
   game: GameId;
   hostId: string;
@@ -25,8 +38,28 @@ interface Room {
   nextSeat: number;
   dealerSeat: number;
   handNumber: number;
+  recoveryUntil?: number;
+}
+export interface LobbyCheckpoint {
+  version: 1;
+  savedAt: number;
+  rooms: Array<{
+    code: string; game: GameId; hostId: string; nextSeat: number; dealerSeat: number; handNumber: number;
+    players: Array<{id: string; nickname: string; token: string; stack: number; seat: number; expiresAt?: number}>;
+    reviews?: SavedReview[];
+    settings?: RoomSettings;
+    daily?: { date: string; players: DailyResult[] };
+    scoredHandId?: string;
+    startingStacks?: Record<string, number>;
+    hand?: ReturnType<HoldemHand['checkpoint']>;
+  }>;
 }
 interface LobbyOptions {
+  store?: StateStore;
+  trustedProxies?: string[];
+  maxConnections?: number;
+  maxConnectionsPerIp?: number;
+  onFatal?: () => void;
   nextHandMs?: number;
   runoutMs?: number;
   riverSqueezeMs?: number;
@@ -38,6 +71,11 @@ interface LobbyOptions {
 
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const maxPlayers = 6;
+// Room records use a consistent calendar day for this Korean-language app.
+const today = () => new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+function settingsCopy(s: RoomSettings): RoomSettings {
+  return { startingChips:s.startingChips, smallBlind:s.smallBlind, bigBlind:s.bigBlind, turnSeconds:s.turnSeconds };
+}
 
 function parseMessage(raw: string): ClientMessage | null {
   let value: unknown;
@@ -52,6 +90,7 @@ function parseMessage(raw: string): ClientMessage | null {
   if (v.type === 'act' && typeof v.handId === 'string' && Number.isSafeInteger(v.revision)
     && ['fold', 'check', 'call', 'raise', 'allIn'].includes(String(v.action))
     && (v.amount === undefined || Number.isSafeInteger(v.amount))) return v as unknown as ClientMessage;
+  if (v.type === 'updateSettings' && validRoomSettings(v.settings)) return { type: 'updateSettings', settings: settingsCopy(v.settings) };
   if (v.type === 'leave') return { type: 'leave' };
   if (v.type === 'resume' && typeof v.code === 'string' && /^[A-Z2-9]{8}$/.test(v.code)
     && typeof v.token === 'string' && /^[a-f0-9]{64}$/.test(v.token)) {
@@ -61,7 +100,8 @@ function parseMessage(raw: string): ClientMessage | null {
   const nickname = v.nickname.trim().normalize('NFC');
   if ([...nickname].length < 1 || [...nickname].length > 12 || /[\p{Cc}\p{Cf}]/u.test(nickname)) return null;
   if (v.type === 'create' && (v.game === 'holdem' || v.game === 'seotda')) {
-    return { type: 'create', nickname, game: v.game };
+    if (v.settings !== undefined && !validRoomSettings(v.settings)) return null;
+    return { type: 'create', nickname, game: v.game, settings: settingsCopy(v.settings ?? DEFAULT_SETTINGS) };
   }
   if (v.type === 'join' && typeof v.code === 'string' && v.code.length <= 16) {
     const code = v.code.trim().toUpperCase();
@@ -73,23 +113,27 @@ function parseMessage(raw: string): ClientMessage | null {
 export function attachLobby(server: Server, options: LobbyOptions = {}) {
   const rooms = new Map<string, Room>();
   const connectionsByIp = new Map<string, number>();
-  const reconnectMs = options.reconnectMs ?? 30_000;
+  const reconnectMs = options.reconnectMs ?? 300_000;
   const wss = new WebSocketServer({ server, path: '/lobby', maxPayload: 2048, perMessageDeflate: false });
   const alive = new WeakSet<WebSocket>();
   let stopping = false;
 
   function send(socket: WebSocket, message: ServerMessage) {
+    if (socket.bufferedAmount > 256 * 1024) { socket.terminate(); return; }
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
   }
   function snapshot(room: Room, viewer: string): LobbyRoom {
     return {
       ...(room.hand ? { holdem: room.hand.viewFor(viewer) } : {}),
+      handReviews: (room.reviews ?? []).map(r=>reviewFor(r,viewer)),
       nextHandAt: room.nextHandAt ?? null, fundedPlayers: room.players.filter(p => p.stack > 0).length,
       code: room.code, game: room.game, hostId: room.hostId, maxPlayers,
+      settings: room.settings, todayResults: room.daily.date === today() ? room.daily : {date:today(), players:[]},
       players: room.players.map(p => ({ id: p.id, nickname: p.nickname, connected: !!p.socket })),
     };
   }
   function broadcast(room: Room) {
+    if (!persist()) return;
     for (const member of room.players) if (member.socket) send(member.socket, { type: 'room', room: snapshot(room, member.id) });
   }
   function cancelNextHand(room: Room) {
@@ -103,8 +147,9 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     cancelNextHand(room);
     let dealerIndex = players.findIndex(p => p.seat > room.dealerSeat);
     if (dealerIndex < 0) dealerIndex = 0;
+    room.startingStacks = Object.fromEntries(players.map(p => [p.id, p.stack]));
     room.hand = new HoldemHand(players.map(p => ({ id: p.id, nickname: p.nickname, stack: p.stack })),
-      { dealerIndex, number: ++room.handNumber, turnMs: options.turnMs, runoutMs: options.runoutMs, riverSqueezeMs: options.riverSqueezeMs });
+      { dealerIndex, number: ++room.handNumber, turnMs: options.turnMs ?? room.settings.turnSeconds * 1000, smallBlind: room.settings.smallBlind, bigBlind: room.settings.bigBlind, runoutMs: options.runoutMs, riverSqueezeMs: options.riverSqueezeMs });
     room.dealerSeat = players[dealerIndex].seat;
     return true;
   }
@@ -125,9 +170,27 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     }, Math.max(1, room.nextHandAt - Date.now()));
     room.nextHandTimer.unref();
   }
+  function recordResult(room: Room) {
+    const hand = room.hand;
+    if (!hand?.complete || room.scoredHandId === hand.id) return;
+    room.scoredHandId = hand.id;
+    if (room.daily.date !== today()) room.daily = { date:today(), players:[] };
+    const payouts = hand.viewFor('').payouts;
+    for (const p of hand.players) {
+      const starting = room.startingStacks?.[p.id];
+      if (starting === undefined) continue; // Legacy checkpoints have no trustworthy hand baseline.
+      let row = room.daily.players.find(r => r.playerId === p.id);
+      if (!row) {
+        row = { playerId:p.id, nickname:p.nickname, hands:0, wins:0, netChips:0 };
+        room.daily.players.push(row);
+      }
+      row.hands++; row.netChips += p.stack - starting;
+      if (payouts.some(win => win.playerId === p.id && win.amount > 0)) row.wins++;
+    }
+  }
   function syncGame(room: Room) {
     clearTimeout(room.turnTimer);
-    room.hand?.skipDisconnectedSqueeze(room.players.filter(p => p.socket).map(p => p.id));
+    if (!room.recoveryUntil || Date.now() >= room.recoveryUntil) room.hand?.skipDisconnectedSqueeze(room.players.filter(p => p.socket).map(p => p.id));
     if (room.hand) {
       for (const p of room.hand.players) {
         const member = room.players.find(m => m.id === p.id);
@@ -138,6 +201,15 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         room.turnTimer.unref();
       }
     }
+    if(room.hand?.complete) {
+      room.reviews ??= [];
+      const saved = saveReview(room.hand);
+      const existing = room.reviews.findIndex(r=>r.public.hand.id===room.hand!.id);
+      if(existing>=0) room.reviews[existing]=saved;
+      else room.reviews.unshift(saved);
+      room.reviews = room.reviews.slice(0,10);
+    }
+    recordResult(room);
     scheduleNextHand(room);
     broadcast(room);
   }
@@ -145,7 +217,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     room.hand?.depart(member.id);
     clearTimeout(member.expiry);
     room.players = room.players.filter(p => p !== member);
-    if (room.players.length === 0) { clearTimeout(room.turnTimer); cancelNextHand(room); rooms.delete(room.code); return; }
+    if (room.players.length === 0) { clearTimeout(room.turnTimer); cancelNextHand(room); rooms.delete(room.code); persist(); return; }
     if (room.hostId === member.id) {
       room.hostId = (room.players.find(p => p.socket) ?? room.players[0]).id;
     }
@@ -154,9 +226,10 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
 
   wss.on('connection', (socket, request) => {
     socket.on('error', () => socket.terminate());
-    const ip = request.socket.remoteAddress ?? 'unknown';
+    if (stopping || wss.clients.size > (options.maxConnections ?? 240)) { socket.close(1013, 'Server busy'); return; }
+    const ip = clientIp(request.socket.remoteAddress, request.headers['x-forwarded-for'], options.trustedProxies ?? []);
     const count = connectionsByIp.get(ip) ?? 0;
-    if (count >= 24) { socket.close(1013, 'Too many connections'); return; }
+    if (count >= (options.maxConnectionsPerIp ?? 24)) { socket.close(1013, 'Too many connections'); return; }
     connectionsByIp.set(ip, count + 1);
     alive.add(socket);
     let membership: { room: Room; member: Member } | undefined;
@@ -179,7 +252,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         return;
       }
       const input = isBinary ? null : parseMessage(data.toString());
-      if (!input) { fail('INVALID_REQUEST', '닉네임(1~12자)과 8자리 초대 코드를 확인해 주세요.'); return; }
+      if (!input) { fail('INVALID_REQUEST', '닉네임·초대 코드 또는 방 설정의 허용 범위를 확인해 주세요.'); return; }
       if (input.type === 'ping') {
         if (!membership) { fail('SESSION_EXPIRED', '방에 다시 입장해 주세요.'); return; }
         send(socket, { type: 'pong', id: input.id });
@@ -194,6 +267,15 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         }
         send(socket, { type: 'left' });
         socket.close(1000, 'Left room');
+        return;
+      }
+      if (input.type === 'updateSettings') {
+        if (!membership || membership.room.hostId !== membership.member.id) { fail('GAME_ERROR', '방장만 방 설정을 바꿀 수 있어요.'); return; }
+        const room = membership.room;
+        if (room.hand) { fail('GAME_ERROR', '새 경기 준비 후 대기실에서 설정을 바꿔 주세요.'); return; }
+        room.settings = settingsCopy(input.settings);
+        room.players.forEach(p => { p.stack = room.settings.startingChips; });
+        broadcast(room);
         return;
       }
       if (input.type === 'startHand' || input.type === 'act' || input.type === 'resetChips' || input.type === 'revealCards' || input.type === 'revealRiver') {
@@ -215,7 +297,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
             if (room.hand && !room.hand.complete) throw new Error('현재 판이 끝난 후 진행해 주세요.');
             if (input.type === 'resetChips') {
               if (!room.hand || room.hand.id !== input.handId) throw new Error('이미 초기화되었어요.');
-              room.players.forEach(p => { p.stack = 1000; });
+              room.players.forEach(p => { p.stack = room.settings.startingChips; });
               room.hand = undefined;
             } else {
               if ((room.hand?.id ?? null) !== input.previousHandId) throw new Error('게임 상태가 바뀌었어요.');
@@ -232,7 +314,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       let member: Member;
       if (input.type === 'resume') {
         const existing = rooms.get(input.code);
-        const previous = existing?.players.find(p => p.token === input.token);
+        const previous = existing?.players.find(p => p.token === input.token && (p.expiresAt === undefined || p.expiresAt > Date.now()));
         if (!existing || !previous) { fail('SESSION_EXPIRED', '재접속 시간이 지났거나 방이 닫혔어요. 다시 입장해 주세요.'); return; }
         room = existing;
         member = previous;
@@ -241,31 +323,33 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         member.socket = socket;
         clearTimeout(member.expiry);
         member.expiry = undefined;
+        member.expiresAt = undefined;
         oldSocket?.close(4001, 'Session replaced');
       } else {
         if (input.type === 'create') {
+          if (input.game !== 'holdem') { fail('GAME_ERROR', '현재는 홀덤만 이용할 수 있어요.'); return; }
           if (rooms.size >= (options.maxRooms ?? 1000)) { fail('SERVER_FULL', '서버가 혼잡해요. 잠시 후 다시 시도해 주세요.'); return; }
           let code: string;
           do { code = Array.from({ length: 8 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code));
-          room = { code, game: input.game, hostId: '', players: [], nextSeat: 0, dealerSeat: -1, handNumber: 0 };
+          room = { code, game: input.game, hostId: '', players: [], nextSeat: 0, dealerSeat: -1, handNumber: 0, settings: settingsCopy(input.settings ?? DEFAULT_SETTINGS), daily: {date:today(), players:[]} };
           rooms.set(code, room);
         } else {
           const existing = rooms.get(input.code);
           if (!existing) { fail('ROOM_NOT_FOUND', '초대 코드를 확인해 주세요. 방이 없거나 닫혔어요.'); return; }
           room = existing;
         }
-        if (room.hand && !room.hand.complete) { fail('GAME_ERROR', '진행 중인 판이 끝나면 입장해 주세요.'); return; }
         if (room.players.length >= maxPlayers) { fail('ROOM_FULL', '방이 가득 찼어요. 최대 6명까지 입장할 수 있어요.'); return; }
         if (room.players.some(p => p.nickname.toLowerCase() === input.nickname.toLowerCase())) {
           fail('NICKNAME_TAKEN', '이 방에서 사용 중인 닉네임이에요. 다른 이름을 입력해 주세요.'); return;
         }
-        member = { id: randomUUID(), nickname: input.nickname, token: randomBytes(32).toString('hex'), stack: 1000, seat: room.nextSeat++, socket };
+        member = { id: randomUUID(), nickname: input.nickname, token: randomBytes(32).toString('hex'), stack: room.settings.startingChips, seat: room.nextSeat++, socket };
         room.players.push(member);
         if (!room.hostId) room.hostId = member.id;
       }
       membership = { room, member };
       clearTimeout(authTimeout);
       scheduleNextHand(room);
+      if (!persist()) return;
       send(socket, { type: 'joined', room: snapshot(room, member.id), playerId: member.id, token: member.token });
       broadcast(room);
     });
@@ -276,6 +360,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       if (!membership || membership.member.socket !== socket || stopping) return;
       const { room, member } = membership;
       member.socket = undefined;
+      member.expiresAt = Date.now() + reconnectMs;
       member.expiry = setTimeout(() => remove(room, member), reconnectMs);
       member.expiry.unref();
       syncGame(room);
@@ -291,14 +376,68 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
   }, options.heartbeatMs ?? 15_000);
   heartbeat.unref();
 
+  function checkpoint(): LobbyCheckpoint {
+    return { version: 1, savedAt: Date.now(), rooms: [...rooms.values()].map(room => ({
+      code: room.code, game: room.game, hostId: room.hostId, nextSeat: room.nextSeat,
+      dealerSeat: room.dealerSeat, handNumber: room.handNumber,
+      reviews: room.reviews, settings: room.settings, daily: room.daily, scoredHandId: room.scoredHandId, startingStacks: room.startingStacks,
+      players: room.players.map(p => ({id:p.id, nickname:p.nickname, token:p.token, stack:p.stack, seat:p.seat, expiresAt:p.expiresAt})),
+      hand: room.hand?.checkpoint(),
+    })) };
+  }
+  function persist() {
+    if (stopping) return false;
+    if (!options.store) return true;
+    try { options.store.save(checkpoint()); return true; }
+    catch {
+      // Never acknowledge state that cannot be made durable.
+      stop();
+      console.error(JSON.stringify({ event: 'persistence_failed' }));
+      options.onFatal?.();
+      return false;
+    }
+  }
+  function stop() {
+    if (stopping) return;
+    stopping = true;
+    clearInterval(heartbeat);
+    for (const room of rooms.values()) {
+      cancelNextHand(room); clearTimeout(room.turnTimer);
+      for (const member of room.players) clearTimeout(member.expiry);
+    }
+    for (const socket of wss.clients) socket.terminate();
+    wss.close();
+  }
+  try {
+    const saved = options.store?.load();
+    if (saved) {
+      if (saved.version !== 1 || !Number.isFinite(saved.savedAt) || !Array.isArray(saved.rooms)) throw new Error('Unsupported lobby checkpoint');
+      const now = Date.now();
+      // Abandoned rooms are not resurrected indefinitely after a long outage.
+      if (now - saved.savedAt < 24 * 60 * 60 * 1000) for (const r of saved.rooms) {
+        if (!/^[A-Z2-9]{8}$/.test(r.code) || r.game !== 'holdem' || !Array.isArray(r.players)) throw new Error('Invalid room checkpoint');
+        const room: Room = { code:r.code, game:r.game, hostId:r.hostId, nextSeat:r.nextSeat, dealerSeat:r.dealerSeat, handNumber:r.handNumber,
+          settings: settingsCopy(r.settings && validRoomSettings(r.settings) ? r.settings : DEFAULT_SETTINGS),
+          reviews:r.reviews ?? [], daily:r.daily ?? {date:today(), players:[]}, scoredHandId:r.scoredHandId, startingStacks:r.startingStacks,
+          players:r.players.map(p => ({...p})), hand:r.hand ? HoldemHand.restore(r.hand) : undefined, recoveryUntil:now+30_000 };
+        rooms.set(room.code, room);
+        room.hand?.recoverClock(now);
+        for (const member of room.players) {
+          member.expiresAt ??= now + reconnectMs;
+          member.expiry = setTimeout(() => remove(room, member), Math.max(1, member.expiresAt - now));
+          member.expiry.unref();
+        }
+        if (room.hand && !room.hand.complete) {
+          room.turnTimer = setTimeout(() => { room.hand!.timeout(); syncGame(room); }, Math.max(1, (room.hand.deadline ?? now + 30_000) - now));
+          room.turnTimer.unref();
+        }
+      }
+      if (!persist()) throw new Error('Checkpoint could not be persisted');
+    }
+  } catch (error) { stop(); throw error; }
   return {
-    close() {
-      stopping = true;
-      clearInterval(heartbeat);
-      for (const room of rooms.values()) { cancelNextHand(room); clearTimeout(room.turnTimer); for (const member of room.players) clearTimeout(member.expiry); }
-      rooms.clear();
-      for (const socket of wss.clients) socket.terminate();
-      wss.close();
-    },
+    healthy: () => !stopping,
+    stats: () => ({ rooms: rooms.size, connections: wss.clients.size }),
+    close() { if (!stopping) persist(); stop(); },
   };
 }

@@ -1,0 +1,11 @@
+node_modules
+**/node_modules
+.git
+**/.expo
+**/dist
+**/.env*
+**/*.sqlite*
+**/*.log
+**/*.jks
+**/*.p8
+**/*.p12

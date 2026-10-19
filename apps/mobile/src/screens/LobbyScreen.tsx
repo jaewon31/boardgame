@@ -1,4 +1,8 @@
-import { Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { DEFAULT_SETTINGS, type RoomSettings } from '@boardgame/shared';
+import { RoomSettingsEditor, settingsLabel } from '../components/RoomSettingsEditor';
+import { RoomRecords } from '../components/RoomRecords';
+import { shareInvite } from '../services/shareInvite';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { LobbyRoom } from '@boardgame/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton } from '../components/ActionButton';
@@ -11,26 +15,29 @@ interface Props {
   error: string | null;
   onLeave: () => void;
   onStart: () => void;
+  onSettings: (settings: RoomSettings) => void;
 }
-export function LobbyScreen({ room, playerId, connected, error, onLeave, onStart }: Props) {
+export function LobbyScreen({ room, playerId, connected, error, onLeave, onStart, onSettings }: Props) {
+  const [editing, setEditing] = useState(false);
+  const settings = room.settings ?? DEFAULT_SETTINGS;
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const [shareError, setShareError] = useState<string | null>(null);
   async function share() {
     setShareError(null);
-    try { await Share.share({ message: `Friends Table에서 같이 놀아요!\n초대 코드: ${room.code}\n앱에서 '코드로 입장'을 선택해 주세요.` }); }
+    try { await shareInvite(room.code); }
     catch { setShareError('공유 창을 열지 못했어요. 초대 코드를 직접 전달해 주세요.'); }
   }
   return (
     <View style={[styles.screen, styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
-      <View style={styles.header}><Text style={styles.brand}>FRIENDS TABLE</Text><Text style={styles.status}>{connected ? '● 연결됨' : '○ 연결 확인 중'}</Text></View>
+      <View style={styles.header}><Text style={styles.brand}>FRIENDS TABLE</Text><RoomRecords room={room} /><Text style={styles.status}>{connected ? '● 연결됨' : '○ 연결 확인 중'}</Text></View>
       <Text style={styles.eyebrow}>{room.game === 'holdem' ? '텍사스 홀덤' : '섯다'} · 비공개 대기실</Text>
       {height > 740 && <Text style={styles.title}>친구들을 기다리는 중</Text>}
 
       <View style={styles.invite}>
         <Text style={styles.label}>우리 방 초대 코드</Text>
         <Text selectable accessibilityLabel={`초대 코드 ${room.code}`} style={styles.code}>{room.code}</Text>
-        <ActionButton compact title="친구에게 코드 공유" onPress={share} disabled={!connected} />
+        <ActionButton compact title="초대 링크 공유" onPress={share} disabled={!connected} />
         {shareError && <Text accessibilityRole="alert" style={styles.error}>{shareError}</Text>}
       </View>
       {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
@@ -42,7 +49,9 @@ export function LobbyScreen({ room, playerId, connected, error, onLeave, onStart
           {room.hostId === player.id && <Text style={styles.host}>방장</Text>}
         </View>
       ))}</View>
-      <View style={styles.note}><Text style={styles.noteText}>{room.game === 'holdem' ? '시작 칩 1,000 · 블라인드 10/20 · 차례당 30초. 첫 판만 방장이 시작하고 이후에는 자동 진행됩니다.' : '섯다 게임은 준비 중이에요.'}</Text></View>
+      <View style={styles.note}><Text style={styles.noteText}>{room.game === 'holdem' ? settingsLabel(settings) + ' · 첫 판 이후 자동 진행' : '섯다 게임은 준비 중이에요.'}</Text></View>
+      {room.hostId === playerId && <Pressable accessibilityRole="button" disabled={!connected} onPress={()=>setEditing(true)} style={{minHeight:44,justifyContent:'center'}}><Text style={styles.host}>방 설정 변경 ›</Text></Pressable>}
+      {editing && <RoomSettingsEditor initial={settings} onClose={()=>setEditing(false)} onSave={value=>{onSettings(value);setEditing(false);}} />}
       <View style={{ flexDirection: 'row', gap: 8 }}>{room.game === 'holdem' && room.hostId === playerId && <View style={{ flex: 1 }}><ActionButton compact title="홀덤 시작" onPress={onStart} disabled={!connected || room.players.filter(p => p.connected).length < 2} /></View>}
       <View style={{ flex: 1 }}><ActionButton compact title="방 나가기" onPress={onLeave} secondary /></View></View>
     </View>
