@@ -101,3 +101,30 @@ test('failed persistence closes the lobby before acknowledging a newly created r
   const closed=once(p.socket,'close'); p.send({type:'create',game:'holdem',nickname:'A'}); await closed;
   assert.equal(failed,true); assert.equal(lobby.healthy(),false); assert.equal(p.queue.some(m=>m.type==='joined'),false);
 });
+
+
+test('room settings and once-only daily results survive SQLite restart and chip resets',async t=>{
+  const dir=mkdtempSync(join(tmpdir(),'boardgame-settings-')),path=join(dir,'state.sqlite');
+  let app=await start(path);t.after(async()=>{await app.close();rmSync(dir,{recursive:true,force:true});});
+  const a=await app.connect(), b=await app.connect();
+  const settings={startingChips:5000,smallBlind:25,bigBlind:50,turnSeconds:60};
+  a.send({type:'create',nickname:'A',game:'holdem',settings});const first=await a.next('joined');
+  b.send({type:'join',nickname:'B',code:first.room.code});await b.next('joined');
+  a.send({type:'startHand',previousHandId:null});const hand=(await a.next('room',m=>!!m.room.holdem)).room.holdem;
+  a.send({type:'act',handId:hand.id,revision:0,action:'fold'});
+  const done=(await a.next('room',m=>m.room.holdem?.street==='complete')).room;
+  await app.close();app=await start(path);
+  const ra=await app.connect();ra.send({type:'resume',code:first.room.code,token:first.token});
+  const restored=(await ra.next('joined')).room;
+  assert.deepEqual(restored.settings,settings);assert.deepEqual(restored.todayResults,done.todayResults);
+  assert.equal(done.handReviews.length,1);
+  assert.deepEqual(restored.handReviews,done.handReviews);
+  assert.equal(restored.handReviews[0].hand.players.find((p:any)=>p.id===first.playerId).cards.length,2);
+  assert.ok(restored.handReviews[0].hand.players.filter((p:any)=>p.id!==first.playerId).every((p:any)=>p.cards===null));
+  ra.send({type:'revealCards',handId:hand.id});
+  const again=(await ra.next('room',m=>m.room.holdem?.street==='complete')).room;
+  assert.deepEqual(again.todayResults,done.todayResults);
+  ra.send({type:'resetChips',handId:hand.id});
+  const reset=(await ra.next('room',m=>!m.room.holdem)).room;
+  assert.deepEqual(reset.settings,settings);assert.deepEqual(reset.todayResults,done.todayResults);assert.deepEqual(reset.handReviews,done.handReviews);
+});

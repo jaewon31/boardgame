@@ -1,5 +1,8 @@
-import type { HoldemView, PokerAction } from './holdem.js';
-export type { Card, HoldemView, LegalActions, PokerAction, HandPlayer } from './holdem.js';
+import type { RoomSettings } from './settings.ts';
+export { DEFAULT_SETTINGS, validRoomSettings, SETTINGS_HELP } from './settings.ts';
+export type { RoomSettings } from './settings.ts';
+import type { HandReview, HoldemView, PokerAction } from './holdem.js';
+export type { HandReview, HandReviewEvent, Card, HoldemView, LegalActions, PokerAction, HandPlayer } from './holdem.js';
 // Public data contracts. The server alone owns room state and membership.
 export type GameId = 'holdem' | 'seotda';
 
@@ -14,7 +17,14 @@ export interface LobbyPlayer {
   connected: boolean;
 }
 
+export interface DailyResult {
+  playerId: string; nickname: string; hands: number; wins: number; netChips: number;
+}
 export interface LobbyRoom {
+  handReviews?: HandReview[];
+  settings?: RoomSettings;
+  todayResults?: { date: string; players: DailyResult[] };
+
   code: string;
   game: GameId;
   hostId: string;
@@ -26,13 +36,14 @@ export interface LobbyRoom {
 }
 
 export type EntryRequest =
-  | { type: 'create'; nickname: string; game: GameId }
+  | { type: 'create'; nickname: string; game: GameId; settings?: RoomSettings }
   | { type: 'join'; nickname: string; code: string };
 
 export type ClientMessage = EntryRequest
   | { type: 'ping'; id: number }
   | { type: 'resume'; code: string; token: string }
   | { type: 'leave' }
+  | { type: 'updateSettings'; settings: RoomSettings }
   | { type: 'startHand'; previousHandId: string | null }
   | { type: 'revealCards'; handId: string }
   | { type: 'revealRiver'; handId: string }

@@ -13,17 +13,27 @@ interface Seat {
   actedAt: number | null;
 }
 export interface PlayerSeed { id: string; nickname: string; stack: number }
-interface Options { runoutMs?: number; riverSqueezeMs?: number; dealerIndex?: number; deck?: Card[]; turnMs?: number; number?: number }
+interface Options { smallBlind?: number; bigBlind?: number; runoutMs?: number; riverSqueezeMs?: number; dealerIndex?: number; deck?: Card[]; turnMs?: number; number?: number }
 
 export class HoldemHand {
+  private initialStacks: Record<string,number> = {};
+  private reviewEvents: import('@boardgame/shared').HandReviewEvent[] = [];
+  private recordReview(text: string) {
+    this.reviewEvents.push({street:this.street, text, board:[...this.board], pot:this.players.reduce((sum,p)=>sum+p.totalBet,0)});
+    if(this.reviewEvents.length > 150) this.reviewEvents.splice(1,1);
+  }
+  reviewFor(id: string): import('@boardgame/shared').HandReview {
+    if(!this.complete) throw new Error('완료된 핸드만 복기할 수 있어요.');
+    return {netChips:Object.fromEntries(this.players.filter(p=>this.initialStacks[p.id]!==undefined).map(p=>[p.id,p.stack-this.initialStacks[p.id]])), hand:this.viewFor(id), events:structuredClone(this.reviewEvents)};
+  }
   readonly id = randomUUID();
   readonly number: number;
   readonly players: Seat[];
   readonly dealerIndex: number;
   readonly smallBlindIndex: number;
   readonly bigBlindIndex: number;
-  readonly smallBlind = 10;
-  readonly bigBlind = 20;
+  readonly smallBlind: number;
+  readonly bigBlind: number;
   private deck: Card[];
   private turnMs: number;
   private runoutMs: number;
@@ -46,6 +56,11 @@ export class HoldemHand {
   constructor(seeds: PlayerSeed[], options: Options = {}) {
     if (seeds.length < 2 || seeds.length > 6 || new Set(seeds.map(p => p.id)).size !== seeds.length
       || seeds.some(p => !Number.isSafeInteger(p.stack) || p.stack <= 0 || p.stack > 1_000_000)) throw new Error('칩이 있는 참가자 2~6명이 필요합니다.');
+    this.smallBlind = options.smallBlind ?? 10;
+    this.bigBlind = options.bigBlind ?? 20;
+    if (!Number.isSafeInteger(this.smallBlind) || !Number.isSafeInteger(this.bigBlind) || this.smallBlind < 1 || this.bigBlind <= this.smallBlind || this.bigBlind > 10000) throw new Error('Invalid blinds');
+    this.currentBet = this.bigBlind;
+    this.fullRaise = this.bigBlind;
     this.deck = options.deck ? [...options.deck] : shuffledDeck();
     const valid = new Set(newDeck());
     if (this.deck.length !== 52 || new Set(this.deck).size !== 52 || this.deck.some(c => !valid.has(c))) throw new Error('Invalid deck');
@@ -55,6 +70,7 @@ export class HoldemHand {
     this.runoutMs = options.runoutMs ?? 2_000;
     this.riverSqueezeMs = options.riverSqueezeMs ?? 15_000;
     this.number = options.number ?? 1;
+    this.initialStacks = Object.fromEntries(seeds.map(p=>[p.id,p.stack]));
     this.players = seeds.map(p => ({ ...p, hole: [], roundBet: 0, totalBet: 0, folded: false, actedAt: null }));
     this.smallBlindIndex = seeds.length === 2 ? this.dealerIndex : this.next(this.dealerIndex);
     this.bigBlindIndex = this.next(this.smallBlindIndex);
@@ -63,12 +79,13 @@ export class HoldemHand {
     }
     this.pay(this.players[this.smallBlindIndex], Math.min(this.smallBlind, this.players[this.smallBlindIndex].stack));
     this.pay(this.players[this.bigBlindIndex], Math.min(this.bigBlind, this.players[this.bigBlindIndex].stack));
+    this.recordReview(`블라인드 ${this.smallBlind}/${this.bigBlind} · 개인 패 배분`);
     this.advance(this.bigBlindIndex);
   }
 
   // Server-only durable state. Never send this object to a client.
   checkpoint() {
-    return structuredClone({ version: 1 as const, id: this.id, number: this.number, players: this.players, dealerIndex: this.dealerIndex, smallBlindIndex: this.smallBlindIndex, bigBlindIndex: this.bigBlindIndex, smallBlind: this.smallBlind, bigBlind: this.bigBlind, deck: this.deck, turnMs: this.turnMs, runoutMs: this.runoutMs, riverSqueezeMs: this.riverSqueezeMs, runout: this.runout, board: this.board, currentBet: this.currentBet, fullRaise: this.fullRaise, street: this.street, actorIndex: this.actorIndex, showdown: this.showdown, revision: this.revision, deadline: this.deadline, lastEvent: this.lastEvent, payouts: this.payouts, refunds: this.refunds, pots: this.pots, revealed: [...this.revealed] });
+    return structuredClone({ initialStacks:this.initialStacks, reviewEvents: this.reviewEvents, version: 1 as const, id: this.id, number: this.number, players: this.players, dealerIndex: this.dealerIndex, smallBlindIndex: this.smallBlindIndex, bigBlindIndex: this.bigBlindIndex, smallBlind: this.smallBlind, bigBlind: this.bigBlind, deck: this.deck, turnMs: this.turnMs, runoutMs: this.runoutMs, riverSqueezeMs: this.riverSqueezeMs, runout: this.runout, board: this.board, currentBet: this.currentBet, fullRaise: this.fullRaise, street: this.street, actorIndex: this.actorIndex, showdown: this.showdown, revision: this.revision, deadline: this.deadline, lastEvent: this.lastEvent, payouts: this.payouts, refunds: this.refunds, pots: this.pots, revealed: [...this.revealed] });
   }
   static restore(saved: ReturnType<HoldemHand['checkpoint']>) {
     if (saved.version !== 1 || !Array.isArray(saved.players) || saved.players.length < 2 || saved.players.length > 6
@@ -76,12 +93,15 @@ export class HoldemHand {
       || !Number.isSafeInteger(saved.revision) || typeof saved.id !== 'string') throw new Error('Invalid hand checkpoint');
     const hand = Object.create(HoldemHand.prototype) as HoldemHand;
     Object.assign(hand, structuredClone({ id: saved.id, number: saved.number, players: saved.players, dealerIndex: saved.dealerIndex, smallBlindIndex: saved.smallBlindIndex, bigBlindIndex: saved.bigBlindIndex, smallBlind: saved.smallBlind, bigBlind: saved.bigBlind, deck: saved.deck, turnMs: saved.turnMs, runoutMs: saved.runoutMs, riverSqueezeMs: saved.riverSqueezeMs, runout: saved.runout, board: saved.board, currentBet: saved.currentBet, fullRaise: saved.fullRaise, street: saved.street, actorIndex: saved.actorIndex, showdown: saved.showdown, revision: saved.revision, deadline: saved.deadline, lastEvent: saved.lastEvent, payouts: saved.payouts, refunds: saved.refunds, pots: saved.pots }));
+    hand.initialStacks = structuredClone(saved.initialStacks ?? {});
+    hand.reviewEvents = structuredClone(saved.reviewEvents ?? []);
     hand.revealed = new Set(saved.revealed);
+    if (hand.runout) hand.exposeAllInHands();
     return hand;
   }
   recoverClock(now: number) {
     if (this.complete) return;
-    this.deadline = now + 30_000;
+    this.deadline = now + (this.runout ? 30_000 : this.turnMs);
     if (this.runout) this.runout.deadline = this.deadline;
   }
 
@@ -149,6 +169,7 @@ export class HoldemHand {
       p.actedAt = this.currentBet;
       this.lastEvent = `${p.nickname}: ${p.roundBet}까지 ${p.stack === 0 ? '올인' : '레이즈'}`;
     }
+    this.recordReview(this.lastEvent);
     this.revision++;
     this.advance(index);
   }
@@ -158,6 +179,8 @@ export class HoldemHand {
     if (!this.actorId) return;
     const id = this.actorId;
     this.act(id, this.legalFor(id)!.canCheck ? 'check' : 'fold');
+    const event = [...this.reviewEvents].reverse().find(e => e.text.startsWith(this.players.find(p=>p.id===id)!.nickname + ':'));
+    if(event) event.text = '시간 초과 · ' + event.text;
     this.lastEvent = `시간 초과 · ${this.lastEvent}`;
   }
 
@@ -172,6 +195,7 @@ export class HoldemHand {
     if (!p || this.complete || p.folded || p.stack === 0) return; // All-in hands remain eligible.
     p.folded = true;
     this.lastEvent = `${p.nickname}: 퇴장으로 폴드`;
+    this.recordReview(this.lastEvent);
     this.revision++;
     // Preserve the current actor when somebody else leaves out of turn.
     this.advance(index === this.actorIndex ? index : (this.actorIndex - 1 + this.players.length) % this.players.length);
@@ -203,10 +227,19 @@ export class HoldemHand {
     for (const p of this.players) { p.roundBet = 0; p.actedAt = null; }
     this.currentBet = 0;
     this.fullRaise = this.bigBlind;
+    this.recordReview('공용 카드 공개');
     this.advance(this.dealerIndex);
   }
 
+  private exposeAllInHands() {
+    const live = this.live();
+    if (live.length < 2 || !live.some(p => p.stack === 0)) return;
+    const newlyExposed = live.some(p => !this.revealed.has(p.id));
+    for (const p of live) this.revealed.add(p.id);
+    if (newlyExposed) this.recordReview('올인 베팅 종료 · 참가자 패 모두 공개');
+  }
   private queueRunout() {
+    this.exposeAllInHands();
     const nextStreet = this.street === 'preflop' ? 'flop' : this.street === 'flop' ? 'turn' : this.street === 'turn' ? 'river' : 'showdown';
     this.actorIndex = -1;
     this.deadline = Date.now() + this.runoutMs;
@@ -239,6 +272,7 @@ export class HoldemHand {
     for (const p of this.players) { p.roundBet = 0; p.actedAt = null; }
     this.currentBet = 0;
     this.fullRaise = this.bigBlind;
+    this.recordReview('공용 카드 공개');
     this.revision++;
     this.queueRunout();
   }
@@ -250,6 +284,7 @@ export class HoldemHand {
     if (this.runout?.phase !== 'squeezing' || !this.runout.card) return;
     this.board.push(this.runout.card);
     this.street = 'river';
+    this.recordReview('리버 공개');
     for (const p of this.players) p.roundBet = 0;
     this.revision++;
     this.queueRunout();
@@ -259,6 +294,7 @@ export class HoldemHand {
   }
 
   private finish(showdown: boolean) {
+    if (showdown) this.exposeAllInHands();
     this.runout = null;
     this.showdown = showdown;
     this.street = 'complete';
@@ -300,6 +336,7 @@ export class HoldemHand {
       });
       previous = level;
     }
+    this.recordReview('핸드 종료 · 결과 확정');
   }
   private distance(p: Seat) { return (this.players.indexOf(p) - this.dealerIndex - 1 + this.players.length) % this.players.length; }
 
@@ -308,7 +345,7 @@ export class HoldemHand {
     return this.complete && this.showdown && !!player && !player.folded && !this.isRevealed(id);
   }
   private isRevealed(id: string) {
-    return this.showdown && (this.revealed.has(id) || this.payouts.some(p => p.playerId === id));
+    return this.revealed.has(id) || (this.showdown && this.payouts.some(p => p.playerId === id));
   }
   revealCards(id: string) {
     if (this.isRevealed(id)) return;

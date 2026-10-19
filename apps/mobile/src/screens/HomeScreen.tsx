@@ -1,12 +1,17 @@
+import { DEFAULT_SETTINGS, type RoomSettings } from '@boardgame/shared';
+import { RoomSettingsEditor, settingsLabel } from '../components/RoomSettingsEditor';
 import type { EntryRequest, GameId } from '@boardgame/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton } from '../components/ActionButton';
 
-interface Props { onEnter: (request: EntryRequest) => void; busy: boolean; error: string | null; onCancel?: () => void }
+interface Props { invite?: { code: string }; onEnter: (request: EntryRequest) => void; busy: boolean; error: string | null; onCancel?: () => void }
 
-export default function HomeScreen({ onEnter, busy, error, onCancel }: Props) {
+export default function HomeScreen({ onEnter, busy, error, onCancel, invite }: Props) {
+  const [settings, setSettings] = useState<RoomSettings>({...DEFAULT_SETTINGS});
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { if (invite) { setCode(invite.code); setMode('join'); setValidation(null); } }, [invite]);
   const [game, setGame] = useState<GameId>('holdem');
   const [mode, setMode] = useState<'create' | 'join'>('create');
   const [nickname, setNickname] = useState('');
@@ -26,15 +31,15 @@ export default function HomeScreen({ onEnter, busy, error, onCancel }: Props) {
     }
     setValidation(null);
     Keyboard.dismiss();
-    onEnter(mode === 'create' ? { type: 'create', nickname: name, game } : { type: 'join', nickname: name, code: code.trim().toUpperCase() });
+    onEnter(mode === 'create' ? { type: 'create', nickname: name, game, settings } : { type: 'join', nickname: name, code: code.trim().toUpperCase() });
   }
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View onLayout={e => setAvailableHeight(e.nativeEvent.layout.height - insets.top - insets.bottom)} style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
         {!tight && <View style={styles.header}><Text style={styles.brand}>FRIENDS TABLE</Text><Text style={styles.badge}>친구 전용</Text></View>}
 
-        {!compact && <Text style={styles.title}>친구들 모이면,{ '\n' }여기가 테이블.</Text>}
-        {availableHeight >= 680 && <View style={styles.hero}><Text style={styles.suits}>♠  ♥  ♣  ♦</Text><Text style={styles.heroCaption}>GOOD FRIENDS. GREAT HANDS.</Text></View>}
+        {availableHeight >= 620 && <Text style={styles.title}>친구들 모이면,{ '\n' }여기가 테이블.</Text>}
+        {availableHeight >= 780 && <View style={styles.hero}><Text style={styles.suits}>♠  ♥  ♣  ♦</Text><Text style={styles.heroCaption}>GOOD FRIENDS. GREAT HANDS.</Text></View>}
         <View accessibilityRole="tablist" style={styles.tabs}>
           {([{ id: 'create', label: '새 방 만들기' }, { id: 'join', label: '코드로 입장' }] as const).map(tab => (
             <Pressable key={tab.id} disabled={busy} accessibilityRole="tab" accessibilityState={{ selected: mode === tab.id }}
@@ -48,16 +53,16 @@ export default function HomeScreen({ onEnter, busy, error, onCancel }: Props) {
           placeholder="닉네임 1~12자" placeholderTextColor="#7F9287" maxLength={24} autoCorrect={false} autoCapitalize="none"
           style={styles.input} returnKeyType="done" onSubmitEditing={submit} />
         {mode === 'create' ? <>
-          {!tight && <Text style={styles.label}>어떤 게임을 할까요?</Text>}
+
           <View style={styles.gameRow}>
             {([{ id: 'holdem', symbol: '♠', name: '텍사스 홀덤' }] as const).map(item => (
               <Pressable key={item.id} disabled={busy} onPress={() => setGame(item.id)} accessibilityRole="radio" accessibilityState={{ checked: game === item.id }} style={[styles.game, tight && { minHeight: 44, justifyContent: 'center' }, game === item.id && styles.selectedGame]}>
                 <Text style={styles.gameName}>{item.symbol} {item.name}</Text>
-                {!tight && <Text style={styles.selection}>{game === item.id ? '선택됨 ✓' : '선택하기'}</Text>}
+
               </Pressable>
             ))}
           </View>
-
+          <Pressable accessibilityRole="button" disabled={busy} onPress={()=>{Keyboard.dismiss();setEditing(true);}} style={styles.settings}><Text style={styles.selection}>방 설정 ›  {settingsLabel(settings)}</Text></Pressable>
         </> : <>
           {!tight && <Text style={styles.label}>초대 코드</Text>}
           <TextInput accessibilityLabel="초대 코드" value={code} onChangeText={text => { setCode(text.toUpperCase().replace(/\s/g, '')); setValidation(null); }}
@@ -71,10 +76,12 @@ export default function HomeScreen({ onEnter, busy, error, onCancel }: Props) {
         {busy && !tight && <Text style={styles.hint}>방에 연결하고 있어요…</Text>}
         {!compact && <Text style={styles.footer}>친구 2~6명이 모이면 홀덤을 시작할 수 있어요.{ '\n' }가상 칩으로 즐기는 친구 전용 게임입니다.</Text>}
       </View>
+      {editing && <RoomSettingsEditor initial={settings} onClose={()=>setEditing(false)} onSave={value=>{setSettings(value);setEditing(false);}} />}
     </KeyboardAvoidingView>
   );
 }
 const styles = StyleSheet.create({
+  settings: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   container: { flex: 1, backgroundColor: '#101C18' },
   content: { flex: 1, gap: 6, justifyContent: 'center', paddingHorizontal: 20, width: '100%', maxWidth: 560, alignSelf: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },

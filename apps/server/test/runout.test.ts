@@ -39,7 +39,8 @@ test('turn loser, not eventual loser, alone receives the private river; wrong ca
   assert.equal(JSON.stringify(leader).includes('13d'),false);
   assert.equal(JSON.stringify(spectator).includes('13d'),false);
   assert.ok(loser.runout!.deadline > Date.now()+14000);
-  assert.equal(leader.players[1].cards,null); assert.equal(loser.players[0].cards,null);
+  assert.equal(leader.players[1].cards?.length,2); assert.equal(loser.players[0].cards?.length,2);
+  assert.ok(spectator.players.every(p=>p.revealed && p.cards?.length===2));
   const before=h.viewFor('0');
   assert.throws(()=>h.revealRiver('0')); assert.throws(()=>h.revealRiver('spectator'));
   assert.deepEqual(h.viewFor('0'),before);
@@ -87,4 +88,35 @@ test('normal betting never sends a private river and keeps each street actionabl
     h.act(id,h.legalFor(id)!.canCheck?'check':'call');
   }
   assert.ok(h.complete);
+});
+
+test('all-in call opens both hands before flop, survives restore and remains public in review',()=>{
+ const h=reversal();h.act('0','allIn');
+ assert.ok(h.viewFor('spectator').players.every(p=>p.cards===null));
+ h.act('1','call');
+ assert.equal(h.viewFor('spectator').board.length,0);
+ assert.ok(h.viewFor('spectator').players.every(p=>p.revealed&&p.cards?.length===2));
+ const restored=HoldemHand.restore(h.checkpoint());
+ assert.ok(restored.viewFor('spectator').players.every(p=>p.revealed&&p.cards?.length===2));
+ while(!restored.complete)restored.timeout();
+ assert.ok(restored.reviewFor('spectator').hand.players.every(p=>p.cards?.length===2));
+ assert.ok(restored.players.every(p=>!restored.canReveal(p.id)));
+});
+test('side-pot betting keeps hands private until river betting ends',()=>{
+ const h=new HoldemHand(seeds(50,200,200));
+ h.act('0','allIn');h.act('1','call');h.act('2','call');
+ assert.equal(h.viewFor('spectator').street,'flop');
+ while(!h.complete){
+   assert.ok(h.viewFor('spectator').players.every(p=>p.cards===null));
+   h.act(h.actorId!,'check');
+ }
+ assert.ok(h.viewFor('spectator').players.every(p=>p.cards?.length===2));
+});
+test('uncalled all-in and folded participants stay private',()=>{
+ const uncalled=reversal();uncalled.act('0','allIn');uncalled.act('1','fold');
+ assert.ok(uncalled.viewFor('spectator').players.every(p=>p.cards===null));
+ const h=new HoldemHand(seeds(100,100,100));
+ h.act('0','fold');h.act('1','allIn');h.act('2','call');
+ assert.equal(h.viewFor('spectator').players[0].cards,null);
+ assert.ok(h.viewFor('spectator').players.slice(1).every(p=>p.cards?.length===2));
 });

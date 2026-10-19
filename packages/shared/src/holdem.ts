@@ -27,6 +27,8 @@ export interface RunoutView {
   // Only the selected player receives this card before public river revelation.
   card: Card | null;
 }
+export interface HandReviewEvent { street: HoldemView['street']; text: string; board: Card[]; pot: number }
+export interface HandReview { netChips?: Record<string, number>; hand: HoldemView; events: HandReviewEvent[] }
 export interface HoldemView {
   runout?: RunoutView | null;
   id: string;

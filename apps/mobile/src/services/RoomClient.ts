@@ -1,4 +1,4 @@
-import type { ClientMessage, PokerAction, EntryRequest, LobbyRoom, ServerMessage } from '@boardgame/shared';
+import type { RoomSettings, ClientMessage, PokerAction, EntryRequest, LobbyRoom, ServerMessage } from '@boardgame/shared';
 
 export interface RoomState {
   status: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
@@ -86,6 +86,7 @@ export class RoomClient {
     this.update({ error: null });
     this.socket.send(JSON.stringify(command));
   }
+  updateSettings(settings: RoomSettings) { this.gameCommand({ type: 'updateSettings', settings }); }
   startHand() { this.gameCommand({ type: 'startHand', previousHandId: this.state.room?.holdem?.id ?? null }); }
   revealRiver(handId: string) { this.gameCommand({ type: 'revealRiver', handId }); }
   revealCards(handId: string) { this.gameCommand({ type: 'revealCards', handId }); }

@@ -1,7 +1,7 @@
 import { createSessionStore } from '../services/sessionStore';
 import { AppState } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
-import type { EntryRequest, PokerAction } from '@boardgame/shared';
+import type { RoomSettings, EntryRequest, PokerAction } from '@boardgame/shared';
 import { RoomClient, type RoomState } from '../services/RoomClient';
 import { getServerUrl } from '../services/serverUrl';
 
@@ -19,6 +19,7 @@ export function useRoom() {
   return {
     ...state,
     enter: (request: EntryRequest) => client.current?.enter(request),
+    updateSettings: (settings: RoomSettings) => client.current?.updateSettings(settings),
     startHand: () => client.current?.startHand(),
     revealRiver: (handId: string) => client.current?.revealRiver(handId),
     revealCards: (handId: string) => client.current?.revealCards(handId),

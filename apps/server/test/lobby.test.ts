@@ -62,7 +62,7 @@ class Peer {
   send(value: unknown) { this.socket.send(JSON.stringify(value)); }
   async next(type: ServerMessage['type'], predicate: (value: ServerMessage) => boolean = () => true): Promise<ServerMessage> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => { this.waiting = undefined; reject(new Error(`Timed out waiting for ${type}`)); }, 2000);
+      const timeout = setTimeout(() => { this.waiting = undefined; reject(new Error(`Timed out waiting for ${type}: ${predicate.toString()}`)); }, 2000);
       const check = () => {
         const index = this.queue.findIndex(item => item.type === type && predicate(item));
         if (index !== -1) { clearTimeout(timeout); this.waiting = undefined; resolve(this.queue.splice(index, 1)[0]); }
@@ -383,7 +383,7 @@ test('one remaining player cancels the countdown and reset cannot leave a stray 
   assert.equal((await c.next('joined') as Joined).room.holdem,undefined);
 });
 
-test('a busted player is not dealt another hand and may still reveal after the match ends', async t => {
+test('a busted all-in player is already public and is not dealt another hand', async t => {
   const app=await setup(t,{nextHandMs:50});
   const a=await app.connect(),b=await app.connect();
   const first=await a.create();
@@ -402,9 +402,11 @@ test('a busted player is not dealt another hand and may still reveal after the m
     if(!loser) continue; // A tied board keeps both players in the automatic match.
     assert.equal(end.fundedPlayers,1);
     assert.equal(end.nextHandAt,null);
+    assert.equal(loser.revealed,true);
+    assert.equal(loser.cards?.length,2);
     const loserPeer=loser.id===first.playerId?a:b;
     loserPeer.send({type:'revealCards',handId:hand.id});
-    const shown=(await a.next('room',m=>m.type==='room' && m.room.holdem?.id===hand.id && m.room.holdem.revision===end.holdem!.revision+1) as RoomMessage).room;
+    const shown=(await a.next('room',m=>m.type==='room' && m.room.holdem?.id===hand.id && m.room.holdem.revision===end.holdem!.revision) as RoomMessage).room;
     assert.equal(shown.holdem!.players.find(p=>p.id===loser.id)?.cards?.length,2);
     assert.equal(shown.nextHandAt,null);
     await new Promise(r=>setTimeout(r,100));
@@ -452,4 +454,49 @@ test('real sockets receive paced streets and keep the river private across sessi
   const visible=(await other.next('room',m=>m.type==='room' && m.room.holdem?.street==='river') as RoomMessage).room.holdem!;
   assert.equal(visible.board[4],privateView.runout?.card); assert.equal(visible.payouts.length,0);
   await other.next('room',m=>m.type==='room' && m.room.holdem?.street==='complete');
+});
+
+
+test('host settings control every hand, late entry and reset; results count finished hands once', async t => {
+  const app=await setup(t,{nextHandMs:10000});
+  const a=await app.connect(), b=await app.connect();
+  const settings={startingChips:5000,smallBlind:25,bigBlind:50,turnSeconds:45};
+  a.send({type:'create',nickname:'A',game:'holdem',settings});
+  const first=await a.next('joined') as Joined;
+  assert.deepEqual(first.room.settings,settings);
+  b.send({type:'join',nickname:'B',code:first.room.code}); const second=await b.next('joined') as Joined;
+  b.send({type:'updateSettings',settings:{...settings,turnSeconds:10}}); await b.next('error');
+  const updated={...settings,startingChips:6000,turnSeconds:60};
+  a.send({type:'updateSettings',settings:updated});
+  await a.next('room',m=>m.type==='room' && m.room.settings?.turnSeconds===60);
+  a.send({type:'startHand',previousHandId:null});
+  const hand=(await a.next('room',m=>m.type==='room' && !!m.room.holdem) as RoomMessage).room.holdem!;
+  assert.ok(hand.players.every(p=>p.stack+p.totalBet===6000));
+  assert.equal(hand.smallBlind,25);assert.equal(hand.bigBlind,50);assert.equal(hand.legal?.minRaiseTo,100);
+  assert.ok(hand.deadline! > Date.now()+58000 && hand.deadline! <= Date.now()+60000);
+  a.send({type:'updateSettings',settings});await a.next('error');
+  const c=await app.connect();c.send({type:'join',nickname:'C',code:first.room.code});await c.next('joined');
+  a.send({type:'act',handId:hand.id,revision:hand.revision,action:'fold'});
+  const result=(await a.next('room',m=>m.type==='room' && m.room.holdem?.street==='complete') as RoomMessage).room;
+  assert.equal(result.todayResults?.players.length,2);
+  assert.deepEqual(result.todayResults?.players.map(p=>[p.playerId,p.hands,p.wins,p.netChips]),[[first.playerId,1,0,-25],[second.playerId,1,1,25]]);
+  assert.equal(JSON.stringify(result.todayResults).includes('cards'),false);
+  b.socket.terminate();
+  const repeat=(await a.next('room',m=>m.type==='room' && m.room.players.some(p=>p.id===second.playerId && !p.connected)) as RoomMessage).room;
+  const rb=await app.connect();rb.send({type:'resume',code:first.room.code,token:second.token});await rb.next('joined');
+  assert.deepEqual(repeat.todayResults,result.todayResults);
+  a.send({type:'resetChips',handId:hand.id});
+  const reset=(await a.next('room',m=>m.type==='room' && !m.room.holdem && m.room.todayResults?.players.length===2) as RoomMessage).room;
+  assert.deepEqual(reset.todayResults,result.todayResults);
+  a.send({type:'startHand',previousHandId:null});
+  const next=(await a.next('room',m=>m.type==='room' && m.room.holdem?.number===2) as RoomMessage).room.holdem!;
+  assert.equal(next.players.length,3);assert.ok(next.players.every(p=>p.stack+p.totalBet===6000));
+});
+
+test('malformed settings cannot create or change a room', async t=>{
+  const app=await setup(t), a=await app.connect();
+  for(const settings of [null, [], {startingChips:1000,smallBlind:20,bigBlind:10,turnSeconds:30}, {startingChips:1000,smallBlind:10,bigBlind:200,turnSeconds:30}, {startingChips:1000,smallBlind:10,bigBlind:20,turnSeconds:0}, {startingChips:'1000',smallBlind:10,bigBlind:20,turnSeconds:30}]) {
+    a.send({type:'create',nickname:'A',game:'holdem',settings}); await a.next('error');
+  }
+  const room=await a.create();assert.equal(room.room.settings?.startingChips,1000);
 });
