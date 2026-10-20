@@ -17,7 +17,8 @@
     "server": "npm run dev --workspace=@boardgame/server",
     "typecheck": "npm run typecheck --workspaces",
     "test": "npm run test --workspace=@boardgame/server",
-    "export:mobile": "npm run export --workspace=@boardgame/mobile"
+    "export:mobile": "npm run export --workspace=@boardgame/mobile",
+    "android:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-android-native.ps1"
   },
   "devDependencies": {
     "typescript": "~6.0.3",

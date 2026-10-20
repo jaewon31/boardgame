@@ -15,7 +15,7 @@ EXPO_PUBLIC_AUTH_GOOGLE=false
 EXPO_PUBLIC_AUTH_APPLE=false
 ```
 
-4. Authentication의 Email 제공자를 켭니다. 이메일 템플릿의 Magic Link에 `{{ .Token }}`을 표시하도록 설정합니다. 운영 서비스 전에는 발신 도메인과 SMTP를 설정하고 실제 메일 도착을 확인합니다.
+4. 이메일 OTP는 custom SMTP를 먼저 연결해야 합니다. 기본 발송 서비스에서는 템플릿 편집이 잠길 수 있고 허용 수신자/발송량도 제한됩니다. SMTP 연결 후 **Confirm signup과 Magic Link 두 템플릿 모두** 본문에 `{{ .Token }}`을 표시합니다. 기존 메일 링크는 쓰지 않고 새 인증 코드를 요청해서 앱에 입력합니다. SMTP가 준비되지 않았다면 Google 로그인부터 검증합니다.
 5. Redirect URLs에 `friendstable://auth/callback`을 정확히 등록합니다.
 6. Google 제공자에 Google Cloud OAuth client 설정을, Apple 제공자에 Apple Developer Service ID·키 설정을 등록합니다. 공급자에게 등록할 서버 콜백은 Supabase 대시보드에 표시되는 주소를 사용합니다. 비밀 키는 Supabase 대시보드에서만 관리합니다.
 7. 설정이 완료된 제공자만 해당 환경변수를 `true`로 바꿉니다.
@@ -32,3 +32,14 @@ EXPO_PUBLIC_AUTH_APPLE=false
 ## Git 작업 방식
 
 기능별 `codex/` 브랜치 → 검증 → 커밋·푸시 → Draft PR → 검토 후 병합 순서로 관리합니다. 현재는 기존 PR 위에 쌓인 브랜치이므로 부모 PR을 먼저 병합하거나 새 PR의 기준 브랜치를 조정합니다. main 병합은 자동으로 하지 않습니다.
+
+## Windows에서 설치형 Android 앱 테스트
+
+1. Android Studio 에뮬레이터 Pixel_7을 켭니다.
+2. 저장소 루트에서 `npm.cmd run android:build`를 실행합니다. 처음 빌드는 Gradle/SDK/NDK 다운로드로 오래 걸릴 수 있습니다. 다른 AVD는 `npm.cmd run android:build -- -Device Boardgame_Guest`로 지정합니다.
+3. 별도 터미널에서 `npm.cmd start -- --lan --port 8081` 실행 후 앱을 다시 엽니다. 이 앱의 기본 개발 서버 포트는 8081입니다.
+4. Google Cloud의 앱이 테스트 상태면 Audience(대상)의 테스트 사용자에 로그인할 이메일을 추가합니다.
+5. Supabase Redirect URLs에 `friendstable://auth/callback`을 등록합니다. Google Cloud의 웹 OAuth 리디렉션 URI는 Supabase의 `https://PROJECT_REF.supabase.co/auth/v1/callback`입니다.
+6. 첫 화면 로그인 → Google을 선택합니다. 실제 Google 인증은 사용자가 직접 진행합니다. 완료 후 닉네임과 친구 코드가 표시되는지 확인합니다.
+
+Supabase Google 제공자가 활성화되어도 로컬 `EXPO_PUBLIC_AUTH_GOOGLE=true` 설정과 Expo 재시작이 필요합니다. 비밀 키는 Supabase에서만 보관합니다.
