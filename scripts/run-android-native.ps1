@@ -3,6 +3,11 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $mobileRoot = Join-Path $projectRoot 'apps\mobile'
 if (-not $env:JAVA_HOME) {
+  $jdkRoot = Join-Path $env:ProgramFiles 'Microsoft'
+  $jdk17 = Get-ChildItem -LiteralPath $jdkRoot -Directory -Filter 'jdk-17*' -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+  if ($jdk17) { $env:JAVA_HOME = $jdk17.FullName }
+}
+if (-not $env:JAVA_HOME) {
   $studioJava = Join-Path $env:ProgramFiles 'Android\Android Studio\jbr'
   if (Test-Path -LiteralPath (Join-Path $studioJava 'bin\java.exe')) { $env:JAVA_HOME = $studioJava }
 }
