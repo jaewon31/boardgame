@@ -1,3 +1,4 @@
+import { FriendsScreen } from './src/screens/FriendsScreen';
 import { needsNickname, showAccountEntry } from './src/services/accountFlow';
 import { useAccount } from './src/hooks/useAccount';
 import { AccountScreen } from './src/screens/AccountScreen';
@@ -16,6 +17,8 @@ function Screens() {
   const room = useRoom();
   const account = useAccount();
   const [accountOpen,setAccountOpen] = useState(false);
+  const [friendsOpen,setFriendsOpen] = useState(false);
+  useEffect(()=>setFriendsOpen(false),[account.user?.id]);
   const [guest,setGuest] = useState(false);
   const setup = needsNickname(account.profile,account.user?.user_metadata);
   useEffect(()=>{if(account.user){setGuest(false);setAccountOpen(false);}},[account.user?.id]);
@@ -40,10 +43,11 @@ function Screens() {
     else setInvite({code});
   },[incoming,room.status,room.room?.code]);
   if(showAccountEntry({hasRoom:!!room.room,configured:account.configured,loading:account.loading,user:!!account.user,profile:!!account.profile,setup,guest,opened:accountOpen})) return <><StatusBar style="light"/><AccountScreen account={account} setup={setup} onClose={()=>{account.clearMessage();setAccountOpen(false);setGuest(true);}} /></>;
+  if(friendsOpen && account.profile && !room.room) return <><StatusBar style="light"/><FriendsScreen profile={account.profile} onClose={()=>setFriendsOpen(false)}/></>;
   return <>
     <StatusBar style="light" />
     {room.room?.holdem ? <GameScreen audio={audio} room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onReset={room.resetChips} onAct={room.act} onReveal={room.revealCards} onRevealRiver={room.revealRiver} /> : room.room ? <LobbyScreen room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onStart={room.startHand} onSettings={room.updateSettings} />
-      : <HomeScreen accountName={account.profile?.display_name} onAccount={()=>setAccountOpen(true)} invite={invite} onCancel={room.leave} onEnter={room.enter} busy={room.status === 'connecting' || room.status === 'reconnecting'} error={room.error} />}
+      : <HomeScreen onFriends={()=>setFriendsOpen(true)} accountName={account.profile?.display_name} onAccount={()=>setAccountOpen(true)} invite={invite} onCancel={room.leave} onEnter={room.enter} busy={room.status === 'connecting' || room.status === 'reconnecting'} error={room.error} />}
   </>;
 }
 export default function App() {

@@ -1,11 +1,12 @@
-param([int]$Port = 8082)
+param([int]$Port = 8081, [switch]$ExpoGo)
 $ErrorActionPreference = 'Stop'
+if (-not $ExpoGo -and $Port -ne 8081) { throw 'The installed app uses port 8081. Start Metro with --port 8081, or explicitly use -ExpoGo for Expo Go.' }
 $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
 $adb = Join-Path $sdk 'platform-tools\adb.exe'
 if (!(Test-Path -LiteralPath $adb)) { throw 'Android SDK platform-tools/adb.exe was not found.' }
 $devices = @(& $adb devices | Where-Object { $_ -match '^\S+\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] })
 if (!$devices.Count) { throw 'Start Pixel_7 and Boardgame_Guest in Android Studio Device Manager first.' }
-# Verify the same IPv4 endpoints used by adb reverse before opening Expo Go.
+# Verify the same IPv4 endpoints used by the installed app and adb reverse.
 try {
   $metro = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/status" -UseBasicParsing -TimeoutSec 5
   $body = $metro.Content
@@ -25,6 +26,13 @@ foreach ($device in $devices) {
   if ($LASTEXITCODE -ne 0) { throw "Expo forwarding failed: $device" }
   & $adb -s $device reverse tcp:3000 tcp:3000
   if ($LASTEXITCODE -ne 0) { throw "Game server forwarding failed: $device" }
-  & $adb -s $device shell am start -a android.intent.action.VIEW -d "exp://127.0.0.1:$Port" -p host.exp.exponent
-  if ($LASTEXITCODE -ne 0) { throw "Expo Go failed to open: $device" }
+  if ($ExpoGo) {
+    & $adb -s $device shell am start -a android.intent.action.VIEW -d "exp://127.0.0.1:$Port" -p host.exp.exponent
+  } else {
+    $installed = & $adb -s $device shell pm path com.jaewon31.boardgame
+    if ($LASTEXITCODE -ne 0 -or -not ($installed -match '^package:')) { throw "Friends Table is not installed on $device. Run npm.cmd run android:build for that AVD first." }
+    & $adb -s $device shell am force-stop host.exp.exponent
+    & $adb -s $device shell am start -n com.jaewon31.boardgame/.MainActivity
+  }
+  if ($LASTEXITCODE -ne 0) { throw "App failed to open: $device" }
 }
