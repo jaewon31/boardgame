@@ -67,7 +67,7 @@ export function useAccount() {
     social:(provider:'google'|'apple')=>run(async()=>{
       if(Constants.appOwnership==='expo'){setMessage('간편 로그인은 설치형 테스트 앱에서 사용할 수 있어요. 여기서는 이메일 인증을 이용해 주세요.');return;}
       if(!authClient||!authProviders[provider])throw Error();
-      const {data,error}=await authClient.auth.signInWithOAuth({provider,options:{redirectTo:AUTH_REDIRECT,skipBrowserRedirect:true}});if(error||!data.url)throw error??Error();
+      const {data,error}=await authClient.auth.signInWithOAuth({provider,options:{redirectTo:AUTH_REDIRECT,skipBrowserRedirect:true,...(provider==='google'?{queryParams:{prompt:'select_account'}}:{})}});if(error||!data.url)throw error??Error();
       const result=await WebBrowser.openAuthSessionAsync(data.url,AUTH_REDIRECT);if(result.type==='success')await exchange(result.url);
     }),
     saveName:(name:string)=>run(async()=>{const clean=name.trim().normalize('NFC');if(!authClient||!user||[...clean].length<1||[...clean].length>12||/[\p{Cc}\p{Cf}]/u.test(clean))throw Error();const {data,error}=await authClient.from('profiles').update({display_name:clean}).eq('id',user.id).select('id,display_name,friend_code').single();if(error)throw error;const completed=await authClient.auth.updateUser({data:{nickname_setup_complete:true}});if(completed.error)throw completed.error;setUser(completed.data.user);setProfile(data);setMessage('닉네임을 저장했어요.');}),
