@@ -9,6 +9,7 @@ WebBrowser.maybeCompleteAuthSession();
 export interface Profile {id:string;display_name:string;friend_code:string}
 export function useAccount() {
   const [user,setUser]=useState<User|null>(null),[profile,setProfile]=useState<Profile|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[loading,setLoading]=useState(!!authClient);
+  const [profileLoading,setProfileLoading]=useState(false),[profileError,setProfileError]=useState(false),[reload,setReload]=useState(0);
   const working=useRef(false), alive=useRef(true), generation=useRef(0), exchanging=useRef(new Set<string>());
   async function exchange(url:string){
     const code=authCode(url);if(!code||!authClient||exchanging.current.has(code))return;
@@ -28,15 +29,16 @@ export function useAccount() {
     return()=>{alive.current=false;generation.current++;subscription.unsubscribe();app.remove();link.remove();client.auth.stopAutoRefresh();};
   },[]);
   useEffect(()=>{
-    const version=++generation.current;setProfile(null);
+    const version=++generation.current;setProfile(null);setProfileError(false);setProfileLoading(!!user);
     if(!user||!authClient)return;
     void authClient.from('profiles').select('id,display_name,friend_code').eq('id',user.id).single().then(({data,error})=>{
       if(!alive.current||version!==generation.current)return;
-      if(error)setMessage('프로필을 불러오지 못했어요. 잠시 후 다시 로그인해 주세요.');else setProfile(data);
+      setProfileLoading(false);
+      if(error){setProfileError(true);setMessage('프로필을 불러오지 못했어요. 다시 시도해 주세요.');}else setProfile(data);
     });
-  },[user?.id]);
-  async function run(action:()=>Promise<void>){if(working.current)return;working.current=true;setBusy(true);setMessage('');try{await action();}catch{if(alive.current)setMessage('요청을 완료하지 못했어요. 연결과 입력 내용을 확인해 주세요.');}finally{working.current=false;if(alive.current)setBusy(false);}}
-  return {user,profile,busy,loading,message,configured:!!authClient,providers:authProviders,
+  },[user?.id,reload]);
+  async function run(action:()=>Promise<void>):Promise<boolean>{if(working.current)return false;working.current=true;setBusy(true);setMessage('');try{await action();return true;}catch{if(alive.current)setMessage('요청을 완료하지 못했어요. 연결과 입력 내용을 확인해 주세요.');return false;}finally{working.current=false;if(alive.current)setBusy(false);}}
+  return {user,profile,busy,loading,message,profileLoading,profileError,clearMessage:()=>setMessage(''),reloadProfile:()=>{setMessage('');setReload(value=>value+1);},configured:!!authClient,providers:authProviders,
     sendCode:(email:string)=>run(async()=>{if(!authClient)throw Error();const {error}=await authClient.auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true}});if(error)throw error;setMessage('인증 코드를 보냈어요. 메일함을 확인해 주세요.');}),
     verifyCode:(email:string,token:string)=>run(async()=>{if(!authClient)throw Error();const {error}=await authClient.auth.verifyOtp({email:email.trim(),token:token.trim(),type:'email'});if(error)throw error;}),
     social:(provider:'google'|'apple')=>run(async()=>{
@@ -45,7 +47,7 @@ export function useAccount() {
       const {data,error}=await authClient.auth.signInWithOAuth({provider,options:{redirectTo:AUTH_REDIRECT,skipBrowserRedirect:true}});if(error||!data.url)throw error??Error();
       const result=await WebBrowser.openAuthSessionAsync(data.url,AUTH_REDIRECT);if(result.type==='success')await exchange(result.url);
     }),
-    saveName:(name:string)=>run(async()=>{const clean=name.trim().normalize('NFC');if(!authClient||!user||[...clean].length<1||[...clean].length>12||/[\p{Cc}\p{Cf}]/u.test(clean))throw Error();const {data,error}=await authClient.from('profiles').update({display_name:clean}).eq('id',user.id).select('id,display_name,friend_code').single();if(error)throw error;setProfile(data);setMessage('닉네임을 저장했어요.');}),
+    saveName:(name:string)=>run(async()=>{const clean=name.trim().normalize('NFC');if(!authClient||!user||[...clean].length<1||[...clean].length>12||/[\p{Cc}\p{Cf}]/u.test(clean))throw Error();const {data,error}=await authClient.from('profiles').update({display_name:clean}).eq('id',user.id).select('id,display_name,friend_code').single();if(error)throw error;const completed=await authClient.auth.updateUser({data:{nickname_setup_complete:true}});if(completed.error)throw completed.error;setUser(completed.data.user);setProfile(data);setMessage('닉네임을 저장했어요.');}),
     signOut:()=>run(async()=>{if(!authClient)return;const {error}=await authClient.auth.signOut({scope:'local'});if(error)throw error;setProfile(null);setUser(null);}),
   };
 }

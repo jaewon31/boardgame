@@ -1,3 +1,4 @@
+import { needsNickname, showAccountEntry } from './src/services/accountFlow';
 import { useAccount } from './src/hooks/useAccount';
 import { AccountScreen } from './src/screens/AccountScreen';
 import { useGameAudio } from './src/hooks/useGameAudio';
@@ -15,6 +16,9 @@ function Screens() {
   const room = useRoom();
   const account = useAccount();
   const [accountOpen,setAccountOpen] = useState(false);
+  const [guest,setGuest] = useState(false);
+  const setup = needsNickname(account.profile,account.user?.user_metadata);
+  useEffect(()=>{if(account.user){setGuest(false);setAccountOpen(false);}},[account.user?.id]);
   const audio = useGameAudio(room.room?.holdem ?? null, room.playerId, room.status === 'connected');
   const [incoming,setIncoming] = useState<string | null>(null);
   const [invite,setInvite] = useState<{code:string} | undefined>();
@@ -35,7 +39,7 @@ function Screens() {
     ]);
     else setInvite({code});
   },[incoming,room.status,room.room?.code]);
-  if(accountOpen && !room.room) return <AccountScreen account={account} onClose={()=>setAccountOpen(false)} />;
+  if(showAccountEntry({hasRoom:!!room.room,configured:account.configured,loading:account.loading,user:!!account.user,profile:!!account.profile,setup,guest,opened:accountOpen})) return <><StatusBar style="light"/><AccountScreen account={account} setup={setup} onClose={()=>{account.clearMessage();setAccountOpen(false);setGuest(true);}} /></>;
   return <>
     <StatusBar style="light" />
     {room.room?.holdem ? <GameScreen audio={audio} room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onReset={room.resetChips} onAct={room.act} onReveal={room.revealCards} onRevealRiver={room.revealRiver} /> : room.room ? <LobbyScreen room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onStart={room.startHand} onSettings={room.updateSettings} />
