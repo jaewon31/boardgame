@@ -43,3 +43,7 @@ EXPO_PUBLIC_AUTH_APPLE=false
 6. 첫 화면 로그인 → Google을 선택합니다. 실제 Google 인증은 사용자가 직접 진행합니다. 완료 후 닉네임과 친구 코드가 표시되는지 확인합니다.
 
 Supabase Google 제공자가 활성화되어도 로컬 `EXPO_PUBLIC_AUTH_GOOGLE=true` 설정과 Expo 재시작이 필요합니다. 비밀 키는 Supabase에서만 보관합니다.
+
+## 두 에뮬레이터 실행 시 주의
+
+`npm.cmd run android:devices`는 이제 설치형 Friends Table을 엽니다. Metro는 8081에서 실행해 주세요. Expo 터미널의 `a`나 Shift+A는 Expo Go를 열 수 있으므로 Google 로그인 테스트에는 사용하지 않습니다. Expo Go가 필요할 때만 `npm.cmd run android:devices -- -ExpoGo -Port 8082`를 명시합니다.
