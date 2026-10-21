@@ -1,3 +1,6 @@
+import { FriendStatsStore } from './FriendStatsStore.ts';
+import { friendStatsApi } from './friendStatsApi.ts';
+import { join,dirname } from 'node:path';
 import { existsSync,readFileSync } from 'node:fs';
 import { parseEnv } from 'node:util';
 import { accountAuthorizer } from './accountSession.ts';
@@ -15,8 +18,10 @@ if(!authUrl||!authKey) throw new Error('Set SUPABASE_URL and SUPABASE_PUBLISHABL
 const config = serverConfig(process.env);
 const store = config.statePath ? new SqliteStateStore(config.statePath) : undefined;
 let ready = false;
-const server = createAppServer(() => ready);
-const lobby = attachLobby(server, { ...config, authorize:accountAuthorizer(authUrl,authKey), store, onFatal: () => setImmediate(() => shutdown(1)) });
+const stats=new FriendStatsStore(process.env.STATS_DB_PATH??join(dirname(config.statePath??'./data/boardgame.sqlite'),'stats.sqlite'));
+const authorize=accountAuthorizer(authUrl,authKey);
+const server = createAppServer(() => ready,friendStatsApi(stats,authorize,authUrl,authKey));
+const lobby = attachLobby(server, { ...config, authorize, recordHand:(id,players)=>stats.record(id,players), store, onFatal: () => setImmediate(() => shutdown(1)) });
 server.listen(config.port, config.host, () => {
   ready = true;
   console.log(JSON.stringify({event:'server_started', port:config.port, durable:!!store}));
@@ -29,7 +34,7 @@ function shutdown(code = 0) {
   if (closing) { if (code) process.exitCode = code; return; }
   closing = true; ready = false; clearInterval(metrics);
   process.exitCode = code;
-  try { lobby.close(); } finally { store?.close(); server.close(); }
+  try { lobby.close(); } finally { store?.close(); stats.close(); server.close(); }
   setTimeout(() => process.exit(process.exitCode || 0),10000).unref();
 }
 process.once('SIGINT', () => shutdown());

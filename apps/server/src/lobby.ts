@@ -1,3 +1,4 @@
+import type { AccountResult } from './FriendStatsStore.ts';
 import { saveReview, reviewFor } from './holdem/review.ts';
 import type { SavedReview } from './holdem/review.ts';
 import { DEFAULT_SETTINGS, validRoomSettings } from '@boardgame/shared';
@@ -28,6 +29,7 @@ interface Room {
   daily: { date: string; players: DailyResult[] };
   scoredHandId?: string;
   startingStacks?: Record<string, number>;
+  handAccounts?: Record<string,string>;
 
   code: string;
   game: GameId;
@@ -53,10 +55,12 @@ export interface LobbyCheckpoint {
     daily?: { date: string; players: DailyResult[] };
     scoredHandId?: string;
     startingStacks?: Record<string, number>;
+    handAccounts?: Record<string,string>;
     hand?: ReturnType<HoldemHand['checkpoint']>;
   }>;
 }
 interface LobbyOptions {
+  recordHand?: (id:string,players:AccountResult[])=>void;
   authorize?: (token:string)=>Promise<string|{accountId:string;sessionId:string}|null>;
   store?: StateStore;
   trustedProxies?: string[];
@@ -151,6 +155,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     let dealerIndex = players.findIndex(p => p.seat > room.dealerSeat);
     if (dealerIndex < 0) dealerIndex = 0;
     room.startingStacks = Object.fromEntries(players.map(p => [p.id, p.stack]));
+    room.handAccounts=Object.fromEntries(players.filter(p=>p.accountId).map(p=>[p.id,p.accountId!]));
     room.hand = new HoldemHand(players.map(p => ({ id: p.id, nickname: p.nickname, stack: p.stack })),
       { dealerIndex, number: ++room.handNumber, turnMs: options.turnMs ?? room.settings.turnSeconds * 1000, smallBlind: room.settings.smallBlind, bigBlind: room.settings.bigBlind, runoutMs: options.runoutMs, riverSqueezeMs: options.riverSqueezeMs });
     room.dealerSeat = players[dealerIndex].seat;
@@ -176,6 +181,11 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
   function recordResult(room: Room) {
     const hand = room.hand;
     if (!hand?.complete || room.scoredHandId === hand.id) return;
+    const results:AccountResult[]=hand.players.flatMap(p=>{
+      const accountId=room.handAccounts?.[p.id],starting=room.startingStacks?.[p.id];
+      return accountId && starting!==undefined?[{accountId,netChips:p.stack-starting,won:hand.viewFor('').payouts.some(win=>win.playerId===p.id&&win.amount>0)}]:[];
+    });
+    try{options.recordHand?.(hand.id,results);}catch{stop();console.error(JSON.stringify({event:'stats_persistence_failed'}));options.onFatal?.();return;}
     room.scoredHandId = hand.id;
     if (room.daily.date !== today()) room.daily = { date:today(), players:[] };
     const payouts = hand.viewFor('').payouts;
@@ -218,6 +228,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
   }
   function remove(room: Room, member: Member) {
     room.hand?.depart(member.id);
+    recordResult(room);
     clearTimeout(member.expiry);
     room.players = room.players.filter(p => p !== member);
     if (room.players.length === 0) { clearTimeout(room.turnTimer); cancelNextHand(room); rooms.delete(room.code); persist(); return; }
@@ -409,7 +420,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     return { version: 1, savedAt: Date.now(), rooms: [...rooms.values()].map(room => ({
       code: room.code, game: room.game, hostId: room.hostId, nextSeat: room.nextSeat,
       dealerSeat: room.dealerSeat, handNumber: room.handNumber,
-      reviews: room.reviews, settings: room.settings, daily: room.daily, scoredHandId: room.scoredHandId, startingStacks: room.startingStacks,
+      reviews: room.reviews, settings: room.settings, daily: room.daily, scoredHandId: room.scoredHandId, startingStacks: room.startingStacks, handAccounts:room.handAccounts,
       players: room.players.map(p => ({loginId:p.loginId, accountId:p.accountId, id:p.id, nickname:p.nickname, token:p.token, stack:p.stack, seat:p.seat, expiresAt:p.expiresAt})),
       hand: room.hand?.checkpoint(),
     })) };
@@ -447,7 +458,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         if (!/^[A-Z2-9]{8}$/.test(r.code) || r.game !== 'holdem' || !Array.isArray(r.players)) throw new Error('Invalid room checkpoint');
         const room: Room = { code:r.code, game:r.game, hostId:r.hostId, nextSeat:r.nextSeat, dealerSeat:r.dealerSeat, handNumber:r.handNumber,
           settings: settingsCopy(r.settings && validRoomSettings(r.settings) ? r.settings : DEFAULT_SETTINGS),
-          reviews:r.reviews ?? [], daily:r.daily ?? {date:today(), players:[]}, scoredHandId:r.scoredHandId, startingStacks:r.startingStacks,
+          reviews:r.reviews ?? [], daily:r.daily ?? {date:today(), players:[]}, scoredHandId:r.scoredHandId, startingStacks:r.startingStacks, handAccounts:r.handAccounts,
           players:r.players.map(p => ({...p})), hand:r.hand ? HoldemHand.restore(r.hand) : undefined, recoveryUntil:now+30_000 };
         rooms.set(room.code, room);
         room.hand?.recoverClock(now);

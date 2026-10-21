@@ -525,3 +525,19 @@ test('new login retires the previous account seat without waiting for reconnect 
  assert.equal((await b.next('joined') as Joined).room.players.length,1);
  assert.equal((await closed)[0],4003);
 });
+
+test('server records completed hands once using original seated account identity including departures',async t=>{
+ const results:{id:string;players:{accountId:string;netChips:number;won:boolean}[]}[]=[];
+ const app=await setup(t,{authorize:async token=>token||null,recordHand:(id,players)=>{results.push({id,players});}});
+ const a=await app.connect(),b=await app.connect();
+ a.send({type:'create',game:'holdem',nickname:'A',accessToken:'account-a'});const created=await a.next('joined') as Joined;
+ b.send({type:'join',code:created.room.code,nickname:'B',accessToken:'account-b'});await b.next('joined');
+ a.send({type:'startHand',previousHandId:null,accessToken:'account-a'});
+ await b.next('room',m=>m.type==='room'&&!!m.room.holdem);
+ a.send({type:'leave',accessToken:'account-a'});await a.next('left');
+ const finished=await b.next('room',m=>m.type==='room'&&m.room.holdem?.street==='complete') as RoomMessage;
+ assert.equal(results.length,1);assert.deepEqual(results[0].players.map(p=>p.accountId).sort(),['account-a','account-b']);
+ assert.equal(results[0].players.reduce((sum,p)=>sum+p.netChips,0),0);
+ b.send({type:'revealCards',handId:finished.room.holdem!.id,accessToken:'account-b'});
+ await b.next('error');assert.equal(results.length,1);
+});
