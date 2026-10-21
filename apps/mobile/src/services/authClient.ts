@@ -1,0 +1,10 @@
+import './nativeAuthCrypto';
+import 'react-native-url-polyfill/auto';
+import { createClient } from '@supabase/supabase-js';
+import * as SecureStore from 'expo-secure-store';
+import { authStorage } from './authStorage';
+const url=process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const key=process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
+export const authConfigured=/^https:\/\/[^/]+\.supabase\.co\/?$/.test(url)&&key.startsWith('sb_publishable_');
+export const authClient=authConfigured?createClient(url,key,{auth:{storage:authStorage(SecureStore),persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,flowType:'pkce'}}):null;
+export const authProviders={google:process.env.EXPO_PUBLIC_AUTH_GOOGLE==='true',apple:process.env.EXPO_PUBLIC_AUTH_APPLE==='true'};

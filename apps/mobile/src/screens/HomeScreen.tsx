@@ -6,15 +6,16 @@ import { Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton } from '../components/ActionButton';
 
-interface Props { invite?: { code: string }; onEnter: (request: EntryRequest) => void; busy: boolean; error: string | null; onCancel?: () => void }
+interface Props { accountName?: string; onAccount?: () => void; invite?: { code: string }; onEnter: (request: EntryRequest) => void; busy: boolean; error: string | null; onCancel?: () => void }
 
-export default function HomeScreen({ onEnter, busy, error, onCancel, invite }: Props) {
+export default function HomeScreen({ onEnter, busy, error, onCancel, invite, accountName, onAccount }: Props) {
   const [settings, setSettings] = useState<RoomSettings>({...DEFAULT_SETTINGS});
   const [editing, setEditing] = useState(false);
   useEffect(() => { if (invite) { setCode(invite.code); setMode('join'); setValidation(null); } }, [invite]);
   const [game, setGame] = useState<GameId>('holdem');
   const [mode, setMode] = useState<'create' | 'join'>('create');
   const [nickname, setNickname] = useState('');
+  useEffect(()=>{if(accountName)setNickname(accountName);},[accountName]);
   const [code, setCode] = useState('');
   const [validation, setValidation] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
@@ -36,7 +37,7 @@ export default function HomeScreen({ onEnter, busy, error, onCancel, invite }: P
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View onLayout={e => setAvailableHeight(e.nativeEvent.layout.height - insets.top - insets.bottom)} style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
-        {!tight && <View style={styles.header}><Text style={styles.brand}>FRIENDS TABLE</Text><Text style={styles.badge}>친구 전용</Text></View>}
+        {!tight && <View style={styles.header}><Text style={styles.brand}>FRIENDS TABLE</Text><Pressable accessibilityRole="button" disabled={busy} onPress={onAccount} style={{minHeight:44,justifyContent:'center'}}><Text style={styles.badge}>{accountName ? '내 프로필' : '로그인'}</Text></Pressable></View>}
 
         {availableHeight >= 620 && <Text style={styles.title}>친구들 모이면,{ '\n' }여기가 테이블.</Text>}
         {availableHeight >= 780 && <View style={styles.hero}><Text style={styles.suits}>♠  ♥  ♣  ♦</Text><Text style={styles.heroCaption}>GOOD FRIENDS. GREAT HANDS.</Text></View>}
@@ -48,10 +49,10 @@ export default function HomeScreen({ onEnter, busy, error, onCancel, invite }: P
             </Pressable>
           ))}
         </View>
-        {!tight && <Text style={styles.label}>친구들에게 보일 닉네임</Text>}
-        <TextInput accessibilityLabel="닉네임" value={nickname} onChangeText={text => { setNickname(text); setValidation(null); }} editable={!busy}
+        {!accountName && !tight && <Text style={styles.label}>친구들에게 보일 닉네임</Text>}
+        {accountName ? <View style={styles.identity}><Text style={styles.identityName}>{accountName}님, 반가워요.</Text><Text style={styles.hint}>방을 만들거나 친구의 초대 코드로 입장하세요.</Text></View> : <TextInput accessibilityLabel="닉네임" value={nickname} onChangeText={text => { setNickname(text); setValidation(null); }} editable={!busy}
           placeholder="닉네임 1~12자" placeholderTextColor="#7F9287" maxLength={24} autoCorrect={false} autoCapitalize="none"
-          style={styles.input} returnKeyType="done" onSubmitEditing={submit} />
+          style={styles.input} returnKeyType="done" onSubmitEditing={submit} />}
         {mode === 'create' ? <>
 
           <View style={styles.gameRow}>
@@ -81,6 +82,7 @@ export default function HomeScreen({ onEnter, busy, error, onCancel, invite }: P
   );
 }
 const styles = StyleSheet.create({
+  identity:{paddingVertical:8,gap:4},identityName:{color:'#FAF6E9',fontSize:18,fontWeight:'700'},
   settings: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   container: { flex: 1, backgroundColor: '#101C18' },
   content: { flex: 1, gap: 6, justifyContent: 'center', paddingHorizontal: 20, width: '100%', maxWidth: 560, alignSelf: 'center' },

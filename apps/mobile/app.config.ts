@@ -9,7 +9,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     ...config, name: config.name ?? 'Friends Table', slug: config.slug ?? 'friends-table',
     scheme: 'friendstable',
-    plugins: [...(config.plugins ?? []), ['expo-audio', { microphonePermission:false, recordAudioAndroid:false, enableBackgroundPlayback:false, enableBackgroundRecording:false }]],
+    plugins: [...(config.plugins ?? []), 'expo-web-browser', ['expo-audio', { microphonePermission:false, recordAudioAndroid:false, enableBackgroundPlayback:false, enableBackgroundRecording:false }]],
     ios: { ...config.ios, bundleIdentifier:id, supportsTablet:false },
     android: { ...config.android, package:id },
     // Set EXPO_PROJECT_ID after running eas init in this workspace.
