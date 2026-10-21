@@ -14,11 +14,12 @@ import HomeScreen from './src/screens/HomeScreen';
 import { LobbyScreen } from './src/screens/LobbyScreen';
 
 function Screens() {
-  const room = useRoom();
   const account = useAccount();
+  const room = useRoom(!account.loading && !!account.user && !account.sessionBlocked);
   const [accountOpen,setAccountOpen] = useState(false);
   const [friendsOpen,setFriendsOpen] = useState(false);
   useEffect(()=>setFriendsOpen(false),[account.user?.id]);
+  useEffect(()=>{if(account.sessionBlocked || (!account.user && !account.loading))room.leave();},[account.sessionBlocked,account.user?.id,account.loading]);
   const [guest,setGuest] = useState(false);
   const setup = needsNickname(account.profile,account.user?.user_metadata);
   useEffect(()=>{if(account.user){setGuest(false);setAccountOpen(false);}},[account.user?.id]);
@@ -47,7 +48,7 @@ function Screens() {
   return <>
     <StatusBar style="light" />
     {room.room?.holdem ? <GameScreen audio={audio} room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onReset={room.resetChips} onAct={room.act} onReveal={room.revealCards} onRevealRiver={room.revealRiver} /> : room.room ? <LobbyScreen room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={room.leave} onStart={room.startHand} onSettings={room.updateSettings} />
-      : <HomeScreen onFriends={()=>setFriendsOpen(true)} accountName={account.profile?.display_name} onAccount={()=>setAccountOpen(true)} invite={invite} onCancel={room.leave} onEnter={room.enter} busy={room.status === 'connecting' || room.status === 'reconnecting'} error={room.error} />}
+      : <HomeScreen onFriends={()=>setFriendsOpen(true)} accountName={account.profile?.display_name} onAccount={()=>setAccountOpen(true)} invite={invite} onCancel={room.leave} onEnter={request=>{if(!account.user||account.sessionBlocked){setAccountOpen(true);return;}room.enter(request);}} busy={room.status === 'connecting' || room.status === 'reconnecting'} error={room.error} />}
   </>;
 }
 export default function App() {

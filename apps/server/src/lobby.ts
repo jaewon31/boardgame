@@ -11,6 +11,8 @@ import { WebSocket, WebSocketServer } from 'ws';
 import type { ClientMessage, ErrorCode, GameId, LobbyRoom, ServerMessage } from '@boardgame/shared';
 
 interface Member {
+  accountId?: string;
+  loginId?: string;
   id: string;
   nickname: string;
   token: string;
@@ -45,7 +47,7 @@ export interface LobbyCheckpoint {
   savedAt: number;
   rooms: Array<{
     code: string; game: GameId; hostId: string; nextSeat: number; dealerSeat: number; handNumber: number;
-    players: Array<{id: string; nickname: string; token: string; stack: number; seat: number; expiresAt?: number}>;
+    players: Array<{loginId?: string; accountId?: string; id: string; nickname: string; token: string; stack: number; seat: number; expiresAt?: number}>;
     reviews?: SavedReview[];
     settings?: RoomSettings;
     daily?: { date: string; players: DailyResult[] };
@@ -55,6 +57,7 @@ export interface LobbyCheckpoint {
   }>;
 }
 interface LobbyOptions {
+  authorize?: (token:string)=>Promise<string|{accountId:string;sessionId:string}|null>;
   store?: StateStore;
   trustedProxies?: string[];
   maxConnections?: number;
@@ -114,7 +117,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
   const rooms = new Map<string, Room>();
   const connectionsByIp = new Map<string, number>();
   const reconnectMs = options.reconnectMs ?? 300_000;
-  const wss = new WebSocketServer({ server, path: '/lobby', maxPayload: 2048, perMessageDeflate: false });
+  const wss = new WebSocketServer({ server, path: '/lobby', maxPayload: 12288, perMessageDeflate: false });
   const alive = new WeakSet<WebSocket>();
   let stopping = false;
 
@@ -242,8 +245,13 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     const fail = (code: ErrorCode, message: string) => send(socket, { type: 'error', code, message, recoverable: !!membership && code !== 'RATE_LIMITED' });
 
     socket.on('pong', () => alive.add(socket));
-    socket.on('message', (data, isBinary) => {
-      if (stopping) return;
+    let queued=0;let requests=Promise.resolve();
+    socket.on('message',(data,isBinary)=>{
+      if(++queued>30){socket.close(1008,'Too many pending requests');return;}
+      requests=requests.then(()=>handle(data,isBinary)).catch(()=>socket.close(1011,'Request failed')).finally(()=>{queued--;});
+    });
+    async function handle(data:import('ws').RawData,isBinary:boolean) {
+      if (stopping || socket.readyState!==WebSocket.OPEN) return;
       if (membership && membership.member.socket !== socket) return;
       if (Date.now() - windowStart >= 10_000) { messages = 0; windowStart = Date.now(); }
       if (++messages > 30) {
@@ -253,6 +261,20 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       }
       const input = isBinary ? null : parseMessage(data.toString());
       if (!input) { fail('INVALID_REQUEST', '닉네임·초대 코드 또는 방 설정의 허용 범위를 확인해 주세요.'); return; }
+
+      let accountId:string|undefined,loginId:string|undefined;
+      if(options.authorize) {
+        let token:unknown;
+        try { token=JSON.parse(data.toString()).accessToken; } catch { /* parser already validated */ }
+        try { const identity=await options.authorize(typeof token==='string'?token:'');accountId=typeof identity==='string'?identity:identity?.accountId;loginId=typeof identity==='string'?identity:identity?.sessionId; }
+        catch { send(socket,{type:'error',code:'AUTH_UNAVAILABLE',message:'로그인 확인 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',recoverable:!!membership});if(!membership)socket.close(1013,'Authentication unavailable');return; }
+        if(stopping || socket.readyState!==WebSocket.OPEN || (membership && membership.member.socket!==socket)) return;
+        if(!accountId || (membership && (membership.member.accountId!==accountId || membership.member.loginId!==loginId))) {
+          send(socket,{type:'error',code:'AUTH_REQUIRED',message:'다른 기기에서 로그인했거나 로그인이 만료됐어요. 다시 로그인해 주세요.',recoverable:false});
+          if(membership){const {room,member}=membership;membership=undefined;member.socket=undefined;remove(room,member);}
+          socket.close(4003,'Account session expired');return;
+        }
+      }
       if (input.type === 'ping') {
         if (!membership) { fail('SESSION_EXPIRED', '방에 다시 입장해 주세요.'); return; }
         send(socket, { type: 'pong', id: input.id });
@@ -310,12 +332,19 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         return;
       }
       if (membership) { fail('ALREADY_JOINED', '현재 방에서 먼저 나가 주세요.'); return; }
+      // A newly verified login retires the prior login's seats immediately.
+      if(accountId)for(const previousRoom of [...rooms.values()])for(const previous of [...previousRoom.players]) {
+        if(previous.accountId===accountId && previous.loginId!==loginId){const old=previous.socket;previous.socket=undefined;remove(previousRoom,previous);old?.close(4003,'Account replaced');}
+      }
+      if(accountId && input.type!=='resume' && [...rooms.values()].some(r=>r.players.some(p=>p.accountId===accountId))) {
+        fail('ALREADY_JOINED','이 계정은 이미 방에 참여 중이에요. 기존 방으로 다시 접속하거나 먼저 나가 주세요.');return;
+      }
       let room: Room;
       let member: Member;
       if (input.type === 'resume') {
         const existing = rooms.get(input.code);
         const previous = existing?.players.find(p => p.token === input.token && (p.expiresAt === undefined || p.expiresAt > Date.now()));
-        if (!existing || !previous) { fail('SESSION_EXPIRED', '재접속 시간이 지났거나 방이 닫혔어요. 다시 입장해 주세요.'); return; }
+        if (!existing || !previous || (options.authorize && previous.accountId!==accountId)) { fail('SESSION_EXPIRED', '재접속 시간이 지났거나 방이 닫혔어요. 다시 입장해 주세요.'); return; }
         room = existing;
         member = previous;
         const oldSocket = member.socket;
@@ -342,7 +371,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         if (room.players.some(p => p.nickname.toLowerCase() === input.nickname.toLowerCase())) {
           fail('NICKNAME_TAKEN', '이 방에서 사용 중인 닉네임이에요. 다른 이름을 입력해 주세요.'); return;
         }
-        member = { id: randomUUID(), nickname: input.nickname, token: randomBytes(32).toString('hex'), stack: room.settings.startingChips, seat: room.nextSeat++, socket };
+        member = { accountId, loginId, id: randomUUID(), nickname: input.nickname, token: randomBytes(32).toString('hex'), stack: room.settings.startingChips, seat: room.nextSeat++, socket };
         room.players.push(member);
         if (!room.hostId) room.hostId = member.id;
       }
@@ -352,7 +381,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       if (!persist()) return;
       send(socket, { type: 'joined', room: snapshot(room, member.id), playerId: member.id, token: member.token });
       broadcast(room);
-    });
+    }
     socket.on('close', () => {
       clearTimeout(authTimeout);
       const remaining = (connectionsByIp.get(ip) ?? 1) - 1;
@@ -381,7 +410,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       code: room.code, game: room.game, hostId: room.hostId, nextSeat: room.nextSeat,
       dealerSeat: room.dealerSeat, handNumber: room.handNumber,
       reviews: room.reviews, settings: room.settings, daily: room.daily, scoredHandId: room.scoredHandId, startingStacks: room.startingStacks,
-      players: room.players.map(p => ({id:p.id, nickname:p.nickname, token:p.token, stack:p.stack, seat:p.seat, expiresAt:p.expiresAt})),
+      players: room.players.map(p => ({loginId:p.loginId, accountId:p.accountId, id:p.id, nickname:p.nickname, token:p.token, stack:p.stack, seat:p.seat, expiresAt:p.expiresAt})),
       hand: room.hand?.checkpoint(),
     })) };
   }

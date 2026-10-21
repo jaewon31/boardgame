@@ -500,3 +500,28 @@ test('malformed settings cannot create or change a room', async t=>{
   }
   const room=await a.create();assert.equal(room.room.settings?.startingChips,1000);
 });
+
+test('verified account cannot occupy two seats; revoked sessions cannot act or reclaim another account seat',async t=>{
+ let revoked=false;
+ const app=await setup(t,{authorize:async token=>token==='account-a'&&!revoked?'a':token==='account-b'?'b':null});
+ const a=await app.connect();a.send({type:'create',game:'holdem',nickname:'A',accessToken:'account-a'});
+ const first=await a.next('joined') as Joined;
+ const b=await app.connect();b.send({type:'join',code:first.room.code,nickname:'A2',accessToken:'account-a'});
+ assert.equal((await b.next('error') as Extract<ServerMessage,{type:'error'}>).code,'ALREADY_JOINED');
+ const thief=await app.connect();thief.send({type:'resume',code:first.room.code,token:first.token,accessToken:'account-b'});
+ assert.equal((await thief.next('error') as Extract<ServerMessage,{type:'error'}>).code,'SESSION_EXPIRED');
+ revoked=true;a.send({type:'startHand',previousHandId:null,accessToken:'account-a'});
+ assert.equal((await a.next('error') as Extract<ServerMessage,{type:'error'}>).code,'AUTH_REQUIRED');
+ const invalid=await app.connect();invalid.send({type:'create',game:'holdem',nickname:'X'});
+ assert.equal((await invalid.next('error') as Extract<ServerMessage,{type:'error'}>).code,'AUTH_REQUIRED');
+});
+
+test('new login retires the previous account seat without waiting for reconnect expiry',async t=>{
+ const app=await setup(t,{authorize:async token=>token==='old'||token==='new'?{accountId:'same',sessionId:token}:null});
+ const a=await app.connect();a.send({type:'create',game:'holdem',nickname:'A',accessToken:'old'});
+ await a.next('joined');
+ const closed=once(a.socket,'close');
+ const b=await app.connect();b.send({type:'create',game:'holdem',nickname:'A',accessToken:'new'});
+ assert.equal((await b.next('joined') as Joined).room.players.length,1);
+ assert.equal((await closed)[0],4003);
+});

@@ -51,7 +51,7 @@ export type ClientMessage = EntryRequest
   | { type: 'act'; handId: string; revision: number; action: PokerAction; amount?: number };
 
 export type ErrorCode = 'INVALID_REQUEST' | 'ROOM_NOT_FOUND' | 'ROOM_FULL'
-  | 'NICKNAME_TAKEN' | 'SESSION_EXPIRED' | 'ALREADY_JOINED' | 'RATE_LIMITED' | 'SERVER_FULL' | 'GAME_ERROR';
+  | 'AUTH_REQUIRED' | 'AUTH_UNAVAILABLE' | 'NICKNAME_TAKEN' | 'SESSION_EXPIRED' | 'ALREADY_JOINED' | 'RATE_LIMITED' | 'SERVER_FULL' | 'GAME_ERROR';
 
 export type ServerMessage =
   | { type: 'pong'; id: number }

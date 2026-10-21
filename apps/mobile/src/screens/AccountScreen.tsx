@@ -20,7 +20,7 @@ export function AccountScreen({account,onClose,setup=false}:{account:Account;onC
   return <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS==='ios'?'padding':'height'}>
     <View style={[styles.content,{paddingTop:insets.top+8,paddingBottom:insets.bottom+8}]}>
       <View style={styles.top}><Text style={styles.brand}>FRIENDS TABLE</Text>{!waiting&&!setup&&<Pressable accessibilityRole="button" disabled={account.busy} onPress={()=>step!=='choose'&&!account.user?navigate('choose'):onClose()} style={styles.close}><Text style={styles.note}>{account.user?'닫기':step==='choose'?'둘러보기':'뒤로'}</Text></Pressable>}</View>
-      {waiting?<View style={styles.loading}><ActivityIndicator color="#DFC98D"/><Text style={styles.note}>잠시만 기다려 주세요</Text></View>:<View style={[styles.body,compact&&{gap:10,paddingVertical:6}]}>
+      {waiting?<View style={styles.loading}><ActivityIndicator color="#DFC98D"/><Text style={styles.note}>{account.message || '잠시만 기다려 주세요'}</Text></View>:<View style={[styles.body,compact&&{gap:10,paddingVertical:6}]}>
         {!compact&&!account.user&&step==='choose'&&<Text accessible={false} style={styles.mark}>♠</Text>}
         <Text style={[styles.title,compact&&{fontSize:22}]}>{title}</Text>
         {!account.configured?<><Text style={styles.text}>로그인 서비스를 준비 중이에요.</Text><ActionButton title="둘러보기" onPress={onClose}/></>:account.user?account.profile?<>
