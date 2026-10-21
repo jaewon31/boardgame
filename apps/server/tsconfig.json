@@ -8,7 +8,7 @@
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
     "types": [
-      "node"
+      "node", "emscripten"
     ]
   },
   "include": [
