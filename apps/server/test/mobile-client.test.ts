@@ -172,3 +172,22 @@ test('leaving during reconnect cancels retry and cannot restore stale membership
   assert.equal(app.state.current()?.status, 'idle');
   assert.equal(app.state.current()?.room, null);
 });
+
+test('account token refresh is sent on heartbeat and leave; leaving waits for the authenticated send',async t=>{
+ const received:Record<string,unknown>[]=[];
+ const app=await setup(t,(socket,message)=>{
+   received.push(message);
+   if(message.type==='create')socket.send(JSON.stringify({type:'joined',room,playerId:'me',token:'secret'}));
+   if(message.type==='ping')socket.send(JSON.stringify({type:'pong',id:message.id}));
+ });
+ let token='login-one';app.client.accessToken=async()=>token;
+ app.client.enter({type:'create',nickname:'나',game:'holdem'});
+ await app.state.wait(s=>s.status==='connected');
+ assert.equal(received[0].accessToken,'login-one');
+ token='refreshed-token';app.client.checkConnection();
+ await new Promise(resolve=>setTimeout(resolve,40));
+ assert.equal(received.find(m=>m.type==='ping')?.accessToken,'refreshed-token');
+ app.client.leave();await new Promise(resolve=>setTimeout(resolve,40));
+ assert.equal(received.find(m=>m.type==='leave')?.accessToken,'refreshed-token');
+ assert.equal(app.state.current()?.status,'idle');
+});

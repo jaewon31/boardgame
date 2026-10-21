@@ -1,13 +1,22 @@
+import { existsSync,readFileSync } from 'node:fs';
+import { parseEnv } from 'node:util';
+import { accountAuthorizer } from './accountSession.ts';
 import { createAppServer } from './http.ts';
 import { attachLobby } from './lobby.ts';
 import { SqliteStateStore } from './stateStore.ts';
 import { serverConfig } from './config.ts';
 
+// Local mobile and server use the same public Supabase project configuration.
+// Production must supply these values through its environment.
+const local=process.env.NODE_ENV==='production'?{}:parseEnv(existsSync(new URL('../../mobile/.env.local',import.meta.url))?readFileSync(new URL('../../mobile/.env.local',import.meta.url),'utf8'):'');
+const authUrl=process.env.SUPABASE_URL??local.EXPO_PUBLIC_SUPABASE_URL??'';
+const authKey=process.env.SUPABASE_PUBLISHABLE_KEY??local.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY??'';
+if(!authUrl||!authKey) throw new Error('Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY before starting the game server');
 const config = serverConfig(process.env);
 const store = config.statePath ? new SqliteStateStore(config.statePath) : undefined;
 let ready = false;
 const server = createAppServer(() => ready);
-const lobby = attachLobby(server, { ...config, store, onFatal: () => setImmediate(() => shutdown(1)) });
+const lobby = attachLobby(server, { ...config, authorize:accountAuthorizer(authUrl,authKey), store, onFatal: () => setImmediate(() => shutdown(1)) });
 server.listen(config.port, config.host, () => {
   ready = true;
   console.log(JSON.stringify({event:'server_started', port:config.port, durable:!!store}));

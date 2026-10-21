@@ -14,6 +14,17 @@ export interface SavedSession { code: string; token: string }
 export interface SessionStore { load(): Promise<SavedSession | null>; save(session: SavedSession | null): Promise<void> }
 export class RoomClient {
   private storage?: SessionStore;
+  accessToken?: ()=>Promise<string>;
+  private sendQueue:Promise<void>=Promise.resolve();
+  private send(socket:WebSocket,command:unknown):Promise<void> {
+    if(!this.accessToken){socket.send(JSON.stringify(command));return Promise.resolve();}
+    const generation=this.generation;
+    this.sendQueue=this.sendQueue.then(async()=>{
+      const accessToken=await this.accessToken!();
+      if(generation===this.generation && socket.readyState===WebSocket.OPEN) socket.send(JSON.stringify({...command as object,accessToken}));
+    }).catch(()=>{if(generation===this.generation){this.disconnect();this.remember(null);this.update({...emptyState,error:"로그인을 다시 확인해 주세요."});}});
+    return this.sendQueue;
+  }
   private writes: Promise<void> = Promise.resolve();
   private heartbeat: ReturnType<typeof setInterval> | undefined;
   private lastPong = 0;
@@ -84,7 +95,7 @@ export class RoomClient {
   private gameCommand(command: ClientMessage) {
     if (this.state.status !== 'connected' || this.socket?.readyState !== WebSocket.OPEN) return;
     this.update({ error: null });
-    this.socket.send(JSON.stringify(command));
+    this.send(this.socket,command);
   }
   updateSettings(settings: RoomSettings) { this.gameCommand({ type: 'updateSettings', settings }); }
   startHand() { this.gameCommand({ type: 'startHand', previousHandId: this.state.room?.holdem?.id ?? null }); }
@@ -107,7 +118,7 @@ export class RoomClient {
     }
     if (this.pendingPing !== null) return;
     this.pendingPing = ++this.pingSequence;
-    try { this.socket.send(JSON.stringify({ type: 'ping', id: this.pendingPing })); }
+    try { this.send(this.socket,{ type: 'ping', id: this.pendingPing }); }
     catch { this.connectionLost(); }
   }
 
@@ -132,7 +143,7 @@ export class RoomClient {
       this.connectionLost();
     }, 8_000);
     socket.onopen = () => {
-      if (generation === this.generation) socket.send(JSON.stringify(request));
+      if (generation === this.generation) this.send(socket,request);
     };
     socket.onmessage = event => {
       if (generation !== this.generation) return;
@@ -153,7 +164,7 @@ export class RoomClient {
         this.update({ room: message.room });
       } else if (message.type === 'error') {
         if (message.recoverable && joined) { this.update({ error: message.message }); return; }
-        if (this.session && (message.code === 'RATE_LIMITED' || message.code === 'SERVER_FULL')) { this.connectionLost(); return; }
+        if (this.session && (message.code === 'AUTH_UNAVAILABLE' || message.code === 'RATE_LIMITED' || message.code === 'SERVER_FULL')) { this.connectionLost(); return; }
         this.disconnect();
         this.remember(null);
         this.update({ ...emptyState, error: message.message });
@@ -163,6 +174,7 @@ export class RoomClient {
     socket.onclose = event => {
       if (generation !== this.generation) return;
       clearTimeout(this.timeout);
+      if(event.code===4003){this.disconnect();this.remember(null);this.update({...emptyState,error:'다른 기기에서 로그인하여 접속이 종료됐어요.'});return;}
       if (event.code === 4001) {
         this.disconnect();
         this.remember(null);
@@ -192,11 +204,11 @@ export class RoomClient {
   }
 
   leave() {
-    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: 'leave' }));
-    this.disconnect();
-    this.remember(null);
-    this.retryUntil = 0;
-    this.update(emptyState);
+    const socket=this.socket,generation=this.generation;
+    this.remember(null);this.retryUntil=0;this.update(emptyState);
+    if(socket?.readyState===WebSocket.OPEN && this.accessToken) {
+      void this.send(socket,{type:'leave'}).finally(()=>{if(generation===this.generation){this.disconnect();this.update(emptyState);}});
+    }else {if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'leave'}));this.disconnect();}
   }
   dispose() {
     this.disconnect();
