@@ -1,11 +1,12 @@
 {
   "expo": {
     "name": "Friends Table",
-    "slug": "friends-table",
+    "slug": "error418",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "owner": "jaewoni-studio",
     "ios": {
       "supportsTablet": true
     },
@@ -23,6 +24,11 @@
     },
     "plugins": [
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "818bdf66-db02-4e80-92e9-bd13c5eaef01"
+      }
+    }
   }
 }

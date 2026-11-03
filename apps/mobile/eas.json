@@ -1,6 +1,13 @@
 {
   "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
   "build": {
+    "development": {
+      "node": "24.19.0",
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development",
+      "env": { "APP_ENV": "development" }
+    },
     "preview": {
       "node": "24.19.0",
       "distribution": "internal",

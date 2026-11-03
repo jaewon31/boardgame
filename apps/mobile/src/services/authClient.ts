@@ -6,5 +6,6 @@ import { authStorage } from './authStorage';
 const url=process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const key=process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
 export const authConfigured=/^https:\/\/[^/]+\.supabase\.co\/?$/.test(url)&&key.startsWith('sb_publishable_');
-export const authClient=authConfigured?createClient(url,key,{auth:{storage:authStorage(SecureStore),persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,flowType:'pkce'}}):null;
-export const authProviders={google:process.env.EXPO_PUBLIC_AUTH_GOOGLE==='true',apple:process.env.EXPO_PUBLIC_AUTH_APPLE==='true'};
+if(__DEV__)console.info('[auth:config]',{urlPresent:!!url,urlFormatValid:/^https:\/\/[^/]+\.supabase\.co\/?$/.test(url),keyPresent:!!key,keyFormatValid:key.startsWith('sb_publishable_'),configured:authConfigured});
+export const accountStorage=authStorage(SecureStore);
+export const authClient=authConfigured?createClient(url,key,{auth:{storage:accountStorage,persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,flowType:'pkce'}}):null;

@@ -128,3 +128,23 @@ test('room settings and once-only daily results survive SQLite restart and chip 
   const reset=(await ra.next('room',m=>!m.room.holdem)).room;
   assert.deepEqual(reset.settings,settings);assert.deepEqual(reset.todayResults,done.todayResults);assert.deepEqual(reset.handReviews,done.handReviews);
 });
+
+test('SQLite restart preserves settings revision and does not renew expired checkpoint seats',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'boardgame-lifecycle-')),path=join(dir,'state.sqlite');
+ let app=await start(path);t.after(async()=>{await app.close();rmSync(dir,{recursive:true,force:true});});
+ const a=await app.connect();a.send({type:'create',nickname:'A',game:'holdem'});const first=await a.next('joined');
+ const settings={...first.room.settings,turnSeconds:60};
+ a.send({type:'updateSettings',expectedRevision:0,requestId:'edit',settings});await a.next('settingsUpdated');
+ await app.close();app=await start(path);
+ const restored=await app.connect();restored.send({type:'resume',code:first.room.code,token:first.token});const same=await restored.next('joined');
+ assert.equal(same.room.settingsRevision,1);assert.deepEqual(same.room.settings,settings);
+ await app.close();
+ // Simulate downtime of a checkpoint taken with a connected seat, without touching real data.
+ const store=new SqliteStateStore(path);const checkpoint=store.load()!;checkpoint.savedAt=Date.now()-301000;
+ checkpoint.rooms[0].players.forEach(p=>{delete p.expiresAt;});store.save(checkpoint);store.close();
+ app=await start(path);
+ const expired=await app.connect();expired.send({type:'resume',code:first.room.code,token:first.token});
+ assert.equal((await expired.next('error')).code,'SESSION_EXPIRED');
+ const deadline=Date.now()+1000;
+ while(app.store.load()!.rooms.length){assert.ok(Date.now()<deadline);await new Promise(r=>setTimeout(r,5));}
+});

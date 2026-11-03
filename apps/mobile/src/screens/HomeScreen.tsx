@@ -1,14 +1,15 @@
+import type { RoomPhase } from '../services/roomView';
 import { DEFAULT_SETTINGS, type RoomSettings } from '@boardgame/shared';
 import { RoomSettingsEditor, settingsLabel } from '../components/RoomSettingsEditor';
-import type { EntryRequest, GameId } from '@boardgame/shared';
+import type { EntryRequest, GameId, LobbyRoom } from '@boardgame/shared';
 import { useEffect, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton } from '../components/ActionButton';
 
-interface Props { onFriends?: () => void; accountName?: string; onAccount?: () => void; invite?: { code: string }; onEnter: (request: EntryRequest) => void; busy: boolean; error: string | null; onCancel?: () => void }
+interface Props { phase: RoomPhase; notice?: 'room-closed' | 'membership-ended'; onDismissNotice?: () => void; activeRoom?: LobbyRoom | null; playerId?: string | null; onReturn?: () => void; onLeave?: () => void; onRetry?: () => void; connected?: boolean; onFriends?: () => void; accountName?: string; onAccount?: () => void; invite?: { code: string }; onEnter: (request: EntryRequest) => void; busy: boolean; error: string | null; onCancel?: () => void }
 
-export default function HomeScreen({ onEnter, busy, error, onCancel, invite, accountName, onAccount, onFriends }: Props) {
+export default function HomeScreen({ phase, notice, onDismissNotice, activeRoom, playerId, onReturn, onLeave, onRetry, connected, onEnter, busy, error, onCancel, invite, accountName, onAccount, onFriends }: Props) {
   const [settings, setSettings] = useState<RoomSettings>({...DEFAULT_SETTINGS});
   const [editing, setEditing] = useState(false);
   useEffect(() => { if (invite) { setCode(invite.code); setMode('join'); setValidation(null); } }, [invite]);
@@ -23,6 +24,8 @@ export default function HomeScreen({ onEnter, busy, error, onCancel, invite, acc
   const compact = availableHeight < 540;
   const tight = availableHeight < 380;
   function submit() {
+    if (busy) return;
+    if (activeRoom) { onReturn?.(); return; }
     const name = nickname.trim().normalize('NFC');
     if ([...name].length < 1 || [...name].length > 12 || /[\p{Cc}\p{Cf}]/u.test(name)) {
       setValidation('닉네임은 공백만 입력하지 말고 1~12자로 입력해 주세요.'); return;
@@ -41,6 +44,25 @@ export default function HomeScreen({ onEnter, busy, error, onCancel, invite, acc
 
         {availableHeight >= 620 && <Text style={styles.title}>친구들 모이면,{ '\n' }여기가 테이블.</Text>}
         {availableHeight >= 780 && <View style={styles.hero}><Text style={styles.suits}>♠  ♥  ♣  ♦</Text><Text style={styles.heroCaption}>GOOD FRIENDS. GREAT HANDS.</Text></View>}
+        {activeRoom ? <View style={styles.activeRoom}>
+          <Text style={styles.selection}>참여 중인 방 · {activeRoom.hostId === playerId ? '방장' : '참여자'}</Text>
+          <Text style={styles.gameName}>{activeRoom.game === 'holdem' ? '텍사스 홀덤' : '섯다'} · {activeRoom.code}</Text>
+          <Text style={styles.label}>참여 인원: {activeRoom.players.length}/{activeRoom.maxPlayers}명</Text>
+          <Text style={styles.selection}>{settingsLabel(activeRoom.settings ?? DEFAULT_SETTINGS)}</Text>
+          {!connected && <Text style={styles.hint}>연결 확인 중 · 마지막으로 확인한 방 정보입니다.</Text>}
+          {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+          <ActionButton compact title="참여 중인 방으로 돌아가기" onPress={()=>onReturn?.()} />
+          <ActionButton compact secondary title="방 나가기" disabled={!connected} onPress={()=>onLeave?.()} />
+          {!connected && <ActionButton compact secondary title="연결 재시도" onPress={()=>onRetry?.()} />}
+        </View> : notice ? <View style={styles.activeRoom}>
+          <Text accessibilityRole="alert" style={styles.label}>{notice === 'room-closed' ? '참여 중이던 방이 종료되었어요.' : '이전 방의 참여 유예시간이 끝났거나 참여가 종료되었어요.'}</Text>
+          <ActionButton compact title="홈으로 이동" onPress={()=>onDismissNotice?.()} />
+        </View> : phase !== 'NO_ROOM' ? <View style={styles.activeRoom}>
+          <Text accessibilityRole="alert" style={styles.label}>{phase === 'CHECKING_ROOM' ? '참여 중인 방을 확인하고 있어요.' : '방 정보를 확인하지 못했어요.'}</Text>
+          {error && <Text style={styles.error}>{error}</Text>}
+          <ActionButton compact secondary title="다시 시도" disabled={phase === 'CHECKING_ROOM' || phase === 'RECONNECTING'} onPress={()=>onRetry?.()} />
+          {busy && onCancel && <ActionButton compact secondary title="연결 취소" onPress={onCancel} />}
+        </View> : <>
         <View accessibilityRole="tablist" style={styles.tabs}>
           {([{ id: 'create', label: '새 방 만들기' }, { id: 'join', label: '코드로 입장' }] as const).map(tab => (
             <Pressable key={tab.id} disabled={busy} accessibilityRole="tab" accessibilityState={{ selected: mode === tab.id }}
@@ -75,6 +97,8 @@ export default function HomeScreen({ onEnter, busy, error, onCancel, invite, acc
         <ActionButton compact title={mode === 'create' ? '우리 방 만들기' : '친구 방 입장하기'} onPress={submit} busy={busy} />
         {busy && onCancel && <ActionButton compact title="연결 취소" secondary onPress={onCancel} />}
         {busy && !tight && <Text style={styles.hint}>방에 연결하고 있어요…</Text>}
+        {error && !busy && onRetry && <ActionButton compact secondary title="참여 상태 다시 확인" onPress={onRetry} />}
+        </>}
         {!compact && <Text style={styles.footer}>친구 2~6명이 모이면 홀덤을 시작할 수 있어요.{ '\n' }가상 칩으로 즐기는 친구 전용 게임입니다.</Text>}
       </View>
       {editing && <RoomSettingsEditor initial={settings} onClose={()=>setEditing(false)} onSave={value=>{setSettings(value);setEditing(false);}} />}
@@ -82,6 +106,7 @@ export default function HomeScreen({ onEnter, busy, error, onCancel, invite, acc
   );
 }
 const styles = StyleSheet.create({
+  activeRoom:{padding:18,gap:12,borderRadius:20,backgroundColor:'#24392C',borderWidth:1,borderColor:'#D5BD7F'},
   identity:{paddingVertical:8,gap:4},identityName:{color:'#FAF6E9',fontSize:18,fontWeight:'700'},
   settings: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   container: { flex: 1, backgroundColor: '#101C18' },

@@ -22,6 +22,7 @@ export interface DailyResult {
 }
 export interface LobbyRoom {
   handReviews?: HandReview[];
+  settingsRevision?: number;
   settings?: RoomSettings;
   todayResults?: { date: string; players: DailyResult[] };
 
@@ -40,11 +41,12 @@ export type EntryRequest =
   | { type: 'join'; nickname: string; code: string };
 
 export type ClientMessage = EntryRequest
+  | { type: 'currentRoom'; previousCode?: string }
   | { type: 'ping'; id: number }
   | { type: 'resume'; code: string; token: string }
   | { type: 'leave' }
-  | { type: 'updateSettings'; settings: RoomSettings }
-  | { type: 'startHand'; previousHandId: string | null }
+  | { type: 'updateSettings'; settings: RoomSettings; expectedRevision?: number; requestId?: string }
+  | { type: 'startHand'; previousHandId: string | null; expectedSettingsRevision?: number }
   | { type: 'revealCards'; handId: string }
   | { type: 'revealRiver'; handId: string }
   | { type: 'resetChips'; handId: string }
@@ -58,4 +60,6 @@ export type ServerMessage =
   | { type: 'joined'; room: LobbyRoom; playerId: string; token: string }
   | { type: 'room'; room: LobbyRoom }
   | { type: 'left' }
-  | { type: 'error'; code: ErrorCode; message: string; recoverable?: boolean };
+  | { type: 'noRoom'; reason?: 'room-closed' | 'membership-ended' }
+  | { type: 'settingsUpdated'; settings: RoomSettings; settingsRevision?: number; requestId?: string }
+  | { type: 'error'; code: ErrorCode; message: string; recoverable?: boolean; requestId?: string };

@@ -1,77 +1,96 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState, Linking } from 'react-native';
-import Constants from 'expo-constants';
-import * as WebBrowser from 'expo-web-browser';
-import type { Session, User } from '@supabase/supabase-js';
-import { authClient, authProviders } from '../services/authClient';
-import { authCode, AUTH_REDIRECT } from '../services/authCallback';
-WebBrowser.maybeCompleteAuthSession();
-export interface Profile {id:string;display_name:string;friend_code:string}
+import { AppState } from 'react-native';
+import type { Session } from '@supabase/supabase-js';
+import { authClient, accountStorage } from '../services/authClient';
+import { ensureAccountSession } from '../services/anonymousSession';
+import { logAuthFailure } from '../services/authErrors';
+export interface Profile {id:string;display_name:string;friend_code:string;nickname_setup_complete:boolean}
+const profileFields='id,display_name,friend_code,nickname_setup_complete';
 export function useAccount() {
-  const [user,setUser]=useState<User|null>(null),[profile,setProfile]=useState<Profile|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[loading,setLoading]=useState(!!authClient);
-  const [profileLoading,setProfileLoading]=useState(false),[profileError,setProfileError]=useState(false),[reload,setReload]=useState(0);
-  const working=useRef(false), alive=useRef(true), generation=useRef(0), exchanging=useRef(new Set<string>());
   const [session,setSession]=useState<Session|null>(null);
-  const [sessionBlocked,setSessionBlocked]=useState(!!authClient);
+  const [profile,setProfile]=useState<Profile|null>(null);
+  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(!!authClient);
+  const [message,setMessage]=useState(''),[sessionBlocked,setSessionBlocked]=useState(true);
+  const [profileLoading,setProfileLoading]=useState(false),[profileError,setProfileError]=useState(false);
+  const [retry,setRetry]=useState(0);
+  const alive=useRef(false),working=useRef(false);
+  const identity=useRef<string|null>(null),profileRevision=useRef(0);
+  const user=session?.user??null;
+  useEffect(()=>{
+    alive.current=true;
+    return()=>{alive.current=false;};
+  },[]);
+  useEffect(()=>{
+    if(!authClient)return;
+    const client=authClient;let stopped=false;
+    setLoading(true);setMessage('');
+    const {data:{subscription}}=client.auth.onAuthStateChange((_event,next)=>{
+      if(stopped)return;
+      if(identity.current!==(next?.user.id??null)){
+        identity.current=next?.user.id??null;profileRevision.current++;
+        setProfile(null);setSessionBlocked(true);
+      }
+      setSession(next);
+      if(!next){setSessionBlocked(true);setProfile(null);setMessage('저장된 계정에 접속할 수 없어요. 연결 상태를 확인하고 다시 시도해 주세요.');}
+    });
+    void ensureAccountSession(client.auth,accountStorage).then(next=>{
+      if(!stopped)setSession(next);
+    }).catch(error=>{
+      if(!stopped)setMessage(logAuthFailure('restore_or_create_account',error,__DEV__));
+    }).finally(()=>{if(!stopped)setLoading(false);});
+    const app=AppState.addEventListener('change',state=>{if(state==='active')client.auth.startAutoRefresh();else client.auth.stopAutoRefresh();});
+    if(AppState.currentState==='active')client.auth.startAutoRefresh();
+    return()=>{stopped=true;subscription.unsubscribe();app.remove();client.auth.stopAutoRefresh();};
+  },[retry]);
   useEffect(()=>{
     if(!session||!authClient)return;
     const client=authClient;let stopped=false,running=false;
+    // Keep an already verified account connected during token refresh.
+    setProfileError(false);setProfileLoading(true);
     async function check(){
       if(stopped||running||AppState.currentState!=='active')return;
-      running=true;
-      try {
-        const {data,error}=await client.rpc('current_account_session');
-        if(stopped)return;
-        if(error){setProfileError(true);setMessage('로그인 보안 설정을 확인하지 못했어요. 서버 설정 또는 연결을 확인해 주세요.');return;}
-        if(data!==session!.user.id){
-          setSessionBlocked(true);setMessage('다른 기기에서 로그인하여 이 기기의 접속이 종료됐어요.');
-          await client.auth.signOut({scope:'local'});
-          if(!stopped){setUser(null);setProfile(null);setSession(null);}
-        }else setSessionBlocked(false);
-      }catch{if(!stopped){setProfileError(true);setMessage("로그인을 확인하지 못했어요. 인터넷 연결을 확인해 주세요.");}}finally{running=false;}
+      running=true;const revision=profileRevision.current;
+      let stage='session_rpc';
+      try{
+        const current=await client.rpc('current_account_session');
+        if(current.error)throw current.error;
+        if(current.data!==session!.user.id)throw {code:current.data===null?'account_session_null':'account_session_mismatch'};
+        stage='profile_read';
+        const result=await client.from('profiles').select(profileFields).eq('id',session!.user.id).single();
+        if(result.error)throw result.error;
+        if(!stopped){if(revision===profileRevision.current)setProfile(result.data);setSessionBlocked(false);setProfileError(false);setMessage('');}
+      }catch(error){
+        if(__DEV__){
+          const e=error&&typeof error==='object'?error as Record<string,unknown>:{};
+          const safeCode=typeof e.code==='string'&&(/^(?:[0-9A-Z]{5}|PGRST[0-9]{3})$/.test(e.code)||['account_session_null','account_session_mismatch'].includes(e.code))?e.code:'unknown';
+          console.warn('[account:check]',{stage,code:safeCode});
+        }
+        // Never sign out or silently replace an anonymous account on transient failure.
+        if(!stopped){setSessionBlocked(true);setProfileError(true);setMessage(logAuthFailure('verify_account_profile',error,__DEV__));}
+      }finally{running=false;if(!stopped)setProfileLoading(false);}
     }
-    void check();const timer=setInterval(()=>void check(),3000);
-    const foreground=AppState.addEventListener('change',state=>{if(state==='active')void check();});
-    return()=>{stopped=true;clearInterval(timer);foreground.remove();};
-  },[session?.access_token]);
-  async function exchange(url:string){
-    const code=authCode(url);if(!code||!authClient||exchanging.current.has(code))return;
-    exchanging.current.add(code);
-    const {error}=await authClient.auth.exchangeCodeForSession(code, new URL(url).searchParams.get('sb_flow_id') ? {flowId:new URL(url).searchParams.get('sb_flow_id')!} : undefined);
-    if(error&&alive.current)setMessage('로그인을 완료하지 못했어요. 다시 시도해 주세요.');
+    void check();const timer=setInterval(()=>void check(),10000);
+    const app=AppState.addEventListener('change',state=>{if(state==='active')void check();});
+    return()=>{stopped=true;clearInterval(timer);app.remove();};
+  },[session?.access_token,retry]);
+  async function saveName(name:string):Promise<boolean>{
+    if(working.current)return false;
+    working.current=true;setBusy(true);setMessage('');
+    const revision=++profileRevision.current;
+    try{
+      const clean=name.trim().normalize('NFC');
+      if(!authClient||!user||sessionBlocked||[...clean].length<1||[...clean].length>12||/[\p{Cc}\p{Cf}]/u.test(clean))throw Error('Invalid nickname');
+      // One atomic row update, avoiding profile/metadata partial completion.
+      const {data,error}=await authClient.from('profiles').update({display_name:clean,nickname_setup_complete:true}).eq('id',user.id).select(profileFields).single();
+      if(error)throw error;
+      if(!alive.current||revision!==profileRevision.current)return false;
+      profileRevision.current++; // Ignore profile reads started while this save was in flight.
+      setProfile(data);setMessage('닉네임을 저장했어요.');
+      return true;
+    }catch(error){if(alive.current)setMessage(logAuthFailure('save_nickname',error,__DEV__));return false;}
+    finally{working.current=false;if(alive.current)setBusy(false);}
   }
-  useEffect(()=>{
-    alive.current=true;if(!authClient)return;
-    const client=authClient;
-    const {data:{subscription}}=client.auth.onAuthStateChange((_event,session)=>{setSession(session);setUser(session?.user ?? null);setLoading(false);});
-    void client.auth.getSession().then(({data,error})=>{if(alive.current){if(error)setMessage('로그인 정보를 확인하지 못했어요.');setSession(data.session);setSessionBlocked(!!data.session);setUser(data.session?.user??null);setLoading(false);}});
-    const app=AppState.addEventListener('change',state=>{if(state==='active')client.auth.startAutoRefresh();else client.auth.stopAutoRefresh();});
-    if(AppState.currentState==='active')client.auth.startAutoRefresh();
-    const link=Linking.addEventListener('url',event=>{void exchange(event.url);});
-    void Linking.getInitialURL().then(url=>{if(url&&alive.current)void exchange(url);});
-    return()=>{alive.current=false;generation.current++;subscription.unsubscribe();app.remove();link.remove();client.auth.stopAutoRefresh();};
-  },[]);
-  useEffect(()=>{
-    const version=++generation.current;setProfile(null);setProfileError(false);setProfileLoading(!!user);
-    if(!user||!authClient||sessionBlocked)return;
-    void authClient.from('profiles').select('id,display_name,friend_code').eq('id',user.id).single().then(({data,error})=>{
-      if(!alive.current||version!==generation.current)return;
-      setProfileLoading(false);
-      if(error){setProfileError(true);setMessage('프로필을 불러오지 못했어요. 다시 시도해 주세요.');}else setProfile(data);
-    });
-  },[user?.id,reload,sessionBlocked]);
-  async function run(action:()=>Promise<void>):Promise<boolean>{if(working.current)return false;working.current=true;setBusy(true);setMessage('');try{await action();return true;}catch{if(alive.current)setMessage('요청을 완료하지 못했어요. 연결과 입력 내용을 확인해 주세요.');return false;}finally{working.current=false;if(alive.current)setBusy(false);}}
-  return {user,profile,busy,loading,message,sessionBlocked,profileLoading,profileError,clearMessage:()=>setMessage(''),reloadProfile:()=>{setMessage('');setReload(value=>value+1);},configured:!!authClient,providers:authProviders,
-    sendCode:(email:string)=>run(async()=>{if(!authClient)throw Error();const {error}=await authClient.auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true}});if(error)throw error;setMessage('인증 코드를 보냈어요. 메일함을 확인해 주세요.');}),
-    verifyCode:(email:string,token:string)=>run(async()=>{if(!authClient)throw Error();const {error}=await authClient.auth.verifyOtp({email:email.trim(),token:token.trim(),type:'email'});if(error)throw error;}),
-    social:(provider:'google'|'apple')=>run(async()=>{
-      if(Constants.appOwnership==='expo'){setMessage('간편 로그인은 설치형 테스트 앱에서 사용할 수 있어요. 여기서는 이메일 인증을 이용해 주세요.');return;}
-      if(!authClient||!authProviders[provider])throw Error();
-      const {data,error}=await authClient.auth.signInWithOAuth({provider,options:{redirectTo:AUTH_REDIRECT,skipBrowserRedirect:true,...(provider==='google'?{queryParams:{prompt:'select_account'}}:{})}});if(error||!data.url)throw error??Error();
-      const result=await WebBrowser.openAuthSessionAsync(data.url,AUTH_REDIRECT);if(result.type==='success')await exchange(result.url);
-    }),
-    saveName:(name:string)=>run(async()=>{const clean=name.trim().normalize('NFC');if(!authClient||!user||[...clean].length<1||[...clean].length>12||/[\p{Cc}\p{Cf}]/u.test(clean))throw Error();const {data,error}=await authClient.from('profiles').update({display_name:clean}).eq('id',user.id).select('id,display_name,friend_code').single();if(error)throw error;const completed=await authClient.auth.updateUser({data:{nickname_setup_complete:true}});if(completed.error)throw completed.error;setUser(completed.data.user);setProfile(data);setMessage('닉네임을 저장했어요.');}),
-    signOut:()=>run(async()=>{if(!authClient)return;const {error}=await authClient.auth.signOut({scope:'local'});if(error)throw error;setProfile(null);setUser(null);}),
-  };
+  return {user,profile,busy,loading,message,sessionBlocked,profileLoading,profileError,configured:!!authClient,
+    clearMessage:()=>setMessage(''),reloadProfile:()=>setRetry(value=>value+1),saveName};
 }
 export type Account=ReturnType<typeof useAccount>;

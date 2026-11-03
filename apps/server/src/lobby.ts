@@ -25,6 +25,7 @@ interface Member {
 }
 interface Room {
   reviews?: SavedReview[];
+  settingsRevision: number;
   settings: RoomSettings;
   daily: { date: string; players: DailyResult[] };
   scoredHandId?: string;
@@ -51,6 +52,7 @@ export interface LobbyCheckpoint {
     code: string; game: GameId; hostId: string; nextSeat: number; dealerSeat: number; handNumber: number;
     players: Array<{loginId?: string; accountId?: string; id: string; nickname: string; token: string; stack: number; seat: number; expiresAt?: number}>;
     reviews?: SavedReview[];
+    settingsRevision?: number;
     settings?: RoomSettings;
     daily?: { date: string; players: DailyResult[] };
     scoredHandId?: string;
@@ -71,7 +73,9 @@ interface LobbyOptions {
   runoutMs?: number;
   riverSqueezeMs?: number;
   turnMs?: number;
-  reconnectMs?: number;
+  /** Seat/account membership grace after transport loss, not room TTL. */
+  seatRetentionMs?: number;
+  reconnectMs?: number; // Backward-compatible RECONNECT_MS option.
   heartbeatMs?: number;
   maxRooms?: number;
 }
@@ -90,14 +94,19 @@ function parseMessage(raw: string): ClientMessage | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
   if (v.type === 'ping' && Number.isSafeInteger(v.id) && Number(v.id) >= 0) return { type: 'ping', id: Number(v.id) };
-  if (v.type === 'startHand' && (v.previousHandId === null || typeof v.previousHandId === 'string')) return { type: 'startHand', previousHandId: v.previousHandId };
+  if (v.type === 'startHand' && (v.previousHandId === null || typeof v.previousHandId === 'string')) return { type: 'startHand', previousHandId: v.previousHandId, expectedSettingsRevision: Number.isSafeInteger(v.expectedSettingsRevision) ? Number(v.expectedSettingsRevision) : undefined };
   if (v.type === 'revealRiver' && typeof v.handId === 'string') return { type: 'revealRiver', handId: v.handId };
   if (v.type === 'revealCards' && typeof v.handId === 'string') return { type: 'revealCards', handId: v.handId };
   if (v.type === 'resetChips' && typeof v.handId === 'string') return { type: 'resetChips', handId: v.handId };
   if (v.type === 'act' && typeof v.handId === 'string' && Number.isSafeInteger(v.revision)
     && ['fold', 'check', 'call', 'raise', 'allIn'].includes(String(v.action))
     && (v.amount === undefined || Number.isSafeInteger(v.amount))) return v as unknown as ClientMessage;
-  if (v.type === 'updateSettings' && validRoomSettings(v.settings)) return { type: 'updateSettings', settings: settingsCopy(v.settings) };
+  if (v.type === 'updateSettings' && validRoomSettings(v.settings)) {
+    if (v.expectedRevision !== undefined && (!Number.isSafeInteger(v.expectedRevision) || Number(v.expectedRevision) < 0)) return null;
+    if (v.requestId !== undefined && (typeof v.requestId !== 'string' || v.requestId.length > 80)) return null;
+    return { type: 'updateSettings', settings: settingsCopy(v.settings), expectedRevision: v.expectedRevision as number | undefined, requestId: v.requestId as string | undefined };
+  }
+  if (v.type === 'currentRoom') return { type: 'currentRoom', previousCode: typeof v.previousCode === 'string' && /^[A-Z2-9]{8}$/.test(v.previousCode) ? v.previousCode : undefined };
   if (v.type === 'leave') return { type: 'leave' };
   if (v.type === 'resume' && typeof v.code === 'string' && /^[A-Z2-9]{8}$/.test(v.code)
     && typeof v.token === 'string' && /^[a-f0-9]{64}$/.test(v.token)) {
@@ -120,7 +129,7 @@ function parseMessage(raw: string): ClientMessage | null {
 export function attachLobby(server: Server, options: LobbyOptions = {}) {
   const rooms = new Map<string, Room>();
   const connectionsByIp = new Map<string, number>();
-  const reconnectMs = options.reconnectMs ?? 300_000;
+  const seatRetentionMs = options.seatRetentionMs ?? options.reconnectMs ?? 300_000;
   const wss = new WebSocketServer({ server, path: '/lobby', maxPayload: 12288, perMessageDeflate: false });
   const alive = new WeakSet<WebSocket>();
   let stopping = false;
@@ -135,7 +144,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       handReviews: (room.reviews ?? []).map(r=>reviewFor(r,viewer)),
       nextHandAt: room.nextHandAt ?? null, fundedPlayers: room.players.filter(p => p.stack > 0).length,
       code: room.code, game: room.game, hostId: room.hostId, maxPlayers,
-      settings: room.settings, todayResults: room.daily.date === today() ? room.daily : {date:today(), players:[]},
+      settingsRevision: room.settingsRevision, settings: room.settings, todayResults: room.daily.date === today() ? room.daily : {date:today(), players:[]},
       players: room.players.map(p => ({ id: p.id, nickname: p.nickname, connected: !!p.socket })),
     };
   }
@@ -226,7 +235,18 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     scheduleNextHand(room);
     broadcast(room);
   }
+  function scheduleExpiry(room: Room, member: Member) {
+    clearTimeout(member.expiry);
+    const remaining = (member.expiresAt ?? Infinity) - Date.now();
+    member.expiry = setTimeout(() => {
+      if (stopping || member.socket || rooms.get(room.code) !== room || !room.players.includes(member)) return;
+      if ((member.expiresAt ?? Infinity) > Date.now()) { scheduleExpiry(room, member); return; }
+      remove(room, member);
+    }, Math.max(1, remaining));
+    member.expiry.unref();
+  }
   function remove(room: Room, member: Member) {
+    if (rooms.get(room.code) !== room || !room.players.includes(member)) return;
     room.hand?.depart(member.id);
     recordResult(room);
     clearTimeout(member.expiry);
@@ -253,7 +273,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       if (!membership) socket.close(1008, 'Join timeout');
     }, 15_000);
     authTimeout.unref();
-    const fail = (code: ErrorCode, message: string) => send(socket, { type: 'error', code, message, recoverable: !!membership && code !== 'RATE_LIMITED' });
+    const fail = (code: ErrorCode, message: string, requestId?: string) => send(socket, { type: 'error', code, message, requestId, recoverable: !!membership && code !== 'RATE_LIMITED' });
 
     socket.on('pong', () => alive.add(socket));
     let queued=0;let requests=Promise.resolve();
@@ -298,16 +318,27 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
           member.socket = undefined;
           remove(room, member);
         }
+        if (!persist()) return;
         send(socket, { type: 'left' });
         socket.close(1000, 'Left room');
         return;
       }
       if (input.type === 'updateSettings') {
-        if (!membership || membership.room.hostId !== membership.member.id) { fail('GAME_ERROR', '방장만 방 설정을 바꿀 수 있어요.'); return; }
+        if (!membership || membership.room.hostId !== membership.member.id) { fail('GAME_ERROR', '방장만 방 설정을 바꿀 수 있어요.', input.requestId); return; }
         const room = membership.room;
-        if (room.hand) { fail('GAME_ERROR', '새 경기 준비 후 대기실에서 설정을 바꿔 주세요.'); return; }
+        if (room.hand) { fail('GAME_ERROR', '새 경기 준비 후 대기실에서 설정을 바꿔 주세요.', input.requestId); return; }
+        if (input.expectedRevision !== room.settingsRevision) { fail('GAME_ERROR', '설정 버전이 바뀌었어요. 최신 앱에서 편집기를 다시 열고 확인해 주세요.', input.requestId); return; }
+        const previous = room.settings, stacks = room.players.map(p => p.stack);
+        room.settingsRevision++;
         room.settings = settingsCopy(input.settings);
         room.players.forEach(p => { p.stack = room.settings.startingChips; });
+        if (!persist()) {
+          room.settingsRevision--;
+          room.settings = previous;
+          room.players.forEach((p, i) => { p.stack = stacks[i]; });
+          return;
+        }
+        send(socket, { type: 'settingsUpdated', settings: room.settings, settingsRevision: room.settingsRevision, requestId: input.requestId });
         broadcast(room);
         return;
       }
@@ -332,7 +363,9 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
               if (!room.hand || room.hand.id !== input.handId) throw new Error('이미 초기화되었어요.');
               room.players.forEach(p => { p.stack = room.settings.startingChips; });
               room.hand = undefined;
+              room.settingsRevision++; // Drafts from a previous lobby are stale.
             } else {
+              if (input.expectedSettingsRevision !== undefined && input.expectedSettingsRevision !== room.settingsRevision) throw new Error('방 설정이 바뀌었어요. 최신 설정을 확인하고 다시 시작해 주세요.');
               if ((room.hand?.id ?? null) !== input.previousHandId) throw new Error('게임 상태가 바뀌었어요.');
               if (room.hand) throw new Error('다음 판은 자동으로 시작됩니다.');
               if (!startNextHand(room)) throw new Error('접속 중이며 칩이 있는 친구가 2명 이상 필요해요.');
@@ -346,6 +379,28 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       // A newly verified login retires the prior login's seats immediately.
       if(accountId)for(const previousRoom of [...rooms.values()])for(const previous of [...previousRoom.players]) {
         if(previous.accountId===accountId && previous.loginId!==loginId){const old=previous.socket;previous.socket=undefined;remove(previousRoom,previous);old?.close(4003,'Account replaced');}
+      }
+      // Resolve membership from the verified account/session, never a supplied user ID.
+      if (input.type === 'currentRoom') {
+        if (!accountId) { fail('AUTH_REQUIRED', '로그인이 필요해요.'); return; }
+        for (const existing of rooms.values()) {
+          const previous = existing.players.find(p => p.accountId === accountId && p.loginId === loginId);
+          if (!previous) continue;
+          if (previous.expiresAt !== undefined && previous.expiresAt <= Date.now()) { remove(existing, previous); continue; }
+          const old = previous.socket;
+          previous.socket = socket;
+          clearTimeout(previous.expiry); previous.expiry = undefined; previous.expiresAt = undefined;
+          membership = { room: existing, member: previous };
+          clearTimeout(authTimeout);
+          old?.close(4001, 'Session replaced');
+          scheduleNextHand(existing);
+          if (!persist()) return;
+          send(socket, { type: 'joined', room: snapshot(existing, previous.id), playerId: previous.id, token: previous.token });
+          broadcast(existing);
+          return;
+        }
+        send(socket, { type: 'noRoom', ...(input.previousCode ? { reason: rooms.has(input.previousCode) ? 'membership-ended' as const : 'room-closed' as const } : {}) });
+        return;
       }
       if(accountId && input.type!=='resume' && [...rooms.values()].some(r=>r.players.some(p=>p.accountId===accountId))) {
         fail('ALREADY_JOINED','이 계정은 이미 방에 참여 중이에요. 기존 방으로 다시 접속하거나 먼저 나가 주세요.');return;
@@ -371,7 +426,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
           if (rooms.size >= (options.maxRooms ?? 1000)) { fail('SERVER_FULL', '서버가 혼잡해요. 잠시 후 다시 시도해 주세요.'); return; }
           let code: string;
           do { code = Array.from({ length: 8 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code));
-          room = { code, game: input.game, hostId: '', players: [], nextSeat: 0, dealerSeat: -1, handNumber: 0, settings: settingsCopy(input.settings ?? DEFAULT_SETTINGS), daily: {date:today(), players:[]} };
+          room = { code, game: input.game, hostId: '', players: [], nextSeat: 0, dealerSeat: -1, handNumber: 0, settingsRevision: 0, settings: settingsCopy(input.settings ?? DEFAULT_SETTINGS), daily: {date:today(), players:[]} };
           rooms.set(code, room);
         } else {
           const existing = rooms.get(input.code);
@@ -400,9 +455,8 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       if (!membership || membership.member.socket !== socket || stopping) return;
       const { room, member } = membership;
       member.socket = undefined;
-      member.expiresAt = Date.now() + reconnectMs;
-      member.expiry = setTimeout(() => remove(room, member), reconnectMs);
-      member.expiry.unref();
+      member.expiresAt = Date.now() + seatRetentionMs;
+      scheduleExpiry(room, member);
       syncGame(room);
     });
   });
@@ -420,7 +474,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     return { version: 1, savedAt: Date.now(), rooms: [...rooms.values()].map(room => ({
       code: room.code, game: room.game, hostId: room.hostId, nextSeat: room.nextSeat,
       dealerSeat: room.dealerSeat, handNumber: room.handNumber,
-      reviews: room.reviews, settings: room.settings, daily: room.daily, scoredHandId: room.scoredHandId, startingStacks: room.startingStacks, handAccounts:room.handAccounts,
+      reviews: room.reviews, settingsRevision: room.settingsRevision, settings: room.settings, daily: room.daily, scoredHandId: room.scoredHandId, startingStacks: room.startingStacks, handAccounts:room.handAccounts,
       players: room.players.map(p => ({loginId:p.loginId, accountId:p.accountId, id:p.id, nickname:p.nickname, token:p.token, stack:p.stack, seat:p.seat, expiresAt:p.expiresAt})),
       hand: room.hand?.checkpoint(),
     })) };
@@ -457,15 +511,15 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       if (now - saved.savedAt < 24 * 60 * 60 * 1000) for (const r of saved.rooms) {
         if (!/^[A-Z2-9]{8}$/.test(r.code) || r.game !== 'holdem' || !Array.isArray(r.players)) throw new Error('Invalid room checkpoint');
         const room: Room = { code:r.code, game:r.game, hostId:r.hostId, nextSeat:r.nextSeat, dealerSeat:r.dealerSeat, handNumber:r.handNumber,
+          settingsRevision: r.settingsRevision ?? 0,
           settings: settingsCopy(r.settings && validRoomSettings(r.settings) ? r.settings : DEFAULT_SETTINGS),
           reviews:r.reviews ?? [], daily:r.daily ?? {date:today(), players:[]}, scoredHandId:r.scoredHandId, startingStacks:r.startingStacks, handAccounts:r.handAccounts,
           players:r.players.map(p => ({...p})), hand:r.hand ? HoldemHand.restore(r.hand) : undefined, recoveryUntil:now+30_000 };
         rooms.set(room.code, room);
         room.hand?.recoverClock(now);
         for (const member of room.players) {
-          member.expiresAt ??= now + reconnectMs;
-          member.expiry = setTimeout(() => remove(room, member), Math.max(1, member.expiresAt - now));
-          member.expiry.unref();
+          member.expiresAt ??= saved.savedAt + seatRetentionMs; // Restart must not renew an offline seat.
+          scheduleExpiry(room, member);
         }
         if (room.hand && !room.hand.complete) {
           room.turnTimer = setTimeout(() => { room.hand!.timeout(); syncGame(room); }, Math.max(1, (room.hand.deadline ?? now + 30_000) - now));

@@ -32,7 +32,10 @@ foreach ($device in $devices) {
     $installed = & $adb -s $device shell pm path com.jaewon31.boardgame
     if ($LASTEXITCODE -ne 0 -or -not ($installed -match '^package:')) { throw "Friends Table is not installed on $device. Run npm.cmd run android:build for that AVD first." }
     & $adb -s $device shell am force-stop host.exp.exponent
-    & $adb -s $device shell am start -n com.jaewon31.boardgame/.MainActivity
+    # Explicitly select Metro through adb reverse instead of a stale saved LAN URL.
+    $metroUrl = [Uri]::EscapeDataString("http://127.0.0.1:$Port")
+    & $adb -s $device shell am force-stop com.jaewon31.boardgame
+    & $adb -s $device shell am start -a android.intent.action.VIEW -d "friendstable://expo-development-client?url=$metroUrl" -p com.jaewon31.boardgame
   }
   if ($LASTEXITCODE -ne 0) { throw "App failed to open: $device" }
 }

@@ -13,12 +13,14 @@ interface Props {
   playerId: string | null;
   connected: boolean;
   error: string | null;
+  onHome: () => void;
+  onRetry: () => void;
   onLeave: () => void;
   onStart: () => void;
-  onSettings: (settings: RoomSettings) => void;
+  onSettings: (settings: RoomSettings, revision?: number) => Promise<void>;
 }
-export function LobbyScreen({ room, playerId, connected, error, onLeave, onStart, onSettings }: Props) {
-  const [editing, setEditing] = useState(false);
+export function LobbyScreen({ room, playerId, connected, error, onHome, onRetry, onLeave, onStart, onSettings }: Props) {
+  const [editing, setEditing] = useState<{settings: RoomSettings; revision: number | undefined} | null>(null);
   const settings = room.settings ?? DEFAULT_SETTINGS;
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -40,6 +42,7 @@ export function LobbyScreen({ room, playerId, connected, error, onLeave, onStart
         <ActionButton compact title="초대 링크 공유" onPress={share} disabled={!connected} />
         {shareError && <Text accessibilityRole="alert" style={styles.error}>{shareError}</Text>}
       </View>
+      {!connected && <ActionButton compact secondary title="연결 재시도" onPress={onRetry} />}
       {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       <View style={styles.header}><Text style={styles.section}>참가자</Text><Text style={styles.count}>{room.players.length} / {room.maxPlayers}</Text></View>
       <View style={styles.grid}>{room.players.map((player, index) => (
@@ -50,10 +53,11 @@ export function LobbyScreen({ room, playerId, connected, error, onLeave, onStart
         </View>
       ))}</View>
       <View style={styles.note}><Text style={styles.noteText}>{room.game === 'holdem' ? settingsLabel(settings) + ' · 첫 판 이후 자동 진행' : '섯다 게임은 준비 중이에요.'}</Text></View>
-      {room.hostId === playerId && <Pressable accessibilityRole="button" disabled={!connected} onPress={()=>setEditing(true)} style={{minHeight:44,justifyContent:'center'}}><Text style={styles.host}>방 설정 변경 ›</Text></Pressable>}
-      {editing && <RoomSettingsEditor initial={settings} onClose={()=>setEditing(false)} onSave={value=>{onSettings(value);setEditing(false);}} />}
+      {room.hostId === playerId && <Pressable accessibilityRole="button" disabled={!connected} onPress={()=>setEditing({settings: {...settings}, revision: room.settingsRevision})} style={{minHeight:44,justifyContent:'center'}}><Text style={styles.host}>방 설정 변경 ›</Text></Pressable>}
+      {editing && room.hostId === playerId && <RoomSettingsEditor initial={editing.settings} onClose={()=>setEditing(null)} onSave={value=>onSettings(value, editing.revision)} />}
+      <ActionButton compact secondary title="홈으로 · 방 참여 유지" onPress={onHome} />
       <View style={{ flexDirection: 'row', gap: 8 }}>{room.game === 'holdem' && room.hostId === playerId && <View style={{ flex: 1 }}><ActionButton compact title="홀덤 시작" onPress={onStart} disabled={!connected || room.players.filter(p => p.connected).length < 2} /></View>}
-      <View style={{ flex: 1 }}><ActionButton compact title="방 나가기" onPress={onLeave} secondary /></View></View>
+      <View style={{ flex: 1 }}><ActionButton compact title="방 나가기" onPress={onLeave} disabled={!connected} secondary /></View></View>
     </View>
   );
 }

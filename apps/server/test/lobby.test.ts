@@ -465,16 +465,16 @@ test('host settings control every hand, late entry and reset; results count fini
   const first=await a.next('joined') as Joined;
   assert.deepEqual(first.room.settings,settings);
   b.send({type:'join',nickname:'B',code:first.room.code}); const second=await b.next('joined') as Joined;
-  b.send({type:'updateSettings',settings:{...settings,turnSeconds:10}}); await b.next('error');
+  b.send({type:'updateSettings',expectedRevision:0,settings:{...settings,turnSeconds:10}}); await b.next('error');
   const updated={...settings,startingChips:6000,turnSeconds:60};
-  a.send({type:'updateSettings',settings:updated});
+  a.send({type:'updateSettings',expectedRevision:0,settings:updated});
   await a.next('room',m=>m.type==='room' && m.room.settings?.turnSeconds===60);
   a.send({type:'startHand',previousHandId:null});
   const hand=(await a.next('room',m=>m.type==='room' && !!m.room.holdem) as RoomMessage).room.holdem!;
   assert.ok(hand.players.every(p=>p.stack+p.totalBet===6000));
   assert.equal(hand.smallBlind,25);assert.equal(hand.bigBlind,50);assert.equal(hand.legal?.minRaiseTo,100);
   assert.ok(hand.deadline! > Date.now()+58000 && hand.deadline! <= Date.now()+60000);
-  a.send({type:'updateSettings',settings});await a.next('error');
+  a.send({type:'updateSettings',expectedRevision:0,settings});await a.next('error');
   const c=await app.connect();c.send({type:'join',nickname:'C',code:first.room.code});await c.next('joined');
   a.send({type:'act',handId:hand.id,revision:hand.revision,action:'fold'});
   const result=(await a.next('room',m=>m.type==='room' && m.room.holdem?.street==='complete') as RoomMessage).room;
@@ -540,4 +540,134 @@ test('server records completed hands once using original seated account identity
  assert.equal(results[0].players.reduce((sum,p)=>sum+p.netChips,0),0);
  b.send({type:'revealCards',handId:finished.room.holdem!.id,accessToken:'account-b'});
  await b.next('error');assert.equal(results.length,1);
+});
+
+test('currentRoom discovers only verified account membership and survives lost local token',async t=>{
+ const app=await setup(t,{authorize:async token=>token?{accountId:token,sessionId:token}:null});
+ const a=await app.connect();a.send({type:'create',game:'holdem',nickname:'A',accessToken:'a'});
+ const first=await a.next('joined') as Joined;
+ const stranger=await app.connect();stranger.send({type:'currentRoom',accessToken:'b',accountId:'a'});
+ await stranger.next('noRoom');
+ const unsigned=await app.connect();unsigned.send({type:'currentRoom'});await unsigned.next('error');
+ const restored=await app.connect();restored.send({type:'currentRoom',accessToken:'a'});
+ const same=await restored.next('joined') as Joined;
+ assert.equal(same.playerId,first.playerId);assert.equal(same.room.code,first.room.code);assert.equal(same.room.players.length,1);
+ restored.send({type:'leave',accessToken:'a'});await restored.next('left');
+ const fresh=await app.connect();fresh.send({type:'currentRoom',accessToken:'a'});await fresh.next('noRoom');
+ fresh.send({type:'create',game:'holdem',nickname:'A',accessToken:'a'});
+ const second=await fresh.next('joined') as Joined;assert.notEqual(second.playerId,first.playerId);
+});
+
+test('settings persist before acknowledgement, broadcast to peers and reject participant/invalid edits',async t=>{
+ let saved:import('../src/lobby.ts').LobbyCheckpoint|null=null;
+ const app=await setup(t,{store:{load:()=>saved,save:value=>{saved=structuredClone(value);}}});
+ const a=await app.connect(),b=await app.connect();const first=await a.create();
+ b.send({type:'join',code:first.room.code,nickname:'B'});await b.next('joined');
+ const settings={startingChips:5000,smallBlind:25,bigBlind:50,turnSeconds:60};
+ b.send({type:'updateSettings',expectedRevision:0,settings});await b.next('error');
+ assert.equal(saved!.rooms[0].settings?.startingChips,1000);
+ a.send({type:'updateSettings',expectedRevision:0,settings});await a.next('settingsUpdated');
+ assert.deepEqual(saved!.rooms[0].settings,settings);
+ const synced=await b.next('room',m=>m.type==='room'&&m.room.settings?.startingChips===5000) as RoomMessage;
+ assert.deepEqual(synced.room.settings,settings);
+ a.send({type:'updateSettings',expectedRevision:0,settings:{...settings,startingChips:1}});await a.next('error');
+ assert.deepEqual(saved!.rooms[0].settings,settings);
+});
+
+test('settings persistence failure never acknowledges or overwrites durable settings',async t=>{
+ let saved:import('../src/lobby.ts').LobbyCheckpoint|null=null,fail=false;
+ const app=await setup(t,{store:{load:()=>saved,save:value=>{if(fail)throw Error('disk unavailable');saved=structuredClone(value);}}});
+ const a=await app.connect();const first=await a.create();
+ const before=structuredClone(saved);let acknowledged=false;
+ a.socket.on('message',data=>{if(JSON.parse(data.toString()).type==='settingsUpdated')acknowledged=true;});
+ fail=true;const closed=once(a.socket,'close');
+ a.send({type:'updateSettings',expectedRevision:0,settings:{...first.room.settings!,turnSeconds:60}});await closed;
+ assert.equal(acknowledged,false);assert.deepEqual(saved,before);
+});
+
+for(const disconnected of ['host','guest'] as const)test(`${disconnected} reconnect retains seat, host and latest settings`,async t=>{
+ const app=await setup(t,{authorize:async token=>token||null,seatRetentionMs:1000});
+ const a=await app.connect(),b=await app.connect();
+ a.send({type:'create',nickname:'A',game:'holdem',accessToken:'a'});const first=await a.next('joined') as Joined;
+ b.send({type:'join',nickname:'B',code:first.room.code,accessToken:'b'});const second=await b.next('joined') as Joined;
+ const lost=disconnected==='host'?a:b,watcher=disconnected==='host'?b:a,id=disconnected==='host'?first.playerId:second.playerId;
+ lost.socket.terminate();
+ const offline=await watcher.next('room',m=>m.type==='room'&&m.room.players.some(p=>p.id===id&&!p.connected)) as RoomMessage;
+ assert.equal(offline.room.hostId,first.playerId);assert.equal(offline.room.players.length,2);
+ const settings={startingChips:5000,smallBlind:25,bigBlind:50,turnSeconds:60};
+ if(disconnected==='guest'){a.send({type:'updateSettings',expectedRevision:0,requestId:'edit',settings,accessToken:'a'});await a.next('settingsUpdated');}
+ const restored=await app.connect();restored.send({type:'currentRoom',accessToken:disconnected==='host'?'a':'b'});
+ const same=await restored.next('joined') as Joined;
+ assert.equal(same.playerId,id);assert.equal(same.room.hostId,first.playerId);assert.equal(same.room.players.length,2);
+ if(disconnected==='guest'){assert.deepEqual(same.room.settings,settings);assert.equal(same.room.settingsRevision,1);}
+});
+
+test('zero connected sockets keep reserved members until grace expires; zero members closes room',async t=>{
+ let saved:import('../src/lobby.ts').LobbyCheckpoint|null=null;
+ const app=await setup(t,{seatRetentionMs:200,authorize:async token=>token||null,store:{load:()=>null,save:value=>{saved=structuredClone(value);}}});
+ const a=await app.connect(),b=await app.connect();
+ a.send({type:'create',game:'holdem',nickname:'A',accessToken:'a'});const first=await a.next('joined') as Joined;
+ b.send({type:'join',nickname:'B',code:first.room.code,accessToken:'b'});await b.next('joined');
+ a.socket.terminate();b.socket.terminate();
+ const latest=()=>saved as import('../src/lobby.ts').LobbyCheckpoint | null;
+ const deadline=Date.now()+2000;
+ while(!latest()?.rooms[0]?.players.every(p=>p.expiresAt!==undefined)){assert.ok(Date.now()<deadline);await new Promise(r=>setTimeout(r,5));}
+ assert.equal(latest()!.rooms.length,1);assert.equal(latest()!.rooms[0].players.length,2);assert.equal(latest()!.rooms[0].hostId,first.playerId);
+ while(latest()!.rooms.length){assert.ok(Date.now()<deadline);await new Promise(r=>setTimeout(r,10));}
+ const returning=await app.connect();returning.send({type:'currentRoom',accessToken:'a',previousCode:first.room.code});
+ assert.deepEqual(await returning.next('noRoom'),{type:'noRoom',reason:'room-closed'});
+});
+
+test('expired membership does not report a still occupied room as closed',async t=>{
+ const app=await setup(t,{seatRetentionMs:60,authorize:async token=>token||null});
+ const a=await app.connect(),b=await app.connect();
+ a.send({type:'create',game:'holdem',nickname:'A',accessToken:'a'});const first=await a.next('joined') as Joined;
+ b.send({type:'join',nickname:'B',code:first.room.code,accessToken:'b'});const second=await b.next('joined') as Joined;
+ a.socket.terminate();
+ const remaining=await b.next('room',m=>m.type==='room'&&m.room.players.length===1) as RoomMessage;
+ assert.equal(remaining.room.hostId,second.playerId);
+ const returning=await app.connect();returning.send({type:'currentRoom',accessToken:'a',previousCode:first.room.code});
+ assert.deepEqual(await returning.next('noRoom'),{type:'noRoom',reason:'membership-ended'});
+});
+
+for(const firstAction of ['settings','start'] as const)test(`settings/start race (${firstAction} first) uses authoritative revision and game phase`,async t=>{
+ const app=await setup(t);const a=await app.connect(),b=await app.connect();const first=await a.create();
+ b.send({type:'join',nickname:'B',code:first.room.code});await b.next('joined');
+ const settings={startingChips:5000,smallBlind:25,bigBlind:50,turnSeconds:60};
+ const edit={type:'updateSettings',settings,expectedRevision:0,requestId:'draft'},start={type:'startHand',previousHandId:null,expectedSettingsRevision:0};
+ a.send(firstAction==='settings'?edit:start);a.send(firstAction==='settings'?start:edit);
+ if(firstAction==='settings'){
+   await a.next('settingsUpdated');await a.next('error');
+   a.send({...start,expectedSettingsRevision:1});
+   const begun=await b.next('room',m=>m.type==='room'&&!!m.room.holdem) as RoomMessage;
+   assert.deepEqual(begun.room.settings,settings);
+ }else{
+   const begun=await b.next('room',m=>m.type==='room'&&!!m.room.holdem) as RoomMessage;
+   assert.equal(begun.room.settingsRevision,0);assert.equal(begun.room.settings?.startingChips,1000);
+   const rejected=await a.next('error') as Extract<ServerMessage,{type:'error'}>;assert.equal(rejected.requestId,'draft');
+ }
+});
+
+test('stale settings draft and versionless older client cannot overwrite latest configuration',async t=>{
+ const app=await setup(t),a=await app.connect();const first=await a.create();
+ const settings={...first.room.settings!,turnSeconds:60};
+ a.send({type:'updateSettings',settings,expectedRevision:0,requestId:'first'});const ack=await a.next('settingsUpdated') as Extract<ServerMessage,{type:'settingsUpdated'}>;
+ assert.equal(ack.settingsRevision,1);assert.equal(ack.requestId,'first');
+ a.send({type:'updateSettings',settings:first.room.settings,expectedRevision:0,requestId:'stale'});
+ const stale=await a.next('error') as Extract<ServerMessage,{type:'error'}>;assert.equal(stale.requestId,'stale');
+ a.send({type:'updateSettings',settings:first.room.settings});await a.next('error');
+ const restored=await app.connect();restored.send({type:'resume',code:first.room.code,token:first.token});
+ const same=await restored.next('joined') as Joined;assert.deepEqual(same.room.settings,settings);assert.equal(same.room.settingsRevision,1);
+});
+
+test('in-game disconnect preserves the seat until grace expiry then applies existing departure rules',async t=>{
+ const app=await setup(t,{seatRetentionMs:100,turnMs:10000});const a=await app.connect(),b=await app.connect();const first=await a.create();
+ b.send({type:'join',nickname:'B',code:first.room.code});await b.next('joined');
+ a.send({type:'startHand',previousHandId:null,expectedSettingsRevision:0});
+ const started=await b.next('room',m=>m.type==='room'&&!!m.room.holdem) as RoomMessage;
+ a.socket.terminate();
+ const offline=await b.next('room',m=>m.type==='room'&&m.room.players.some(p=>p.id===first.playerId&&!p.connected)) as RoomMessage;
+ assert.equal(offline.room.players.length,2);assert.equal(offline.room.holdem?.id,started.room.holdem?.id);assert.equal(offline.room.holdem?.revision,started.room.holdem?.revision);
+ const departed=await b.next('room',m=>m.type==='room'&&m.room.players.length===1) as RoomMessage;
+ assert.equal(departed.room.holdem?.street,'complete');assert.notEqual(departed.room.hostId,first.playerId);
 });

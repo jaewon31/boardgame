@@ -1,8 +1,10 @@
 # 친구 대상 비공개 배포
 
 범위: 가상 칩 홀덤, 한 서버 프로세스, Android/iOS. 섯다는 첫 배포에서 제외한다.
-코드를 아는 사람은 입장할 수 있으며 계정 인증·방장 승인·강퇴는 아직 없다.
+유효한 Supabase 계정 세션(익명 계정 포함)과 방 코드로 입장한다. 친구 관계 자체가 방 참가 조건은 아니며 방장 승인·강퇴는 아직 없다.
 공개 스토어 출시 전에는 등급분류, 개인정보 안내/문의처, 심사 접근 방법을 별도로 준비한다.
+
+Railway 배포와 LTE/5G 검증은 [클라우드 검증 가이드](cloud-multiplayer-validation.md)를 먼저 참고한다.
 
 ## 서버
 
@@ -13,10 +15,22 @@ Node 24와 영구 디스크가 필요하다. 이 저장소의 Docker Compose는 
 저장소 루트에서:
 
 ```sh
-export GAME_DOMAIN=실제로-보유한-도메인
-docker compose config
+cp .env.example .env
+# .env의 GAME_DOMAIN, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY를 실제 값으로 설정
+docker compose config --quiet
 docker compose up -d --build
 ```
+
+
+Compose는 루트 `.env` 또는 셸 환경변수에서 위 세 값을 읽는다. 기존 `export GAME_DOMAIN=...` 방식도 계속 사용할 수 있다.
+`SUPABASE_URL`은 앱과 같은 프로젝트의 `https://<project-ref>.supabase.co`, 키는 `sb_publishable_`로 시작하는 publishable key를 사용한다. `service_role`이나 secret key를 넣지 않는다.
+`apps/server/.env.example`은 서버 옵션 참고용이며 Compose가 자동으로 읽는 파일이 아니다. production에서는 모바일 `.env.local`도 읽지 않는다.
+인증 변수가 없거나 빈 문자열이면 Compose가 변수 이름과 함께 즉시 실패한다. 직접 Docker로 실행할 때도 두 인증 변수를 `-e` 또는 `--env-file`로 전달해야 한다.
+`STATE_DB_PATH=/data/boardgame.sqlite`와 영구 볼륨은 Compose에 이미 설정되어 있다. 기존 볼륨을 삭제하지 않는다.
+`.env`는 Git 및 Docker 빌드 컨텍스트에서 제외된다. 설정 확인에는 값을 출력하지 않는 `docker compose config --quiet`를 사용한다.
+
+CI는 가짜 publishable key와 컨테이너의 loopback으로 고정한 테스트 호스트를 사용해 기동·재시작과 `/health`의 상태 코드/JSON을 검사한다.
+인증 변수 누락·빈값도 별도로 실패 검증한다. 이 검사는 실제 Supabase 로그인이나 RPC 연결 성공을 보장하지 않는다.
 
 `https://도메인/health`가 200인지 확인한다. 앱 접속 주소는 `wss://도메인/lobby`이다.
 Compose의 서버/중계 IP는 고정이며 `TRUSTED_PROXY_IPS`는 중계의 정확한 주소만 신뢰한다.

@@ -5,6 +5,8 @@ services:
     init: true
     environment:
       NODE_ENV: production
+      SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL to your Supabase project URL}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY to your Supabase publishable key}
       STATE_DB_PATH: /data/boardgame.sqlite
       TRUSTED_PROXY_IPS: 172.30.50.2
     volumes:

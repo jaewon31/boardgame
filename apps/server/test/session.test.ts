@@ -18,7 +18,7 @@ test('app relaunch resumes saved membership; dispose preserves it and explicit l
   server.on('connection',socket=>socket.on('message',data=>{
     const m=JSON.parse(data.toString());
     if(m.type==='ping'){socket.send(JSON.stringify({type:'pong',id:m.id}));return;}
-    if(m.type==='leave')return;
+    if(m.type==='leave'){socket.send(JSON.stringify({type:'left'}));return;}
     if(m.type==='resume'){resumes++;assert.equal(m.token,'secret');}
     socket.send(JSON.stringify({type:'joined',room:{code:'ABCDEFGH',game:'holdem',hostId:'a',maxPlayers:6,players:[]},playerId:'a',token:'secret'}));
   }));
@@ -37,7 +37,7 @@ test('cancelled async restore cannot reopen a socket or reclaim a departed seat'
   let state:RoomState|undefined;
   const client=new RoomClient('ws://127.0.0.1:1',s=>{state=s;},{},{load:()=>new Promise(r=>{complete=r;}),save:async()=>{}});
   const restoring=client.restore(); client.leave(); complete({code:'ABCDEFGH',token:'secret'}); await restoring;
-  assert.equal(state?.status,'idle'); client.dispose();
+  assert.equal(state?.status,'error'); client.dispose();
 });
 test('expired saved session is removed instead of being retried on every launch',async t=>{
   const server=new WebSocketServer({host:'127.0.0.1',port:0}); await once(server,'listening');
@@ -46,5 +46,5 @@ test('expired saved session is removed instead of being retried on every launch'
   const client=new RoomClient(`ws://127.0.0.1:${(server.address() as AddressInfo).port}`,s=>{state=s;},{},{load:async()=>saved,save:async v=>{saved=v;}});
   t.after(async()=>{client.dispose();for(const s of server.clients)s.terminate();await new Promise<void>(r=>server.close(()=>r()));});
   server.on('connection',s=>s.on('message',()=>s.send(JSON.stringify({type:'error',code:'SESSION_EXPIRED',message:'expired'}))));
-  await client.restore(); await until(()=>saved===null&&state?.status==='idle'); assert.equal(state?.error,'expired');
+  await client.restore(); await until(()=>saved===null&&state?.status==='error'); assert.equal(state?.error,'expired');
 });

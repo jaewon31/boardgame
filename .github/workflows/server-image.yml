@@ -9,29 +9,82 @@ permissions:
 jobs:
   image:
     runs-on: ubuntu-latest
+    env:
+      # Format-valid placeholders, never real credentials. No auth requests are made.
+      GAME_DOMAIN: game.example.com
+      SUPABASE_URL: https://ci-placeholder.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder_not_a_real_key
     steps:
       - uses: actions/checkout@v4
-      - name: Build server container
-        run: docker build -t boardgame-test .
-      - name: Check health and restart with persistent volume
+      - name: Validate Compose authentication environment
         shell: bash
         run: |
           set -euo pipefail
+          docker compose --env-file /dev/null config --format json > /tmp/boardgame-compose.json
+          jq -e '.services.server.environment |
+            .NODE_ENV == "production" and
+            .SUPABASE_URL == env.SUPABASE_URL and
+            .SUPABASE_PUBLISHABLE_KEY == env.SUPABASE_PUBLISHABLE_KEY and
+            .STATE_DB_PATH == "/data/boardgame.sqlite"' /tmp/boardgame-compose.json
+          for key in SUPABASE_URL SUPABASE_PUBLISHABLE_KEY; do
+            for mode in unset empty; do
+              if (
+                if [ "$mode" = unset ]; then unset "$key"; else export "$key="; fi
+                docker compose --env-file /dev/null config --quiet
+              ) > /tmp/boardgame-compose-error.log 2>&1; then
+                echo "Compose unexpectedly accepted $mode $key"
+                exit 1
+              fi
+              grep -F "Set $key " /tmp/boardgame-compose-error.log
+            done
+          done
+      - name: Build server container
+        run: docker build -t boardgame-test .
+      - name: Reject missing authentication configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'docker rm -f boardgame-missing-auth >/dev/null 2>&1 || true' EXIT
+          for key in SUPABASE_URL SUPABASE_PUBLISHABLE_KEY; do
+            status=0
+            timeout 20s docker run --name boardgame-missing-auth --network none \
+              -e SUPABASE_URL -e SUPABASE_PUBLISHABLE_KEY -e "$key=" \
+              boardgame-test > /tmp/boardgame-auth-error.log 2>&1 || status=$?
+            # Require the application's exit code, not a timeout or Docker error.
+            test "$status" -eq 1
+            grep -F 'Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY' /tmp/boardgame-auth-error.log
+            docker rm boardgame-missing-auth
+          done
+      - name: Check dynamic port, container health and restart with persistent volume
+        shell: bash
+        run: |
+          set -euo pipefail
+          cleanup() {
+            docker logs boardgame-test || true
+            docker rm -f boardgame-test || true
+            docker volume rm boardgame-test-data || true
+          }
+          trap cleanup EXIT
           docker volume create boardgame-test-data
-          docker run -d --name boardgame-test -p 127.0.0.1:3300:3000 -v boardgame-test-data:/data boardgame-test
-          trap 'docker logs boardgame-test; docker rm -f boardgame-test; docker volume rm boardgame-test-data' EXIT
-          for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:3300/health; then break; fi
-            sleep 1
-          done
-          curl -fsS http://127.0.0.1:3300/health
+          docker run -d --name boardgame-test -p 127.0.0.1:3300:8080 --health-interval=1s -e PORT=8080 \
+            --add-host ci-placeholder.supabase.co:127.0.0.1 \
+            -e SUPABASE_URL -e SUPABASE_PUBLISHABLE_KEY \
+            -v boardgame-test-data:/data boardgame-test
+          check_health() {
+            for attempt in $(seq 1 30); do
+              test "$(docker inspect --format '{{.State.Running}}' boardgame-test)" = true || return 1
+              if curl -fsS --connect-timeout 1 --max-time 2 http://127.0.0.1:3300/health |
+                jq -e '.status == "ok" and .service == "boardgame-server"'; then
+                test "$(docker inspect --format '{{.State.Health.Status}}' boardgame-test)" = healthy && return 0
+              fi
+              sleep 1
+            done
+            return 1
+          }
+          check_health
           docker restart boardgame-test
-          for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:3300/health; then break; fi
-            sleep 1
-          done
-          curl -fsS http://127.0.0.1:3300/health
+          check_health
       - name: Validate proxy configuration
         run: |
-          GAME_DOMAIN=game.example.com docker compose config --quiet
-          docker run --rm -e GAME_DOMAIN=game.example.com -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile
+          docker compose --env-file /dev/null config --quiet
+          docker run --rm -e GAME_DOMAIN -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile

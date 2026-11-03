@@ -20,7 +20,7 @@ const store = config.statePath ? new SqliteStateStore(config.statePath) : undefi
 let ready = false;
 const stats=new FriendStatsStore(process.env.STATS_DB_PATH??join(dirname(config.statePath??'./data/boardgame.sqlite'),'stats.sqlite'));
 const authorize=accountAuthorizer(authUrl,authKey);
-const server = createAppServer(() => ready,friendStatsApi(stats,authorize,authUrl,authKey));
+const server = createAppServer(() => ready,friendStatsApi(stats,authorize,authUrl,authKey,config.trustedProxies));
 const lobby = attachLobby(server, { ...config, authorize, recordHand:(id,players)=>stats.record(id,players), store, onFatal: () => setImmediate(() => shutdown(1)) });
 server.listen(config.port, config.host, () => {
   ready = true;
