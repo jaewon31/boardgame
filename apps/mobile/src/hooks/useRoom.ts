@@ -1,3 +1,4 @@
+import { CryptoDigestAlgorithm, digestStringAsync } from 'expo-crypto';
 import { authClient } from '../services/authClient';
 import { createSessionStore } from '../services/sessionStore';
 import { AppState } from 'react-native';
@@ -17,6 +18,10 @@ export function useRoom(accountId: string | null) {
     const connection = new RoomClient(endpoint, state => {
       if (active) setSnapshot({ accountId, state });
     }, {}, createSessionStore(endpoint));
+    // Same SHA-256 prefix as the server: compare identities without logging UUIDs/JWTs.
+    void digestStringAsync(CryptoDigestAlgorithm.SHA256, accountId).then(hash => {
+      if (active) console.info(JSON.stringify({event: 'client_account', clientId: connection.diagnosticId, accountRef: hash.slice(0, 16)}));
+    }).catch(() => {});
     connection.accessToken = async () => {
       const result = await authClient?.auth.getSession();
       const session = result?.data.session;
@@ -25,7 +30,7 @@ export function useRoom(accountId: string | null) {
     };
     client.current = { accountId, connection };
     void connection.restore();
-    const subscription = AppState.addEventListener('change', state => { if (state === 'active') connection.refresh(); });
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') connection.refresh(true); });
     return () => { active = false; subscription.remove(); connection.dispose(); client.current = null; };
   }, [accountId]);
   // Mask old account data synchronously, before the new effect has run.

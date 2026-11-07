@@ -1,3 +1,4 @@
+import { safeCloseReason } from '@boardgame/shared';
 import type { RoomSettings, ClientMessage, PokerAction, EntryRequest, LobbyRoom, ServerMessage } from '@boardgame/shared';
 
 export interface RoomState {
@@ -13,7 +14,19 @@ export const emptyState: RoomState = { status: 'idle', room: null, playerId: nul
 export interface ConnectionTiming { heartbeatMs?: number; heartbeatTimeoutMs?: number; retryMs?: number; retryWindowMs?: number; commandTimeoutMs?: number }
 export interface SavedSession { code: string; token: string }
 export interface SessionStore { load(): Promise<SavedSession | null>; save(session: SavedSession | null): Promise<void> }
+export interface ClientConnectionDiagnostic {
+  event: string; clientId: number; generation: number; code?: number; reason?: string;
+  stale?: boolean; wasClean?: boolean; request?: string; delayMs?: number; accountRef?: string;
+}
+let nextClientId = 0;
 export class RoomClient {
+  readonly diagnosticId = ++nextClientId;
+  private replaced = false;
+  private diagnostic(event: string, detail: Partial<ClientConnectionDiagnostic> = {}) {
+    try { this.logger({event, clientId: this.diagnosticId, generation: this.generation, ...detail}); }
+    catch { /* Logging must not affect reconnect or cleanup. */ }
+  }
+  private logger: (entry: ClientConnectionDiagnostic) => void;
   private storage?: SessionStore;
   private disposed = false;
   private commandSequence = 0;
@@ -31,9 +44,11 @@ export class RoomClient {
     clearTimeout(pending.timer);
     if (error) pending.reject(new Error(error)); else pending.resolve();
   }
-  cancel() { this.disconnect(); this.update({ status: 'error', error: '방 확인을 취소했어요. 참여 상태를 다시 확인해 주세요.' }); }
-  refresh() {
-    if (this.disposed) return;
+  cancel() { this.disconnect('cancel'); this.update({ status: 'error', error: '방 확인을 취소했어요. 참여 상태를 다시 확인해 주세요.' }); }
+  refresh(automatic = false) {
+    if (this.disposed || (automatic && this.replaced)) return;
+    // Only an explicit user retry may reclaim a connection replaced elsewhere.
+    this.replaced = false;
     if (this.state.status === 'idle' || this.state.status === 'disconnected' || this.state.status === 'error') {
       this.retryUntil = 0;
       this.update({ status: 'connecting', error: null });
@@ -50,7 +65,7 @@ export class RoomClient {
     this.sendQueue=this.sendQueue.then(async()=>{
       const accessToken=await this.accessToken!();
       if(generation===this.generation && socket.readyState===WebSocket.OPEN) socket.send(JSON.stringify({...command as object,accessToken}));
-    }).catch(()=>{if(generation===this.generation){this.connectionLost();this.update({error:"로그인 연결을 확인하지 못했어요. 연결 복구 후 다시 확인합니다."});}});
+    }).catch(()=>{if(generation===this.generation){this.diagnostic('client_auth_unavailable');this.connectionLost();this.update({error:"로그인 연결을 확인하지 못했어요. 연결 복구 후 다시 확인합니다."});}});
     return this.sendQueue;
   }
   private writes: Promise<void> = Promise.resolve();
@@ -69,7 +84,8 @@ export class RoomClient {
   private endpoint: string;
   private notify: (state: RoomState) => void;
 
-  constructor(endpoint: string, notify: (state: RoomState) => void, timing: ConnectionTiming = {}, storage?: SessionStore) {
+  constructor(endpoint: string, notify: (state: RoomState) => void, timing: ConnectionTiming = {}, storage?: SessionStore, logger: (entry: ClientConnectionDiagnostic) => void = entry => console.info(JSON.stringify(entry))) {
+    this.logger = logger;
     this.storage = storage;
     this.timing = { heartbeatMs: timing.heartbeatMs ?? 5000, heartbeatTimeoutMs: timing.heartbeatTimeoutMs ?? 15000, retryMs: timing.retryMs ?? 1000, retryWindowMs: timing.retryWindowMs ?? 300_000, commandTimeoutMs: timing.commandTimeoutMs ?? 8000 };
     this.endpoint = endpoint;
@@ -105,7 +121,8 @@ export class RoomClient {
     this.state = { ...this.state, ...patch };
     this.notify(this.state);
   }
-  private disconnect() {
+  private disconnect(reason = 'reset') {
+    if (this.socket) this.diagnostic('client_cleanup', {reason});
     this.generation++;
     this.sendQueue = Promise.resolve();
     this.leaving = false;
@@ -158,6 +175,7 @@ export class RoomClient {
     if (this.state.status === 'disconnected' && (this.session || this.accessToken)) { this.retryUntil = 0; this.connectionLost(); return; }
     if (this.state.status !== 'connected') return;
     if (Date.now() - this.lastPong >= this.timing.heartbeatTimeoutMs || this.socket?.readyState !== WebSocket.OPEN) {
+      this.diagnostic('client_timeout', {reason: 'heartbeat_timeout'});
       this.connectionLost();
       return;
     }
@@ -168,7 +186,7 @@ export class RoomClient {
   }
 
   private connect(request: EntryRequest | Extract<ClientMessage, {type: 'currentRoom'}> | { type: 'resume'; code: string; token: string }, entry?: EntryRequest) {
-    this.disconnect();
+    this.disconnect('new_attempt');
     const generation = this.generation;
     let socket: WebSocket;
     try {
@@ -180,15 +198,17 @@ export class RoomClient {
       return;
     }
     this.socket = socket;
+    this.diagnostic('client_connect', {request: request.type});
     let joined = false;
     this.timeout = setTimeout(() => {
       if (generation !== this.generation) return;
+      this.diagnostic('client_timeout', {reason: 'join_timeout'});
       // Invalidate callbacks even if the transport never delivers a close event.
       this.disconnect();
       this.connectionLost();
     }, 8_000);
     socket.onopen = () => {
-      if (generation === this.generation) this.send(socket,request);
+      if (generation === this.generation) { this.diagnostic('client_open'); this.send(socket,request); }
     };
     socket.onmessage = event => {
       if (generation !== this.generation) return;
@@ -198,9 +218,9 @@ export class RoomClient {
         const notice = message.reason ?? (this.state.room || this.session ? 'membership-ended' : undefined);
         this.remember(null);
         if (entry) { const next = entry; entry = undefined; this.send(socket, next); }
-        else { this.disconnect(); this.update({ ...emptyState, notice }); }
+        else { this.disconnect('no_room'); this.update({ ...emptyState, notice }); }
       } else if (message.type === 'left') {
-        this.disconnect(); this.remember(null); this.retryUntil = 0; this.update({ ...emptyState, notice: undefined });
+        this.disconnect('left'); this.remember(null); this.retryUntil = 0; this.update({ ...emptyState, notice: undefined });
       } else if (message.type === 'settingsUpdated' && joined) {
         const pending = this.settingsPending;
         if (!pending || (message.requestId !== pending.requestId)) return;
@@ -209,6 +229,7 @@ export class RoomClient {
       } else if (message.type === 'pong' && joined) {
         if (message.id === this.pendingPing) { this.lastPong = Date.now(); this.pendingPing = null; }
       } else if (message.type === 'joined') {
+        this.diagnostic('client_joined');
         clearTimeout(this.timeout);
         joined = true;
         this.lastPong = Date.now();
@@ -228,18 +249,22 @@ export class RoomClient {
         if ((this.session || this.accessToken) && (message.code === 'AUTH_UNAVAILABLE' || message.code === 'RATE_LIMITED' || message.code === 'SERVER_FULL')) { this.connectionLost(); return; }
         this.disconnect();
         if (message.code === 'AUTH_REQUIRED' || message.code === 'SESSION_EXPIRED') {
+          if (message.code === 'AUTH_REQUIRED') this.replaced = true;
+          this.diagnostic('client_session_rejected', {reason: message.code});
           this.remember(null);
           this.update({ ...emptyState, status: 'error', error: message.message });
         } else this.update({ status: 'error', error: message.message });
       }
     };
-    socket.onerror = () => { /* onclose or timeout handles failures consistently. */ };
+    socket.onerror = () => { this.diagnostic('client_socket_error', {generation, stale: generation !== this.generation}); /* onclose/timeout handles recovery. */ };
     socket.onclose = event => {
+      this.diagnostic('client_close', {generation, code: event.code, reason: safeCloseReason(event.reason), wasClean: event.wasClean, stale: generation !== this.generation});
       if (generation !== this.generation) return;
       clearTimeout(this.timeout);
-      if(event.code===4003){this.disconnect();this.remember(null);this.update({...emptyState,status:'error',error:'다른 기기에서 로그인하여 접속이 종료됐어요.'});return;}
+      if(event.code===4003){this.replaced=true;this.disconnect('account_replaced');this.remember(null);this.update({...emptyState,status:'error',error:'다른 기기에서 로그인하여 접속이 종료됐어요.'});return;}
       if (event.code === 4001) {
-        this.disconnect();
+        this.replaced = true;
+        this.disconnect('session_replaced');
         this.remember(null);
         this.update({ ...emptyState, status: 'error', error: '다른 연결에서 같은 자리에 접속했어요.' });
         return;
@@ -249,7 +274,7 @@ export class RoomClient {
   }
 
   private connectionLost() {
-    this.disconnect();
+    this.disconnect('connection_lost');
     if (!this.session && !this.accessToken) {
       this.update({ status: 'error', error: '서버에 연결하지 못했어요. 인터넷 연결을 확인하고 잠시 후 다시 시도해 주세요.' });
       return;
@@ -261,6 +286,7 @@ export class RoomClient {
     }
     this.update({ status: 'reconnecting', error: '연결이 끊어졌어요. 다시 연결하고 있어요.' });
     clearTimeout(this.retryTimer);
+    this.diagnostic('client_retry_scheduled', {delayMs: this.timing.retryMs});
     this.retryTimer = setTimeout(() => {
       if (this.accessToken) this.connect(this.currentRoomRequest());
       else if (this.session) this.connect({ type: 'resume', ...this.session });
@@ -283,7 +309,7 @@ export class RoomClient {
   }
   dispose() {
     this.disposed = true;
-    this.disconnect();
+    this.disconnect('dispose');
     this.session = null;
   }
 }

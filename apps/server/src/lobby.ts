@@ -1,12 +1,12 @@
 import type { AccountResult } from './FriendStatsStore.ts';
 import { saveReview, reviewFor } from './holdem/review.ts';
 import type { SavedReview } from './holdem/review.ts';
-import { DEFAULT_SETTINGS, validRoomSettings } from '@boardgame/shared';
+import { DEFAULT_SETTINGS, validRoomSettings, safeCloseReason } from '@boardgame/shared';
 import type { RoomSettings, DailyResult } from '@boardgame/shared';
 import { clientIp } from './network.ts';
 import type { StateStore } from './stateStore.ts';
 import { HoldemHand } from './holdem/hand.ts';
-import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { ClientMessage, ErrorCode, GameId, LobbyRoom, ServerMessage } from '@boardgame/shared';
@@ -61,7 +61,13 @@ export interface LobbyCheckpoint {
     hand?: ReturnType<HoldemHand['checkpoint']>;
   }>;
 }
+export interface ConnectionDiagnostic {
+  event: string; serverId: string; connectionId?: string; accountRef?: string; sessionRef?: string;
+  code?: number; reason?: string; command?: string; previousConnectionId?: string;
+  connections?: number; connectionsForIp?: number; durationMs?: number; ownsMembership?: boolean;
+}
 interface LobbyOptions {
+  diagnostic?: (entry: ConnectionDiagnostic) => void;
   recordHand?: (id:string,players:AccountResult[])=>void;
   authorize?: (token:string)=>Promise<string|{accountId:string;sessionId:string}|null>;
   store?: StateStore;
@@ -133,9 +139,30 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
   const wss = new WebSocketServer({ server, path: '/lobby', maxPayload: 12288, perMessageDeflate: false });
   const alive = new WeakSet<WebSocket>();
   let stopping = false;
+  const serverId = randomUUID();
+  const connections = new WeakMap<WebSocket, {connectionId: string; accountRef?: string; sessionRef?: string}>();
+  const fingerprint = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 16);
+  function diagnostic(socket: WebSocket, event: string, detail: Partial<ConnectionDiagnostic> = {}) {
+    // Only fixed events, numeric metadata and hashed identities; never payloads or tokens.
+    try { (options.diagnostic ?? (entry => console.info(JSON.stringify(entry))))({
+      event, serverId, ...connections.get(socket), ...detail,
+    }); } catch { /* Diagnostics must never change connection lifecycle. */ }
+  }
+  function closeSocket(socket: WebSocket, code: number, reason: string) {
+    diagnostic(socket, 'ws_close_requested', {code, reason: safeCloseReason(reason)});
+    socket.close(code, reason);
+  }
+  function terminateSocket(socket: WebSocket, reason: string) {
+    diagnostic(socket, 'ws_terminate', {reason}); socket.terminate();
+  }
+  function replaceSocket(old: WebSocket | undefined, next: WebSocket, code: number, reason: string) {
+    if (!old) return;
+    diagnostic(next, 'ws_replaced', {code, reason, previousConnectionId: connections.get(old)?.connectionId});
+    closeSocket(old, code, reason);
+  }
 
   function send(socket: WebSocket, message: ServerMessage) {
-    if (socket.bufferedAmount > 256 * 1024) { socket.terminate(); return; }
+    if (socket.bufferedAmount > 256 * 1024) { terminateSocket(socket, 'backpressure'); return; }
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
   }
   function snapshot(room: Room, viewer: string): LobbyRoom {
@@ -259,27 +286,39 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
   }
 
   wss.on('connection', (socket, request) => {
-    socket.on('error', () => socket.terminate());
-    if (stopping || wss.clients.size > (options.maxConnections ?? 240)) { socket.close(1013, 'Server busy'); return; }
+    const openedAt = Date.now();
+    connections.set(socket, {connectionId: randomUUID()});
+    diagnostic(socket, 'ws_open', {connections: wss.clients.size});
+    // Register before admission checks so rejected connections also have close diagnostics.
+    socket.on('close', (code, reason) => diagnostic(socket, 'ws_close', {
+      code, reason: safeCloseReason(reason.toString()), durationMs: Date.now() - openedAt,
+      connections: wss.clients.size,
+    }));
+    socket.on('error', () => terminateSocket(socket, 'socket_error'));
+    if (stopping || wss.clients.size > (options.maxConnections ?? 240)) { closeSocket(socket, 1013, 'Server busy'); return; }
     const ip = clientIp(request.socket.remoteAddress, request.headers['x-forwarded-for'], options.trustedProxies ?? []);
     const count = connectionsByIp.get(ip) ?? 0;
-    if (count >= (options.maxConnectionsPerIp ?? 24)) { socket.close(1013, 'Too many connections'); return; }
+    if (count >= (options.maxConnectionsPerIp ?? 24)) { closeSocket(socket, 1013, 'Too many connections'); return; }
     connectionsByIp.set(ip, count + 1);
+    diagnostic(socket, 'ws_admitted', {connectionsForIp: count + 1});
     alive.add(socket);
     let membership: { room: Room; member: Member } | undefined;
     let messages = 0;
     let windowStart = Date.now();
     const authTimeout = setTimeout(() => {
-      if (!membership) socket.close(1008, 'Join timeout');
+      if (!membership) closeSocket(socket, 1008, 'Join timeout');
     }, 15_000);
     authTimeout.unref();
-    const fail = (code: ErrorCode, message: string, requestId?: string) => send(socket, { type: 'error', code, message, requestId, recoverable: !!membership && code !== 'RATE_LIMITED' });
+    const fail = (code: ErrorCode, message: string, requestId?: string) => {
+      diagnostic(socket, 'ws_request_rejected', {reason: code});
+      send(socket, { type: 'error', code, message, requestId, recoverable: !!membership && code !== 'RATE_LIMITED' });
+    };
 
     socket.on('pong', () => alive.add(socket));
     let queued=0;let requests=Promise.resolve();
     socket.on('message',(data,isBinary)=>{
-      if(++queued>30){socket.close(1008,'Too many pending requests');return;}
-      requests=requests.then(()=>handle(data,isBinary)).catch(()=>socket.close(1011,'Request failed')).finally(()=>{queued--;});
+      if(++queued>30){closeSocket(socket, 1008, 'Too many pending requests');return;}
+      requests=requests.then(()=>handle(data,isBinary)).catch(()=>closeSocket(socket, 1011, 'Request failed')).finally(()=>{queued--;});
     });
     async function handle(data:import('ws').RawData,isBinary:boolean) {
       if (stopping || socket.readyState!==WebSocket.OPEN) return;
@@ -287,7 +326,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       if (Date.now() - windowStart >= 10_000) { messages = 0; windowStart = Date.now(); }
       if (++messages > 30) {
         fail('RATE_LIMITED', '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.');
-        socket.close(1008, 'Rate limit');
+        closeSocket(socket, 1008, 'Rate limit');
         return;
       }
       const input = isBinary ? null : parseMessage(data.toString());
@@ -298,12 +337,19 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         let token:unknown;
         try { token=JSON.parse(data.toString()).accessToken; } catch { /* parser already validated */ }
         try { const identity=await options.authorize(typeof token==='string'?token:'');accountId=typeof identity==='string'?identity:identity?.accountId;loginId=typeof identity==='string'?identity:identity?.sessionId; }
-        catch { send(socket,{type:'error',code:'AUTH_UNAVAILABLE',message:'로그인 확인 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',recoverable:!!membership});if(!membership)socket.close(1013,'Authentication unavailable');return; }
+        catch { diagnostic(socket, 'ws_auth_unavailable', {command: input.type}); send(socket,{type:'error',code:'AUTH_UNAVAILABLE',message:'로그인 확인 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',recoverable:!!membership});if(!membership)closeSocket(socket, 1013, 'Authentication unavailable');return; }
         if(stopping || socket.readyState!==WebSocket.OPEN || (membership && membership.member.socket!==socket)) return;
         if(!accountId || (membership && (membership.member.accountId!==accountId || membership.member.loginId!==loginId))) {
+          diagnostic(socket, 'ws_auth_rejected', {command: input.type});
           send(socket,{type:'error',code:'AUTH_REQUIRED',message:'다른 기기에서 로그인했거나 로그인이 만료됐어요. 다시 로그인해 주세요.',recoverable:false});
           if(membership){const {room,member}=membership;membership=undefined;member.socket=undefined;remove(room,member);}
-          socket.close(4003,'Account session expired');return;
+          closeSocket(socket, 4003, 'Account session expired');return;
+        }
+        const info = connections.get(socket)!;
+        const accountRef = fingerprint(accountId), sessionRef = fingerprint(loginId!);
+        if (info.accountRef !== accountRef || info.sessionRef !== sessionRef) {
+          Object.assign(info, {accountRef, sessionRef});
+          diagnostic(socket, 'ws_authenticated', {command: input.type});
         }
       }
       if (input.type === 'ping') {
@@ -320,7 +366,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         }
         if (!persist()) return;
         send(socket, { type: 'left' });
-        socket.close(1000, 'Left room');
+        closeSocket(socket, 1000, 'Left room');
         return;
       }
       if (input.type === 'updateSettings') {
@@ -378,7 +424,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       if (membership) { fail('ALREADY_JOINED', '현재 방에서 먼저 나가 주세요.'); return; }
       // A newly verified login retires the prior login's seats immediately.
       if(accountId)for(const previousRoom of [...rooms.values()])for(const previous of [...previousRoom.players]) {
-        if(previous.accountId===accountId && previous.loginId!==loginId){const old=previous.socket;previous.socket=undefined;remove(previousRoom,previous);old?.close(4003,'Account replaced');}
+        if(previous.accountId===accountId && previous.loginId!==loginId){const old=previous.socket;previous.socket=undefined;remove(previousRoom,previous);replaceSocket(old, socket, 4003, 'Account replaced');}
       }
       // Resolve membership from the verified account/session, never a supplied user ID.
       if (input.type === 'currentRoom') {
@@ -392,13 +438,15 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
           clearTimeout(previous.expiry); previous.expiry = undefined; previous.expiresAt = undefined;
           membership = { room: existing, member: previous };
           clearTimeout(authTimeout);
-          old?.close(4001, 'Session replaced');
+          diagnostic(socket, 'ws_membership', {command: input.type});
+          replaceSocket(old, socket, 4001, 'Session replaced');
           scheduleNextHand(existing);
           if (!persist()) return;
           send(socket, { type: 'joined', room: snapshot(existing, previous.id), playerId: previous.id, token: previous.token });
           broadcast(existing);
           return;
         }
+        diagnostic(socket, 'ws_no_room');
         send(socket, { type: 'noRoom', ...(input.previousCode ? { reason: rooms.has(input.previousCode) ? 'membership-ended' as const : 'room-closed' as const } : {}) });
         return;
       }
@@ -419,7 +467,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         clearTimeout(member.expiry);
         member.expiry = undefined;
         member.expiresAt = undefined;
-        oldSocket?.close(4001, 'Session replaced');
+        replaceSocket(oldSocket, socket, 4001, 'Session replaced');
       } else {
         if (input.type === 'create') {
           if (input.game !== 'holdem') { fail('GAME_ERROR', '현재는 홀덤만 이용할 수 있어요.'); return; }
@@ -442,6 +490,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         if (!room.hostId) room.hostId = member.id;
       }
       membership = { room, member };
+      diagnostic(socket, 'ws_membership', {command: input.type});
       clearTimeout(authTimeout);
       scheduleNextHand(room);
       if (!persist()) return;
@@ -449,6 +498,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       broadcast(room);
     }
     socket.on('close', () => {
+      diagnostic(socket, 'ws_cleanup', {ownsMembership: membership?.member.socket === socket});
       clearTimeout(authTimeout);
       const remaining = (connectionsByIp.get(ip) ?? 1) - 1;
       if (remaining <= 0) connectionsByIp.delete(ip); else connectionsByIp.set(ip, remaining);
@@ -463,7 +513,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
 
   const heartbeat = setInterval(() => {
     for (const socket of wss.clients) {
-      if (!alive.has(socket)) { socket.terminate(); continue; }
+      if (!alive.has(socket)) { terminateSocket(socket, 'heartbeat_timeout'); continue; }
       alive.delete(socket);
       socket.ping();
     }
@@ -499,7 +549,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       cancelNextHand(room); clearTimeout(room.turnTimer);
       for (const member of room.players) clearTimeout(member.expiry);
     }
-    for (const socket of wss.clients) socket.terminate();
+    for (const socket of wss.clients) terminateSocket(socket, 'server_shutdown');
     wss.close();
   }
   try {
