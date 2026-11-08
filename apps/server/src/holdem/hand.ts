@@ -46,6 +46,8 @@ export class HoldemHand {
   private actorIndex = -1;
   private showdown = false;
   private revealed = new Set<string>();
+  // Ephemeral presentation metadata; intentionally excluded from checkpoints.
+  private audioAction?: HoldemView['audioAction'];
   revision = 0;
   deadline: number | null = null;
   private lastEvent = '개인 패를 배분하고 블라인드를 냈습니다.';
@@ -137,6 +139,7 @@ export class HoldemHand {
     if (!legal) throw new Error('지금은 내 차례가 아닙니다.');
     const p = this.players[this.actorIndex];
     const index = this.actorIndex;
+    const previousBet = this.currentBet;
     if (action === 'fold') {
       p.folded = true;
       this.lastEvent = `${p.nickname}: 폴드`;
@@ -171,6 +174,8 @@ export class HoldemHand {
     }
     this.recordReview(this.lastEvent);
     this.revision++;
+    this.audioAction = { revision: this.revision, kind: action === 'fold' || action === 'check' || action === 'call'
+      ? action : p.roundBet <= previousBet ? 'call' : previousBet === 0 ? 'bet' : 'raise' };
     this.advance(index);
   }
 
@@ -197,6 +202,7 @@ export class HoldemHand {
     this.lastEvent = `${p.nickname}: 퇴장으로 폴드`;
     this.recordReview(this.lastEvent);
     this.revision++;
+    this.audioAction = { revision: this.revision, kind: 'fold' };
     // Preserve the current actor when somebody else leaves out of turn.
     this.advance(index === this.actorIndex ? index : (this.actorIndex - 1 + this.players.length) % this.players.length);
   }
@@ -355,9 +361,10 @@ export class HoldemHand {
     this.lastEvent = this.players.find(p => p.id === id)!.nickname + ': 패 공개';
   }
 
-  viewFor(id: string): HoldemView {
+  viewFor(id: string, includeAudio = false): HoldemView {
     return {
       id: this.id, number: this.number, revision: this.revision, street: this.street,
+      ...(includeAudio && this.audioAction ? { audioAction: { ...this.audioAction } } : {}),
       dealerId: this.players[this.dealerIndex].id, smallBlindId: this.players[this.smallBlindIndex].id,
       bigBlindId: this.players[this.bigBlindIndex].id, smallBlind: this.smallBlind, bigBlind: this.bigBlind,
       board: [...this.board], actorId: this.actorId, deadline: this.deadline, legal: this.legalFor(id),

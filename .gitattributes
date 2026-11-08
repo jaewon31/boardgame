@@ -4,3 +4,6 @@
 *.json text eol=lf
 *.yml text eol=lf
 *.md text eol=lf
+
+# Preserve the upstream CC0 license byte-for-byte, including its blank first line.
+docs/audio-sources/kenney-casino/License.txt -text whitespace=-blank-at-eol

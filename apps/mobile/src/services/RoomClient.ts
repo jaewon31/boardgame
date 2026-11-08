@@ -18,12 +18,19 @@ export interface ClientConnectionDiagnostic {
   event: string; clientId: number; generation: number; code?: number; reason?: string;
   failureCategory?: string; serverId?: string; connectionId?: string; pingId?: number; queueWaitMs?: number; tokenWaitMs?: number;
   pongAgeMs?: number; pingQueuedAgeMs?: number; pingSentAgeMs?: number; readyState?: number;
+  appState?: 'active' | 'background' | 'inactive' | 'unknown'; timerLagMs?: number;
   stale?: boolean; wasClean?: boolean; request?: string; delayMs?: number; accountRef?: string;
 }
 let nextClientId = 0;
 export class RoomClient {
   readonly diagnosticId = ++nextClientId;
   private replaced = false;
+  private heartbeatDue = 0;
+  private appState: 'active' | 'background' | 'inactive' | 'unknown' = 'unknown';
+  recordAppState(state: unknown) {
+    this.appState = state === 'active' || state === 'background' || state === 'inactive' ? state : 'unknown';
+    this.diagnostic('client_app_state', {appState: this.appState, readyState: this.socket?.readyState});
+  }
   private contexts = new WeakMap<WebSocket, {generation: number; serverId?: string; connectionId?: string}>();
   private diagnostic(event: string, detail: Partial<ClientConnectionDiagnostic> = {}) {
     try { this.logger(logRecord({event, clientId: this.diagnosticId, generation: this.generation, ...(this.socket ? this.contexts.get(this.socket) : {}), ...detail})); }
@@ -75,6 +82,7 @@ export class RoomClient {
     this.sendQueue = this.sendQueue.then(async () => {
       if (generation !== this.generation) return;
       const started = Date.now();
+      this.diagnostic('client_token_wait_started', {request: command.type, pingId: command.type === 'ping' ? command.id : undefined, queueWaitMs: started - queuedAt});
       const accessToken = await this.accessToken!();
       transmit(accessToken, Date.now() - started, started - queuedAt);
     }).catch(() => {
@@ -272,7 +280,14 @@ export class RoomClient {
         joined = true;
         this.lastPong = Date.now();
         clearInterval(this.heartbeat);
-        this.heartbeat = setInterval(() => this.checkConnection(), this.timing.heartbeatMs);
+        this.heartbeatDue = performance.now() + this.timing.heartbeatMs;
+        this.heartbeat = setInterval(() => {
+          const now = performance.now();
+          const timerLagMs = Math.max(0, Math.round(now - this.heartbeatDue));
+          this.heartbeatDue = now + this.timing.heartbeatMs;
+          this.diagnostic('client_heartbeat_tick', {timerLagMs, appState: this.appState, readyState: this.socket?.readyState});
+          this.checkConnection();
+        }, this.timing.heartbeatMs);
         this.retryUntil = 0;
         this.remember({ code: message.room.code, token: message.token });
         this.update({ status: 'connected', room: message.room, playerId: message.playerId, error: null, notice: undefined });

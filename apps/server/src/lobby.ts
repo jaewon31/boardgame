@@ -1,3 +1,4 @@
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import type { AccountResult } from './FriendStatsStore.ts';
 import { saveReview, reviewFor } from './holdem/review.ts';
 import type { SavedReview } from './holdem/review.ts';
@@ -63,6 +64,7 @@ export interface LobbyCheckpoint {
 }
 export interface ConnectionDiagnostic {
   event: string; serverId: string; connectionId?: string; accountRef?: string; sessionRef?: string;
+  queueDepth?: number; receiveSequence?: number; eventLoopMaxMs?: number; eventLoopMeanMs?: number;
   pingId?: number; queueWaitMs?: number; authMs?: number; transportRttMs?: number; pongAgeMs?: number;
   code?: number; reason?: string; command?: string; previousConnectionId?: string;
   connections?: number; connectionsForIp?: number; durationMs?: number; ownsMembership?: boolean;
@@ -141,6 +143,17 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
   const alive = new WeakSet<WebSocket>();
   let stopping = false;
   const serverId = randomUUID();
+  const loopDelay = monitorEventLoopDelay({resolution: 20});
+  loopDelay.enable();
+  const loopMetrics = setInterval(() => {
+    try {
+      (options.diagnostic ?? (entry => console.info(JSON.stringify(entry))))(logRecord({event: 'server_event_loop', serverId,
+        eventLoopMaxMs: Math.round(loopDelay.max / 1e6),
+        eventLoopMeanMs: Number.isFinite(loopDelay.mean) ? Math.round(loopDelay.mean / 1e6) : 0}));
+    } catch { /* Metrics are observational only. */ }
+    loopDelay.reset();
+  }, 15000);
+  loopMetrics.unref();
   const connections = new WeakMap<WebSocket, {connectionId: string; accountRef?: string; sessionRef?: string}>();
   const transportTiming = new WeakMap<WebSocket, {pingAt?: number; pongAt: number}>();
   const fingerprint = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 16);
@@ -169,7 +182,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
   }
   function snapshot(room: Room, viewer: string): LobbyRoom {
     return {
-      ...(room.hand ? { holdem: room.hand.viewFor(viewer) } : {}),
+      ...(room.hand ? { holdem: room.hand.viewFor(viewer, true) } : {}),
       handReviews: (room.reviews ?? []).map(r=>reviewFor(r,viewer)),
       nextHandAt: room.nextHandAt ?? null, fundedPlayers: room.players.filter(p => p.stack > 0).length,
       code: room.code, game: room.game, hostId: room.hostId, maxPlayers,
@@ -325,12 +338,14 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       timing.pongAt = Date.now();
     });
     let queued=0;let requests=Promise.resolve();
+    let receiveSequence = 0;
     socket.on('message',(data,isBinary)=>{
       if(++queued>30){closeSocket(socket, 1008, 'Too many pending requests');return;}
-      const receivedAt=Date.now();
-      requests=requests.then(()=>handle(data,isBinary,receivedAt)).catch(()=>closeSocket(socket, 1011, 'Request failed')).finally(()=>{queued--;});
+      const receivedAt=Date.now(), sequence=++receiveSequence;
+      diagnostic(socket, 'ws_message_enqueued', {receiveSequence: sequence, queueDepth: queued});
+      requests=requests.then(()=>handle(data,isBinary,receivedAt,sequence)).catch(()=>closeSocket(socket, 1011, 'Request failed')).finally(()=>{queued--;});
     });
-    async function handle(data:import('ws').RawData,isBinary:boolean,receivedAt:number) {
+    async function handle(data:import('ws').RawData,isBinary:boolean,receivedAt:number,sequence:number) {
       if (stopping || socket.readyState!==WebSocket.OPEN) return;
       if (membership && membership.member.socket !== socket) return;
       if (Date.now() - windowStart >= 10_000) { messages = 0; windowStart = Date.now(); }
@@ -342,14 +357,17 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       const input = isBinary ? null : parseMessage(data.toString());
       if (!input) { fail('INVALID_REQUEST', '닉네임·초대 코드 또는 방 설정의 허용 범위를 확인해 주세요.'); return; }
 
-      if (input.type === 'ping') diagnostic(socket, 'ws_app_ping_received', {pingId: input.id, queueWaitMs: Date.now() - receivedAt});
+      diagnostic(socket, 'ws_request_started', {command: input.type, receiveSequence: sequence, queueDepth: queued, queueWaitMs: Date.now() - receivedAt,
+        pingId: input.type === 'ping' ? input.id : undefined});
+      if (input.type === 'ping') diagnostic(socket, 'ws_app_ping_received', {pingId: input.id, receiveSequence: sequence, queueWaitMs: Date.now() - receivedAt});
       const authStarted = Date.now();
       let accountId:string|undefined,loginId:string|undefined;
       if(options.authorize) {
         let token:unknown;
         try { token=JSON.parse(data.toString()).accessToken; } catch { /* parser already validated */ }
         try { const identity=await options.authorize(typeof token==='string'?token:'');accountId=typeof identity==='string'?identity:identity?.accountId;loginId=typeof identity==='string'?identity:identity?.sessionId; }
-        catch { diagnostic(socket, 'ws_auth_unavailable', {command: input.type, authMs: Date.now() - authStarted}); send(socket,{type:'error',code:'AUTH_UNAVAILABLE',message:'로그인 확인 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',recoverable:!!membership});if(!membership)closeSocket(socket, 1013, 'Authentication unavailable');return; }
+        catch { diagnostic(socket, 'ws_auth_unavailable', {command: input.type, receiveSequence: sequence, pingId: input.type === 'ping' ? input.id : undefined, authMs: Date.now() - authStarted}); send(socket,{type:'error',code:'AUTH_UNAVAILABLE',message:'로그인 확인 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',recoverable:!!membership});if(!membership)closeSocket(socket, 1013, 'Authentication unavailable');return; }
+        diagnostic(socket, 'ws_auth_completed', {command: input.type, receiveSequence: sequence, pingId: input.type === 'ping' ? input.id : undefined, authMs: Date.now() - authStarted});
         if(stopping || socket.readyState!==WebSocket.OPEN || (membership && membership.member.socket!==socket)) return;
         if(!accountId || (membership && (membership.member.accountId!==accountId || membership.member.loginId!==loginId))) {
           diagnostic(socket, 'ws_auth_rejected', {command: input.type});
@@ -560,6 +578,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     if (stopping) return;
     stopping = true;
     clearInterval(heartbeat);
+    clearInterval(loopMetrics); loopDelay.disable();
     for (const room of rooms.values()) {
       cancelNextHand(room); clearTimeout(room.turnTimer);
       for (const member of room.players) clearTimeout(member.expiry);

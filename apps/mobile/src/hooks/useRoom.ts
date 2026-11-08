@@ -30,8 +30,9 @@ export function useRoom(accountId: string | null) {
       return session.access_token;
     };
     client.current = { accountId, connection };
+    connection.recordAppState(AppState.currentState);
     void connection.restore();
-    const subscription = AppState.addEventListener('change', state => { if (state === 'active') connection.refresh(true); });
+    const subscription = AppState.addEventListener('change', state => { connection.recordAppState(state); if (state === 'active') connection.refresh(true); });
     return () => { active = false; subscription.remove(); connection.dispose(); client.current = null; };
   }, [accountId]);
   // Mask old account data synchronously, before the new effect has run.
