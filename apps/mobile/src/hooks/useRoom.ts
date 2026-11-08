@@ -1,3 +1,4 @@
+import { logRecord } from '@boardgame/shared';
 import { CryptoDigestAlgorithm, digestStringAsync } from 'expo-crypto';
 import { authClient } from '../services/authClient';
 import { createSessionStore } from '../services/sessionStore';
@@ -20,7 +21,7 @@ export function useRoom(accountId: string | null) {
     }, {}, createSessionStore(endpoint));
     // Same SHA-256 prefix as the server: compare identities without logging UUIDs/JWTs.
     void digestStringAsync(CryptoDigestAlgorithm.SHA256, accountId).then(hash => {
-      if (active) console.info(JSON.stringify({event: 'client_account', clientId: connection.diagnosticId, accountRef: hash.slice(0, 16)}));
+      if (active) console.info(JSON.stringify(logRecord({event: 'client_account', clientId: connection.diagnosticId, accountRef: hash.slice(0, 16)})));
     }).catch(() => {});
     connection.accessToken = async () => {
       const result = await authClient?.auth.getSession();

@@ -1,3 +1,4 @@
+import { logRecord } from '@boardgame/shared';
 import { FriendStatsStore } from './FriendStatsStore.ts';
 import { friendStatsApi } from './friendStatsApi.ts';
 import { join,dirname } from 'node:path';
@@ -24,10 +25,10 @@ const server = createAppServer(() => ready,friendStatsApi(stats,authorize,authUr
 const lobby = attachLobby(server, { ...config, authorize, recordHand:(id,players)=>stats.record(id,players), store, onFatal: () => setImmediate(() => shutdown(1)) });
 server.listen(config.port, config.host, () => {
   ready = true;
-  console.log(JSON.stringify({event:'server_started', port:config.port, durable:!!store}));
+  console.log(JSON.stringify(logRecord({event:'server_started', port:config.port, durable:!!store})));
 });
-server.on('error', () => { console.error(JSON.stringify({event:'server_error'})); shutdown(1); });
-const metrics = setInterval(() => console.log(JSON.stringify({event:'server_stats', ...lobby.stats(), memoryBytes:process.memoryUsage().rss})),60000);
+server.on('error', () => { console.error(JSON.stringify(logRecord({event:'server_error'}, 'error'))); shutdown(1); });
+const metrics = setInterval(() => console.log(JSON.stringify(logRecord({event:'server_stats', ...lobby.stats(), memoryBytes:process.memoryUsage().rss}))),60000);
 metrics.unref();
 let closing = false;
 function shutdown(code = 0) {

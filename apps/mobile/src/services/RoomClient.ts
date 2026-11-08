@@ -1,4 +1,4 @@
-import { safeCloseReason } from '@boardgame/shared';
+import { safeCloseReason, logRecord, validConnectionId, transportFailure } from '@boardgame/shared';
 import type { RoomSettings, ClientMessage, PokerAction, EntryRequest, LobbyRoom, ServerMessage } from '@boardgame/shared';
 
 export interface RoomState {
@@ -16,14 +16,17 @@ export interface SavedSession { code: string; token: string }
 export interface SessionStore { load(): Promise<SavedSession | null>; save(session: SavedSession | null): Promise<void> }
 export interface ClientConnectionDiagnostic {
   event: string; clientId: number; generation: number; code?: number; reason?: string;
+  failureCategory?: string; serverId?: string; connectionId?: string; pingId?: number; queueWaitMs?: number; tokenWaitMs?: number;
+  pongAgeMs?: number; pingQueuedAgeMs?: number; pingSentAgeMs?: number; readyState?: number;
   stale?: boolean; wasClean?: boolean; request?: string; delayMs?: number; accountRef?: string;
 }
 let nextClientId = 0;
 export class RoomClient {
   readonly diagnosticId = ++nextClientId;
   private replaced = false;
+  private contexts = new WeakMap<WebSocket, {generation: number; serverId?: string; connectionId?: string}>();
   private diagnostic(event: string, detail: Partial<ClientConnectionDiagnostic> = {}) {
-    try { this.logger({event, clientId: this.diagnosticId, generation: this.generation, ...detail}); }
+    try { this.logger(logRecord({event, clientId: this.diagnosticId, generation: this.generation, ...(this.socket ? this.contexts.get(this.socket) : {}), ...detail})); }
     catch { /* Logging must not affect reconnect or cleanup. */ }
   }
   private logger: (entry: ClientConnectionDiagnostic) => void;
@@ -59,19 +62,35 @@ export class RoomClient {
   }
   accessToken?: ()=>Promise<string>;
   private sendQueue:Promise<void>=Promise.resolve();
-  private send(socket:WebSocket,command:unknown):Promise<void> {
-    if(!this.accessToken){socket.send(JSON.stringify(command));return Promise.resolve();}
-    const generation=this.generation;
-    this.sendQueue=this.sendQueue.then(async()=>{
-      const accessToken=await this.accessToken!();
-      if(generation===this.generation && socket.readyState===WebSocket.OPEN) socket.send(JSON.stringify({...command as object,accessToken}));
-    }).catch(()=>{if(generation===this.generation){this.diagnostic('client_auth_unavailable');this.connectionLost();this.update({error:"로그인 연결을 확인하지 못했어요. 연결 복구 후 다시 확인합니다."});}});
+  private send(socket:WebSocket,command:ClientMessage):Promise<void> {
+    const generation = this.generation, queuedAt = Date.now();
+    const transmit = (accessToken?: string, tokenWaitMs = 0, queueWaitMs = 0) => {
+      if (generation !== this.generation || socket.readyState !== WebSocket.OPEN) return;
+      if (command.type === 'ping') this.pingSentAt = Date.now();
+      socket.send(JSON.stringify(accessToken === undefined ? command : {...command, accessToken}));
+      if (command.type === 'ping') this.diagnostic('client_ping_sent', {pingId: command.id, tokenWaitMs, queueWaitMs});
+      else this.diagnostic('client_request_sent', {request: command.type, tokenWaitMs, queueWaitMs});
+    };
+    if (!this.accessToken) { transmit(); return Promise.resolve(); }
+    this.sendQueue = this.sendQueue.then(async () => {
+      if (generation !== this.generation) return;
+      const started = Date.now();
+      const accessToken = await this.accessToken!();
+      transmit(accessToken, Date.now() - started, started - queuedAt);
+    }).catch(() => {
+      if (generation === this.generation) {
+        this.diagnostic('client_auth_unavailable'); this.connectionLost('auth_or_send_failed');
+        this.update({error:'로그인 연결을 확인하지 못했어요. 연결 복구 후 다시 확인합니다.'});
+      }
+    });
     return this.sendQueue;
   }
   private writes: Promise<void> = Promise.resolve();
   private heartbeat: ReturnType<typeof setInterval> | undefined;
   private lastPong = 0;
   private pendingPing: number | null = null;
+  private pingQueuedAt: number | null = null;
+  private pingSentAt: number | null = null;
   private pingSequence = 0;
   private timing: Required<ConnectionTiming>;
   private socket: WebSocket | null = null;
@@ -130,6 +149,7 @@ export class RoomClient {
     this.finishSettings('연결이 끊겨 설정 저장을 확인하지 못했어요. 다시 연결한 뒤 확인해 주세요.');
     clearInterval(this.heartbeat);
     this.pendingPing = null;
+    this.pingQueuedAt = null; this.pingSentAt = null;
     clearTimeout(this.retryTimer);
     clearTimeout(this.timeout);
     const socket = this.socket;
@@ -156,7 +176,7 @@ export class RoomClient {
     if (this.leaving || this.state.status !== 'connected' || this.socket?.readyState !== WebSocket.OPEN) return Promise.reject(new Error('서버 연결 후 다시 시도해 주세요.'));
     return new Promise((resolve, reject) => {
       const requestId = `${this.generation}:${++this.commandSequence}`;
-      this.settingsPending = { requestId, resolve, reject, timer: setTimeout(() => { this.finishSettings('저장 응답을 확인하지 못했어요. 다시 연결하여 최신 설정을 확인합니다.'); this.connectionLost(); }, this.timing.commandTimeoutMs) };
+      this.settingsPending = { requestId, resolve, reject, timer: setTimeout(() => { this.finishSettings('저장 응답을 확인하지 못했어요. 다시 연결하여 최신 설정을 확인합니다.'); this.connectionLost('settings_timeout'); }, this.timing.commandTimeoutMs) };
       this.gameCommand({ type: 'updateSettings', settings, expectedRevision, requestId });
     });
   }
@@ -174,15 +194,22 @@ export class RoomClient {
   checkConnection() {
     if (this.state.status === 'disconnected' && (this.session || this.accessToken)) { this.retryUntil = 0; this.connectionLost(); return; }
     if (this.state.status !== 'connected') return;
-    if (Date.now() - this.lastPong >= this.timing.heartbeatTimeoutMs || this.socket?.readyState !== WebSocket.OPEN) {
-      this.diagnostic('client_timeout', {reason: 'heartbeat_timeout'});
-      this.connectionLost();
+    if (this.socket?.readyState !== WebSocket.OPEN) { this.connectionLost('socket_not_open'); return; }
+    // A delayed/paused JS timer is not evidence of a failed probe. Give a new
+    // probe its own budget; also bound a probe stuck waiting for auth/sendQueue.
+    if (this.pendingPing !== null) {
+      const since = this.pingSentAt ?? this.pingQueuedAt!;
+      if (Date.now() - since >= this.timing.heartbeatTimeoutMs) {
+        const reason = this.pingSentAt === null ? 'ping_send_timeout' : 'pong_timeout';
+        this.diagnostic('client_timeout', {reason}); this.connectionLost(reason);
+      }
       return;
     }
-    if (this.pendingPing !== null) return;
     this.pendingPing = ++this.pingSequence;
+    this.pingQueuedAt = Date.now(); this.pingSentAt = null;
+    this.diagnostic('client_ping_queued', {pingId: this.pendingPing});
     try { this.send(this.socket,{ type: 'ping', id: this.pendingPing }); }
-    catch { this.connectionLost(); }
+    catch { this.connectionLost('send_failed'); }
   }
 
   private connect(request: EntryRequest | Extract<ClientMessage, {type: 'currentRoom'}> | { type: 'resume'; code: string; token: string }, entry?: EntryRequest) {
@@ -198,14 +225,15 @@ export class RoomClient {
       return;
     }
     this.socket = socket;
+    const context = {generation, serverId: undefined as string | undefined, connectionId: undefined as string | undefined};
+    this.contexts.set(socket, context);
     this.diagnostic('client_connect', {request: request.type});
     let joined = false;
     this.timeout = setTimeout(() => {
       if (generation !== this.generation) return;
       this.diagnostic('client_timeout', {reason: 'join_timeout'});
       // Invalidate callbacks even if the transport never delivers a close event.
-      this.disconnect();
-      this.connectionLost();
+      this.connectionLost('join_timeout');
     }, 8_000);
     socket.onopen = () => {
       if (generation === this.generation) { this.diagnostic('client_open'); this.send(socket,request); }
@@ -214,6 +242,13 @@ export class RoomClient {
       if (generation !== this.generation) return;
       let message: ServerMessage;
       try { message = JSON.parse(String(event.data)); } catch { return; }
+      if (message.type === 'connection') {
+        if (validConnectionId(message.serverId) && validConnectionId(message.connectionId)) {
+          context.serverId = message.serverId; context.connectionId = message.connectionId;
+          this.diagnostic('client_server_connection');
+        }
+        return;
+      }
       if (message.type === 'noRoom' && !joined) {
         const notice = message.reason ?? (this.state.room || this.session ? 'membership-ended' : undefined);
         this.remember(null);
@@ -227,7 +262,10 @@ export class RoomClient {
         if (this.state.room && (message.settingsRevision ?? 0) >= (this.state.room.settingsRevision ?? 0)) this.update({ room: { ...this.state.room, settings: message.settings, settingsRevision: message.settingsRevision } });
         this.finishSettings();
       } else if (message.type === 'pong' && joined) {
-        if (message.id === this.pendingPing) { this.lastPong = Date.now(); this.pendingPing = null; }
+        if (message.id === this.pendingPing) {
+          this.diagnostic('client_pong', {pingId: message.id, pingSentAgeMs: this.pingSentAt === null ? undefined : Date.now() - this.pingSentAt});
+          this.lastPong = Date.now(); this.pendingPing = null; this.pingQueuedAt = null; this.pingSentAt = null;
+        }
       } else if (message.type === 'joined') {
         this.diagnostic('client_joined');
         clearTimeout(this.timeout);
@@ -246,7 +284,7 @@ export class RoomClient {
         this.finishSettings(message.message);
         if (message.recoverable && joined) { this.leaving = false; clearTimeout(this.leaveTimer); this.update({ error: message.message }); return; }
         if (message.code === 'ALREADY_JOINED' && this.accessToken) { this.connect(this.currentRoomRequest()); return; }
-        if ((this.session || this.accessToken) && (message.code === 'AUTH_UNAVAILABLE' || message.code === 'RATE_LIMITED' || message.code === 'SERVER_FULL')) { this.connectionLost(); return; }
+        if ((this.session || this.accessToken) && (message.code === 'AUTH_UNAVAILABLE' || message.code === 'RATE_LIMITED' || message.code === 'SERVER_FULL')) { this.connectionLost('server_retryable_error'); return; }
         this.disconnect();
         if (message.code === 'AUTH_REQUIRED' || message.code === 'SESSION_EXPIRED') {
           if (message.code === 'AUTH_REQUIRED') this.replaced = true;
@@ -256,9 +294,9 @@ export class RoomClient {
         } else this.update({ status: 'error', error: message.message });
       }
     };
-    socket.onerror = () => { this.diagnostic('client_socket_error', {generation, stale: generation !== this.generation}); /* onclose/timeout handles recovery. */ };
+    socket.onerror = event => { this.diagnostic('client_socket_error', {...context, stale: generation !== this.generation, failureCategory: transportFailure((event as unknown as {message?:unknown}).message)}); /* onclose/timeout handles recovery. */ };
     socket.onclose = event => {
-      this.diagnostic('client_close', {generation, code: event.code, reason: safeCloseReason(event.reason), wasClean: event.wasClean, stale: generation !== this.generation});
+      this.diagnostic('client_close', {...context, code: event.code, reason: safeCloseReason(event.reason), failureCategory: event.code === 1006 ? transportFailure(event.reason) : undefined, wasClean: event.wasClean, stale: generation !== this.generation});
       if (generation !== this.generation) return;
       clearTimeout(this.timeout);
       if(event.code===4003){this.replaced=true;this.disconnect('account_replaced');this.remember(null);this.update({...emptyState,status:'error',error:'다른 기기에서 로그인하여 접속이 종료됐어요.'});return;}
@@ -269,11 +307,17 @@ export class RoomClient {
         this.update({ ...emptyState, status: 'error', error: '다른 연결에서 같은 자리에 접속했어요.' });
         return;
       }
-      this.connectionLost();
+      this.connectionLost('remote_close');
     };
   }
 
-  private connectionLost() {
+  private connectionLost(reason = 'retry_requested') {
+    this.diagnostic('client_connection_lost', {
+      reason, readyState: this.socket?.readyState, pongAgeMs: Date.now() - this.lastPong,
+      pingId: this.pendingPing ?? undefined,
+      pingQueuedAgeMs: this.pingQueuedAt === null ? undefined : Date.now() - this.pingQueuedAt,
+      pingSentAgeMs: this.pingSentAt === null ? undefined : Date.now() - this.pingSentAt,
+    });
     this.disconnect('connection_lost');
     if (!this.session && !this.accessToken) {
       this.update({ status: 'error', error: '서버에 연결하지 못했어요. 인터넷 연결을 확인하고 잠시 후 다시 시도해 주세요.' });
@@ -304,7 +348,7 @@ export class RoomClient {
     }
     this.leaving = true;
     this.update({ error: null });
-    this.leaveTimer = setTimeout(() => { this.connectionLost(); }, 8000);
+    this.leaveTimer = setTimeout(() => { this.connectionLost('leave_timeout'); }, 8000);
     void this.send(socket, { type: 'leave' });
   }
   dispose() {

@@ -52,12 +52,13 @@ export type ClientMessage = EntryRequest
   | { type: 'resetChips'; handId: string }
   | { type: 'act'; handId: string; revision: number; action: PokerAction; amount?: number };
 
-export { safeCloseReason } from './connectionDiagnostics.ts';
+export { safeCloseReason, logRecord, validConnectionId, transportFailure } from './connectionDiagnostics.ts';
 
 export type ErrorCode = 'INVALID_REQUEST' | 'ROOM_NOT_FOUND' | 'ROOM_FULL'
   | 'AUTH_REQUIRED' | 'AUTH_UNAVAILABLE' | 'NICKNAME_TAKEN' | 'SESSION_EXPIRED' | 'ALREADY_JOINED' | 'RATE_LIMITED' | 'SERVER_FULL' | 'GAME_ERROR';
 
 export type ServerMessage =
+  | { type: 'connection'; serverId: string; connectionId: string }
   | { type: 'pong'; id: number }
   | { type: 'joined'; room: LobbyRoom; playerId: string; token: string }
   | { type: 'room'; room: LobbyRoom }
