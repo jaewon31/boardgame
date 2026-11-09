@@ -29,22 +29,29 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
   const [gains, setGains] = useState({ ...defaultSoundGains });
   const [loaded, setLoaded] = useState(false), [ready, setReady] = useState(false);
   const [active, setActive] = useState(AppState.currentState === 'active');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewMode = useRef(false);
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState<string | null>(null);
   const events = useRef(new SoundEvents());
   const writes = useRef(Promise.resolve());
   const mix = useRef({ level, gains });
   mix.current = { level, gains };
-  const gate = useRef({ loaded, ready, muted, level, connected });
-  gate.current = { loaded, ready, muted, level, connected };
+  const gate = useRef({ loaded, ready, muted, level, connected, previewOpen });
+  gate.current = { loaded, ready, muted, level, connected, previewOpen };
   const scheduler = useMemo(() => new AudioScheduler({
     player: sound => players[sound],
     gain: sound => mix.current.level * mix.current.gains[sound],
-    onEnd: (sound, done) => {
-      const sub = players[sound].addListener('playbackStatusUpdate', status => { if (status.didJustFinish) done(); });
+    onEnd: (sound, done, failed) => {
+      const sub = players[sound].addListener('playbackStatusUpdate', status => {
+        if ((status as {error?: unknown}).error) failed?.();
+        else if (status.didJustFinish) done();
+      });
       return () => sub.remove();
     },
     error: () => setError('효과음을 재생하지 못했어요.'),
+    // Fixed event/sound names only: no hand IDs, cards, accounts or native error text.
+    trace: (phase, sound) => console.info(JSON.stringify({event:'game_audio', phase, sound})),
   }), [players]);
   useEffect(() => {
     let live = true;
@@ -66,7 +73,7 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
         events.current.update(null, null, false, Date.now());
       } else {
         const current = gate.current;
-        scheduler.setEnabled(current.loaded && current.ready && !current.muted && current.level > 0 && current.connected);
+        scheduler.setEnabled(current.loaded && current.ready && !current.muted && current.level > 0 && (current.connected || current.previewOpen));
       }
       setActive(state === 'active');
     });
@@ -83,14 +90,15 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
     return () => { live = false; };
   }, [level, muted, gains, loaded]);
   useEffect(() => {
-    scheduler.setEnabled(loaded && ready && !muted && level > 0 && active && connected);
+    scheduler.setEnabled(loaded && ready && !muted && level > 0 && active && (connected || previewOpen));
     scheduler.refreshVolumes();
-  }, [scheduler, loaded, ready, muted, level, gains, active, connected]);
+  }, [scheduler, loaded, ready, muted, level, gains, active, connected, previewOpen]);
   useEffect(() => {
-    scheduler.cancel();
+    if (!previewMode.current) scheduler.cancel();
   }, [scheduler, hand?.id, playerId]);
   useEffect(() => {
-    scheduler.enqueue(events.current.update(hand, playerId, connected && active, now));
+    const cues = events.current.update(hand, playerId, connected && active, now);
+    if (!previewMode.current) scheduler.enqueue(cues);
   }, [scheduler, hand, playerId, connected, active, now]);
   function setMuted(value: boolean) {
     gate.current.muted = value;
@@ -107,8 +115,14 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
   function setSoundGain(sound: GameSound, value: number) {
     if (Number.isFinite(value)) setGains(current => ({ ...current, [sound]: Math.max(0, Math.min(1, value)) }));
   }
+  const setPreviewMode = useMemo(() => (open: boolean) => {
+    if (previewMode.current !== open) scheduler.cancel();
+    previewMode.current = open;
+    gate.current.previewOpen = open;
+    setPreviewOpen(open);
+  }, [scheduler]);
   const previews = useRef(0);
-  return { level, muted, gains, loaded, error, setLevel, setMuted, setSoundGain,
-    preview: (sound: GameSound = 'myTurn') => scheduler.enqueue([{ id: `preview:${++previews.current}`, sound }]) };
+  return { level, muted, gains, loaded, error, setLevel, setMuted, setSoundGain, setPreviewMode,
+    preview: (sound: GameSound = 'myTurn') => scheduler.preview({ id: `preview:${++previews.current}`, sound }) };
 }
 export type GameAudio = ReturnType<typeof useGameAudio>;

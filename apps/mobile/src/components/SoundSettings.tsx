@@ -1,13 +1,16 @@
 import { soundCatalog, type GameSound } from '../services/soundCatalog';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { GameAudio } from '../hooks/useGameAudio';
 export function SoundSettings({audio}:{audio:GameAudio}) {
   const [open,setOpen]=useState(false);
-  const button=(label:string,action:()=>void,selected=false)=><Pressable accessibilityRole="button" accessibilityState={{selected}} disabled={!audio.loaded} onPress={action} style={[styles.button,selected&&styles.selected]}><Text style={styles.text}>{label}</Text></Pressable>;
+  const {setPreviewMode} = audio;
+  useEffect(() => () => setPreviewMode(false), [setPreviewMode]);
+  function changeOpen(value: boolean) { setPreviewMode(value); setOpen(value); }
+  const button=(label:string,action:()=>void,selected=false,accessibilityLabel=label)=><Pressable android_disableSound accessibilityLabel={accessibilityLabel} accessibilityRole="button" accessibilityState={{selected}} disabled={!audio.loaded} onPress={action} style={[styles.button,selected&&styles.selected]}><Text style={styles.text}>{label}</Text></Pressable>;
   return <>
-    {button(audio.muted || audio.level===0?'소리 꺼짐':'소리',()=>setOpen(true))}
-    <Modal visible={open} transparent animationType="fade" onRequestClose={()=>setOpen(false)}>
+    {button(audio.muted || audio.level===0?'소리 꺼짐':'소리',()=>changeOpen(true))}
+    <Modal visible={open} transparent animationType="fade" onRequestClose={()=>changeOpen(false)}>
       <View style={styles.overlay}><View style={styles.panel}>
         <Text style={styles.title}>게임 효과음</Text>
         <Text style={styles.text}>카드 · 칩 · 내 차례 · 시간 경고 · 승리</Text>
@@ -20,12 +23,12 @@ export function SoundSettings({audio}:{audio:GameAudio}) {
             <View style={styles.row}>
               {button('−',()=>audio.setSoundGain(sound,audio.gains[sound]-0.1))}
               {button('+',()=>audio.setSoundGain(sound,audio.gains[sound]+0.1))}
-              {button('듣기',()=>audio.preview(sound))}
+              {button('듣기',()=>audio.preview(sound),false,`${soundCatalog[sound].label} 미리듣기`)}
             </View>
           </View>)}
         </ScrollView>
         {!!audio.error&&<Text style={styles.text}>{audio.error}</Text>}
-        <View style={styles.row}>{button('미리 듣기',()=>audio.preview())}{button('닫기',()=>setOpen(false))}</View>
+        <View style={styles.row}>{button('미리 듣기',()=>audio.preview())}{button('닫기',()=>changeOpen(false))}</View>
       </View></View>
     </Modal>
   </>;

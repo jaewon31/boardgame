@@ -11,7 +11,7 @@ interface Props {
 
 export function ActionButton({ title, onPress, disabled, busy, secondary, compact }: Props) {
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled, busy: !!busy }}
+    <Pressable android_disableSound accessibilityRole="button" accessibilityState={{ disabled: !!disabled, busy: !!busy }}
       onPress={onPress} disabled={disabled || busy}
       style={({ pressed }) => [styles.button, compact && { minHeight: 44, padding: 8 }, secondary && styles.secondary, (disabled || busy) && styles.disabled, pressed && styles.pressed]}>
       {busy ? <ActivityIndicator color="#16261C" /> : <Text style={[styles.text, secondary && styles.secondaryText]}>{title}</Text>}

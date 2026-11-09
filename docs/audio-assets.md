@@ -83,3 +83,7 @@ ZIP의 원본 [License.txt](audio-sources/kenney-casino/License.txt)를 그대�
 - 네이티브 청취·APK 설치·EAS 빌드·Railway 배포는 수행하지 않았다. 커밋·푸시 및 DB/볼륨 변경도 없음.
 
 원본 peak/RMS 수치는 원본 OGG를 44.1kHz mono float로 디코딩한 분석 신호 기준이다. 원본 컨테이너는 stereo이며 stereo 각 채널의 peak나 true-peak 값을 표기한 것은 아니다.
+
+### 2026-11-09 Android 재생 후속 수정
+
+재생 완료 상태 재사용·미리듣기 경합·승리 큐 누락에 대한 조사와 검증은 `audio-playback-investigation.md` 및 `audio-pcm-audit.json`을 참조한다. 일반 효과음 대기 제한은 1.5초를 유지하고, 팟 획득/승리 결과음만 5초로 구분한다. 기존 파일과 gain은 유지했다.

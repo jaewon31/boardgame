@@ -71,3 +71,28 @@ test('missing native completion eventually releases lane without keeping pending
   assert.equal(a.errors,1);assert.equal(a.listeners.size,0);
   a.scheduler.enqueue([cue('check')]);await flush();assert.deepEqual(a.played,['call','check']);
 });
+
+test('Android STATE_ENDED direct isLoaded=false still allows replay from loaded currentStatus',async()=>{
+  const a=setup();a.scheduler.enqueue([cue('call','first')]);await flush();
+  a.players.call.isLoaded=false;
+  Object.defineProperty(a.players.call,'currentStatus',{value:{isLoaded:true,playbackState:'ended'}});
+  a.listeners.get('call')!();a.scheduler.enqueue([cue('call','second')]);await flush();
+  assert.deepEqual(a.played,['call','call']);
+});
+test('an unavailable high-priority player must not block another ready sound',async()=>{
+  const a=setup();a.players.potCollect.isLoaded=false;
+  a.scheduler.enqueue([cue('potCollect'),cue('victory')]);await flush();
+  assert.deepEqual(a.played,['victory']);
+});
+test('victory survives a previous effect plus pot collection in the same result update',async()=>{
+  const a=setup();a.scheduler.enqueue([cue('deal')]);await flush();
+  a.scheduler.enqueue([cue('potCollect'),cue('victory')]);
+  a.advance(900);a.listeners.get('deal')!();a.scheduler.tick();await flush();
+  a.advance(834);a.listeners.get('potCollect')!();a.scheduler.tick();await flush();
+  assert.deepEqual(a.played,['deal','potCollect','victory']);
+});
+test('asynchronous native volume setter must not cancel playback using its old getter value',async()=>{
+  const a=setup();let written=0;
+  Object.defineProperty(a.players.call,'volume',{get:()=>0,set:value=>{written=value;}});
+  a.scheduler.enqueue([cue('call')]);await flush();assert.ok(written>0);assert.deepEqual(a.played,['call']);
+});

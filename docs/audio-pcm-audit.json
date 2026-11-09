@@ -1,0 +1,146 @@
+[
+  {
+    "file": "card-deal.wav",
+    "source": "card-slide-2.ogg",
+    "pcmSha256": "22bc3d3464d5d648b3819ded09c55e1cb3f5fced23d8416469dfdde328bc4ac5",
+    "format": "PCM16 LE mono 44100Hz",
+    "sourceMetrics": {
+      "seconds": 0.584082,
+      "peakDbfs": 1.291205,
+      "rmsDbfs": -23.222105,
+      "zeroSampleFraction": 0,
+      "leadingBelow45DbMs": 0,
+      "trailingBelow45DbMs": 0.31746
+    },
+    "outputMetrics": {
+      "seconds": 0.584082,
+      "peakDbfs": -7.000551,
+      "rmsDbfs": -31.513763,
+      "zeroSampleFraction": 0.009007,
+      "leadingBelow45DbMs": 2.063492,
+      "trailingBelow45DbMs": 92.108844
+    },
+    "trimmedEnergyPercent": 0,
+    "reconstructedPcmMaxError": 0
+  },
+  {
+    "file": "card-reveal.wav",
+    "source": "card-place-2.ogg",
+    "pcmSha256": "67396a1f9e346ab98c606bcc9ced90d4e497fcfdfeceef5cf51cddef15caccea",
+    "format": "PCM16 LE mono 44100Hz",
+    "sourceMetrics": {
+      "seconds": 0.456485,
+      "peakDbfs": 1.018819,
+      "rmsDbfs": -28.906776,
+      "zeroSampleFraction": 0,
+      "leadingBelow45DbMs": 41.814059,
+      "trailingBelow45DbMs": 174.172336
+    },
+    "outputMetrics": {
+      "seconds": 0.258503,
+      "peakDbfs": -7.000551,
+      "rmsDbfs": -34.458811,
+      "zeroSampleFraction": 0.010526,
+      "leadingBelow45DbMs": 3.219955,
+      "trailingBelow45DbMs": 46.1678
+    },
+    "trimmedEnergyPercent": 0.05509,
+    "reconstructedPcmMaxError": 0
+  },
+  {
+    "file": "chips-bet.wav",
+    "source": "chip-lay-3.ogg",
+    "pcmSha256": "ede73af959a3f0005d4173e837ec2a17f5a1e412e1522a6a7c5655296ae9e7af",
+    "format": "PCM16 LE mono 44100Hz",
+    "sourceMetrics": {
+      "seconds": 0.265578,
+      "peakDbfs": 0.266268,
+      "rmsDbfs": -24.012952,
+      "zeroSampleFraction": 0,
+      "leadingBelow45DbMs": 6.712018,
+      "trailingBelow45DbMs": 23.582766
+    },
+    "outputMetrics": {
+      "seconds": 0.253288,
+      "peakDbfs": -8.000117,
+      "rmsDbfs": -32.073791,
+      "zeroSampleFraction": 0.016294,
+      "leadingBelow45DbMs": 82.244898,
+      "trailingBelow45DbMs": 48.956916
+    },
+    "trimmedEnergyPercent": 0.000615,
+    "reconstructedPcmMaxError": 0
+  },
+  {
+    "file": "chips-raise.wav",
+    "source": "chips-stack-3.ogg",
+    "pcmSha256": "a865d5a1137491369ac0d318f2b9c9dc246a289283c5ddaf687b9d9173ae58e1",
+    "format": "PCM16 LE mono 44100Hz",
+    "sourceMetrics": {
+      "seconds": 0.370816,
+      "peakDbfs": 1.828695,
+      "rmsDbfs": -26.498656,
+      "zeroSampleFraction": 0,
+      "leadingBelow45DbMs": 18.730159,
+      "trailingBelow45DbMs": 0.022676
+    },
+    "outputMetrics": {
+      "seconds": 0.355079,
+      "peakDbfs": -6.000478,
+      "rmsDbfs": -34.140099,
+      "zeroSampleFraction": 0.008238,
+      "leadingBelow45DbMs": 5.192744,
+      "trailingBelow45DbMs": 21.882086
+    },
+    "trimmedEnergyPercent": 0.005255,
+    "reconstructedPcmMaxError": 0
+  },
+  {
+    "file": "cards-fold.wav",
+    "source": "card-shove-3.ogg",
+    "pcmSha256": "12e02b6e8ce66414f9899d258dbae3802a552de54d57558864155b119bc7d12d",
+    "format": "PCM16 LE mono 44100Hz",
+    "sourceMetrics": {
+      "seconds": 0.692834,
+      "peakDbfs": -1.553394,
+      "rmsDbfs": -28.979214,
+      "zeroSampleFraction": 0,
+      "leadingBelow45DbMs": 0.272109,
+      "trailingBelow45DbMs": 0
+    },
+    "outputMetrics": {
+      "seconds": 0.692834,
+      "peakDbfs": -10.000127,
+      "rmsDbfs": -37.428081,
+      "zeroSampleFraction": 0.003666,
+      "leadingBelow45DbMs": 3.900227,
+      "trailingBelow45DbMs": 12.902494
+    },
+    "trimmedEnergyPercent": 0,
+    "reconstructedPcmMaxError": 0
+  },
+  {
+    "file": "pot-collect.wav",
+    "source": "chips-handle-5.ogg",
+    "pcmSha256": "a354fab48f31cfad9447ea3dce7f203ca8c2c7823615c617d7441e153fb21c8c",
+    "format": "PCM16 LE mono 44100Hz",
+    "sourceMetrics": {
+      "seconds": 0.833719,
+      "peakDbfs": 0.967588,
+      "rmsDbfs": -22.628033,
+      "zeroSampleFraction": 0,
+      "leadingBelow45DbMs": 0.045351,
+      "trailingBelow45DbMs": 0
+    },
+    "outputMetrics": {
+      "seconds": 0.833719,
+      "peakDbfs": -9.000392,
+      "rmsDbfs": -32.599749,
+      "zeroSampleFraction": 0.001632,
+      "leadingBelow45DbMs": 1.746032,
+      "trailingBelow45DbMs": 3.673469
+    },
+    "trimmedEnergyPercent": 0,
+    "reconstructedPcmMaxError": 0
+  }
+]

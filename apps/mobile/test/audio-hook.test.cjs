@@ -20,10 +20,11 @@ function harness(saved=null){
   const native={AppState:{currentState:'active',addEventListener(_event,fn){subscriptions.add(fn);return {remove(){subscriptions.delete(fn);}};}}};
   const audio={setAudioModeAsync:async()=>{},useAudioPlayer(source){return react.useMemo(()=>{
     const listeners=new Set();
-    const p={source,isLoaded:true,volume:0,plays:0,pauses:0,seek:null,
-      pause(){this.pauses++;},seekTo(){return this.seek?.()??Promise.resolve();},play(){this.plays++;},
+    const p={source,isLoaded:true,ended:false,volume:0,plays:0,pauses:0,seek:null,
+      get currentStatus(){return {isLoaded:this.isLoaded||this.ended};},
+      pause(){this.pauses++;},seekTo(){return (this.seek?.()??Promise.resolve()).then(()=>{this.isLoaded=true;this.ended=false;});},play(){this.plays++;},
       addListener(_event,fn){listeners.add(fn);return {remove(){listeners.delete(fn);}};},
-      finish(){for(const fn of [...listeners])fn({didJustFinish:true});},
+      finish(){this.isLoaded=false;this.ended=true;for(const fn of [...listeners])fn({didJustFinish:true});},
     };players.push(p);return p;
   },[]);}};
   const file=path.join(root,'apps/mobile/src/hooks/useGameAudio.ts');
@@ -78,4 +79,34 @@ test('batched background/foreground events do not leave playback disabled',async
   const h=harness();await h.flush();
   h.appState('background',false);h.appState('active');
   h.audio.preview();await h.flush();assert.equal(h.players[11].plays,1);h.dispose();
+});
+
+test('every preview resolves the expected independent player and asset, including replay after STATE_ENDED',async()=>{
+  const h=harness();await h.flush();h.audio.setPreviewMode(true);await h.flush();
+  const mapping=[['deal','card-deal.wav'],['check','card.wav'],['call','chips-bet.wav'],['bet','chips-bet.wav'],['raise','chips-raise.wav'],['fold','cards-fold.wav'],['flopReveal','card-reveal.wav'],['turnReveal','card-reveal.wav'],['riverReveal','card-reveal.wav'],['potCollect','pot-collect.wav'],['victory','win.wav'],['myTurn','turn.wav'],['warning','warning.wav']];
+  for(let i=0;i<mapping.length;i++){
+    const [sound,file]=mapping[i];assert.ok(h.players[i].source.endsWith('/'+file));
+    h.audio.preview(sound);await h.flush();assert.equal(h.players[i].plays,1,sound);
+    h.players[i].finish();h.audio.preview(sound);await h.flush();assert.equal(h.players[i].plays,2,sound+' replay');
+    h.players[i].finish();
+  }
+  assert.notEqual(h.players[2],h.players[3]);h.dispose();
+});
+test('preview is latest-selection-wins and game/connection changes cannot cancel an open audition',async()=>{
+  const h=harness();await h.flush();h.audio.setPreviewMode(true);await h.flush();
+  let release;h.players[2].seek=()=>new Promise(r=>{release=r;});
+  h.audio.preview('call');h.audio.preview('raise');h.audio.preview('fold');await h.flush();
+  release();await h.flush();assert.equal(h.players[2].plays,0);assert.equal(h.players[4].plays,0);assert.equal(h.players[5].plays,1);
+  const paused=h.players[5].pauses;
+  h.setHand({id:'new',number:1,revision:0,street:'preflop',board:[],players:[],payouts:[],actorId:'b',legal:null});
+  h.connect(false);await h.flush();assert.equal(h.players[5].pauses,paused);
+  h.audio.setPreviewMode(false);await h.flush();assert.ok(h.players[5].pauses>paused);h.dispose();
+});
+test('real winning hand sends pot and victory through the hook once',async()=>{
+  const {HoldemHand}=require(path.join(root,'apps/server/src/holdem/hand.ts'));
+  const hand=new HoldemHand([{id:'a',nickname:'A',stack:100},{id:'b',nickname:'B',stack:100}]);
+  const h=harness();await h.flush();h.setHand(hand.viewFor('a',true));await h.flush();h.players[0].finish();h.tick();
+  hand.depart('b');h.setHand(hand.viewFor('a',true));await h.flush();assert.equal(h.players[9].plays,1);
+  h.players[9].finish();h.tick();await h.flush();assert.equal(h.players[10].plays,1);
+  h.setHand(hand.viewFor('a',true));h.tick();await h.flush();assert.equal(h.players[10].plays,1);h.dispose();
 });

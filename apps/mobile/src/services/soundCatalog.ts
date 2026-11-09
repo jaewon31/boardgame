@@ -8,8 +8,9 @@ export const soundCatalog = {
   flopReveal: { label: '플롭 공개', gain: 0.6, priority: 60, lane: 'table' },
   turnReveal: { label: '턴 공개', gain: 0.6, priority: 60, lane: 'table' },
   riverReveal: { label: '리버 공개', gain: 0.6, priority: 60, lane: 'table' },
-  potCollect: { label: '팟 획득', gain: 0.8, priority: 80, lane: 'table' },
-  victory: { label: '승리', gain: 0.2, priority: 70, lane: 'table' },
+  // Result cues must survive a prior effect plus pot animation; cancelled on hand change.
+  potCollect: { maxWaitMs: 5000, label: '팟 획득', gain: 0.8, priority: 80, lane: 'table' },
+  victory: { maxWaitMs: 5000, label: '승리', gain: 0.2, priority: 70, lane: 'table' },
   myTurn: { label: '내 차례 알림', gain: 0.3, priority: 80, lane: 'notice' },
   warning: { label: '시간 경고', gain: 0.4, priority: 90, lane: 'notice' },
 } as const;
