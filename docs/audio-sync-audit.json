@@ -1,0 +1,386 @@
+{
+  "files": [
+    {
+      "file": "allin-user.wav",
+      "before": {
+        "seconds": 0.966530612244898,
+        "peakDb": -0.00026507636037961915,
+        "rmsDb": -21.91619937704756,
+        "clipped": 4
+      },
+      "after": {
+        "seconds": 0.966530612244898,
+        "peakDb": -2.9999878172428627,
+        "rmsDb": -18.999011059775796,
+        "clipped": 0
+      },
+      "truePeak4xDb": -1.6702779512239752,
+      "sha256": "477313e4504b49f98e80e15c867ad764e48c24b74bf35289cb8ae144f88f5e07"
+    },
+    {
+      "file": "bet-user.wav",
+      "before": {
+        "seconds": 0.40800453514739227,
+        "peakDb": 0,
+        "rmsDb": -19.499444338599943,
+        "clipped": 16
+      },
+      "after": {
+        "seconds": 0.40800453514739227,
+        "peakDb": -2.9999878172428627,
+        "rmsDb": -17.99992333425741,
+        "clipped": 0
+      },
+      "truePeak4xDb": -0.9479559410606874,
+      "sha256": "94ae481da8603d4418d4686baf6969564059860b955e14915264c72251af8a7b"
+    },
+    {
+      "file": "card-deal.wav",
+      "before": {
+        "seconds": 0.5840816326530612,
+        "peakDb": -7.0005506829029605,
+        "rmsDb": -31.513763256175285,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.5840816326530612,
+        "peakDb": -7.0005506829029605,
+        "rmsDb": -31.513763256175285,
+        "clipped": 0
+      },
+      "truePeak4xDb": -7.0005506829029605,
+      "sha256": "a8134294dad4ff4fd154a61778686ee5b520144f90524eece83dead930b23ffa"
+    },
+    {
+      "file": "card-reveal.wav",
+      "before": {
+        "seconds": 0.2585034013605442,
+        "peakDb": -7.0005506829029605,
+        "rmsDb": -34.45881139516707,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.2585034013605442,
+        "peakDb": -7.0005506829029605,
+        "rmsDb": -34.45881139516707,
+        "clipped": 0
+      },
+      "truePeak4xDb": -6.64780673367828,
+      "sha256": "36c9cd11dfb1caa664ca908175cc34a03b561ad98af57a9f09fe700366d6b2c0"
+    },
+    {
+      "file": "card.wav",
+      "before": {
+        "seconds": 0.24,
+        "peakDb": -9.858781690513748,
+        "rmsDb": -23.32869429026934,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.24,
+        "peakDb": -9.858781690513748,
+        "rmsDb": -23.32869429026934,
+        "clipped": 0
+      },
+      "truePeak4xDb": -9.64645380847495,
+      "sha256": "ccdd3de6b6791c8e89b0fd1cf0195c2e6102c1af6d7311c1792adb3a4ce0a971"
+    },
+    {
+      "file": "cards-fold.wav",
+      "before": {
+        "seconds": 0.6928344671201814,
+        "peakDb": -10.000126940172311,
+        "rmsDb": -37.42808134569419,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.6928344671201814,
+        "peakDb": -10.000126940172311,
+        "rmsDb": -37.42808134569419,
+        "clipped": 0
+      },
+      "truePeak4xDb": -8.449133622043341,
+      "sha256": "9fc4516afb279ecc2d64fd91b1511c140fd5281536836d4f6b8739cd1550d275"
+    },
+    {
+      "file": "check-user.wav",
+      "before": {
+        "seconds": 0.72,
+        "peakDb": -0.44736964450579647,
+        "rmsDb": -17.556133185892012,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.72,
+        "peakDb": -2.9999878172428627,
+        "rmsDb": -17.671604222128284,
+        "clipped": 0
+      },
+      "truePeak4xDb": -1.9528334922683424,
+      "sha256": "e0ceda13122ff7adfe93df3796d5c956dfef7a7723925d271077cfbfae74f3c0"
+    },
+    {
+      "file": "chips-bet.wav",
+      "before": {
+        "seconds": 0.2532879818594104,
+        "peakDb": -8.000117030469568,
+        "rmsDb": -32.0737914643857,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.2532879818594104,
+        "peakDb": -8.000117030469568,
+        "rmsDb": -32.0737914643857,
+        "clipped": 0
+      },
+      "truePeak4xDb": -7.973450908056067,
+      "sha256": "ddddef93eb72b1576b0ec14532800b44d0c03449a6a067380822682aa9b751e1"
+    },
+    {
+      "file": "chips-raise.wav",
+      "before": {
+        "seconds": 0.3550793650793651,
+        "peakDb": -6.0004777433190135,
+        "rmsDb": -34.14009877409957,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.3550793650793651,
+        "peakDb": -6.0004777433190135,
+        "rmsDb": -34.14009877409957,
+        "clipped": 0
+      },
+      "truePeak4xDb": -6.0004777433190135,
+      "sha256": "d72b12cfeee537d3b555f13759dba7c60fffb6f20b0b052c05fc96d16bf492f4"
+    },
+    {
+      "file": "chips.wav",
+      "before": {
+        "seconds": 0.32,
+        "peakDb": -16.48736885673499,
+        "rmsDb": -31.103975905152602,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.32,
+        "peakDb": -16.48736885673499,
+        "rmsDb": -31.103975905152602,
+        "clipped": 0
+      },
+      "truePeak4xDb": -16.359291602758617,
+      "sha256": "2202196d1f762da52476a8aa493ee7d47eca98a016f52167f5e518b381be4b14"
+    },
+    {
+      "file": "collect.wav",
+      "before": {
+        "seconds": 0.6,
+        "peakDb": -13.675441715365025,
+        "rmsDb": -28.538391369349398,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.6,
+        "peakDb": -13.675441715365025,
+        "rmsDb": -28.538391369349398,
+        "clipped": 0
+      },
+      "truePeak4xDb": -13.211382743269798,
+      "sha256": "343ccbd7726518148f2c5b203f30438df76ef48ace57514cde2949f10347af92"
+    },
+    {
+      "file": "deal-user.wav",
+      "before": {
+        "seconds": 0.36,
+        "peakDb": 0,
+        "rmsDb": -29.43137876784747,
+        "clipped": 1
+      },
+      "after": {
+        "seconds": 0.36,
+        "peakDb": -2.9999878172428627,
+        "rmsDb": -21.999389136446347,
+        "clipped": 0
+      },
+      "truePeak4xDb": -2.088395763252487,
+      "sha256": "99e2bab44020d6f9fabe5dcb548988fc99e76d42e2af4d5502ba534587a41f0e"
+    },
+    {
+      "file": "deal.wav",
+      "before": {
+        "seconds": 0.5500226757369614,
+        "peakDb": -10.163433752509473,
+        "rmsDb": -23.663719522944724,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.5500226757369614,
+        "peakDb": -10.163433752509473,
+        "rmsDb": -23.663719522944724,
+        "clipped": 0
+      },
+      "truePeak4xDb": -9.731854731791698,
+      "sha256": "9fe0e4489c17537f74fc6862d6bdad98371a1a4c5e8ad9757e4e24456c76727d"
+    },
+    {
+      "file": "pot-collect.wav",
+      "before": {
+        "seconds": 0.833718820861678,
+        "peakDb": -9.000392326786972,
+        "rmsDb": -32.5997485705402,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.833718820861678,
+        "peakDb": -9.000392326786972,
+        "rmsDb": -32.5997485705402,
+        "clipped": 0
+      },
+      "truePeak4xDb": -9.000392326786972,
+      "sha256": "7693b22a178ea0f0bc3656b07b96f926abe0dade42cfecf830a23165845fd58b"
+    },
+    {
+      "file": "raise-user.wav",
+      "before": {
+        "seconds": 0.7680045351473923,
+        "peakDb": 0,
+        "rmsDb": -21.772303365437683,
+        "clipped": 13
+      },
+      "after": {
+        "seconds": 0.7680045351473923,
+        "peakDb": -2.9999878172428627,
+        "rmsDb": -18.999159228665768,
+        "clipped": 0
+      },
+      "truePeak4xDb": -0.20038141676364862,
+      "sha256": "7e5ce8fc66a7610a18d51c3a58b9770f0bb8183e5c3a28bec9821577310d6690"
+    },
+    {
+      "file": "shuffle-user.wav",
+      "before": {
+        "seconds": 5.6880045351473925,
+        "peakDb": -1.6991125902671902,
+        "rmsDb": -33.69426311348997,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 5.6880045351473925,
+        "peakDb": -2.9999878172428627,
+        "rmsDb": -23.997589250119553,
+        "clipped": 0
+      },
+      "truePeak4xDb": -1.8201109774938165,
+      "sha256": "6776cd515f39ec3306a5bd2d06562a59c18efc476c532fff7e482bfafe86b42b"
+    },
+    {
+      "file": "turn.wav",
+      "before": {
+        "seconds": 0.48,
+        "peakDb": -13.107032105223999,
+        "rmsDb": -26.581551110530803,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.48,
+        "peakDb": -13.107032105223999,
+        "rmsDb": -26.581551110530803,
+        "clipped": 0
+      },
+      "truePeak4xDb": -13.103764348341038,
+      "sha256": "cf4a73a7d73e5fadf176c444199f8d0eeccbc6813dacd71e224e4c2f70d42c3f"
+    },
+    {
+      "file": "warning.wav",
+      "before": {
+        "seconds": 0.45,
+        "peakDb": -14.717068874037867,
+        "rmsDb": -30.28226039153255,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.45,
+        "peakDb": -14.717068874037867,
+        "rmsDb": -30.28226039153255,
+        "clipped": 0
+      },
+      "truePeak4xDb": -14.716644768686935,
+      "sha256": "916b7b7e127565ca9adbbce3a10042aa00c14aa2600e0aeba415e1ce6e39971c"
+    },
+    {
+      "file": "win.wav",
+      "before": {
+        "seconds": 0.95,
+        "peakDb": -12.857715837381328,
+        "rmsDb": -25.05020699913404,
+        "clipped": 0
+      },
+      "after": {
+        "seconds": 0.95,
+        "peakDb": -12.857715837381328,
+        "rmsDb": -25.05020699913404,
+        "clipped": 0
+      },
+      "truePeak4xDb": -12.839406661166539,
+      "sha256": "42810e3cda605e19fbef38c67216070fe6aeaffcc5f459432fbe371768766fee"
+    }
+  ],
+  "normalization": [
+    {
+      "name": "check-user.wav",
+      "source": "table_knock_check.mp3",
+      "targetRmsDb": -18,
+      "preLimiterGainDb": 2.865966796875,
+      "filter": "aformat=channel_layouts=mono,aresample=44100,volume=2.865966796875dB,alimiter=limit=0.707945784:attack=1:release=10:level=false:latency=true",
+      "sourceSha256": "4984f6140167c869cc7ffd01561ae4b696353435028f4baf636016995f8a517e",
+      "outputSha256": "e0ceda13122ff7adfe93df3796d5c956dfef7a7723925d271077cfbfae74f3c0"
+    },
+    {
+      "name": "bet-user.wav",
+      "source": "oxidvideos-placing-poker-chips-522515.mp3",
+      "targetRmsDb": -18,
+      "preLimiterGainDb": 7.699951171875,
+      "filter": "aformat=channel_layouts=mono,aresample=44100,volume=7.699951171875dB,alimiter=limit=0.707945784:attack=1:release=10:level=false:latency=true",
+      "sourceSha256": "152f64f2d00d32f3a8d7378fd80b3230c802eaa2af9b68fda29bdabc7a72e91b",
+      "outputSha256": "94ae481da8603d4418d4686baf6969564059860b955e14915264c72251af8a7b"
+    },
+    {
+      "name": "raise-user.wav",
+      "source": "oxidvideos-placing-poker-chips-522521.mp3",
+      "targetRmsDb": -19,
+      "preLimiterGainDb": 11.764892578125,
+      "filter": "aformat=channel_layouts=mono,aresample=44100,volume=11.764892578125dB,alimiter=limit=0.707945784:attack=1:release=10:level=false:latency=true",
+      "sourceSha256": "9c4dab3c4a66e63d8902ca3b73a88a077f56c7a7de395c9a137807f829363f3b",
+      "outputSha256": "7e5ce8fc66a7610a18d51c3a58b9770f0bb8183e5c3a28bec9821577310d6690"
+    },
+    {
+      "name": "allin-user.wav",
+      "source": "freesound_community-allinpushchips-96121.mp3",
+      "targetRmsDb": -19,
+      "preLimiterGainDb": 8.066162109375,
+      "filter": "aformat=channel_layouts=mono,aresample=44100,volume=8.066162109375dB,alimiter=limit=0.707945784:attack=1:release=10:level=false:latency=true",
+      "sourceSha256": "b15026601fe9f632cc1a6deb7f8ffae7f0b875cf8e1c76fca3f8744769392b18",
+      "outputSha256": "477313e4504b49f98e80e15c867ad764e48c24b74bf35289cb8ae144f88f5e07"
+    },
+    {
+      "name": "deal-user.wav",
+      "source": "oxidvideos-taking-playing-card-3-522513.mp3",
+      "targetRmsDb": -22,
+      "preLimiterGainDb": 10.190185546875,
+      "filter": "aformat=channel_layouts=mono,aresample=44100,volume=10.190185546875dB,alimiter=limit=0.707945784:attack=1:release=10:level=false:latency=true",
+      "sourceSha256": "7742533ef676609d40bebb1cab9170d845fdff9a7e0390d511136b095fcea564",
+      "outputSha256": "99e2bab44020d6f9fabe5dcb548988fc99e76d42e2af4d5502ba534587a41f0e"
+    },
+    {
+      "name": "shuffle-user.wav",
+      "source": "freesound_community-shuffling-cards-01-86984.mp3",
+      "targetRmsDb": -24,
+      "preLimiterGainDb": 8.154052734375,
+      "filter": "aformat=channel_layouts=mono,aresample=44100,volume=8.154052734375dB,alimiter=limit=0.707945784:attack=1:release=10:level=false:latency=true",
+      "sourceSha256": "9becb6484be0de55f09a2525855ce2508983cc8ab3d0845d7cab1d1fb00453dd",
+      "outputSha256": "6776cd515f39ec3306a5bd2d06562a59c18efc476c532fff7e482bfafe86b42b"
+    }
+  ],
+  "maxPlayerVolume": 0.8,
+  "worstCaseLanePeak": 0.9587263107299805,
+  "worstCaseLanePeakDb": -0.36610707877536947
+}

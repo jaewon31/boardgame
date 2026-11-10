@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import * as SecureStore from 'expo-secure-store';
 import type { HoldemView } from '@boardgame/shared';
 import { SoundEvents } from '../services/soundEvents';
+import { CardPresentation } from '../services/cardPresentation';
 import { AudioScheduler } from '../services/audioScheduler';
-import { defaultSoundGains, readSoundGains, type GameSound } from '../services/soundCatalog';
+import { defaultSoundGains, readSoundGains, DEFAULT_MASTER_LEVEL, playerGain, type GameSound } from '../services/soundCatalog';
 
 export function useGameAudio(hand: HoldemView | null, playerId: string | null, connected: boolean, nextHandAt?: number | null) {
   // User-provided replacements; other effects retain their original assets.
   const deal = useAudioPlayer(require('../../assets/audio/deal-user.wav'));
   const check = useAudioPlayer(require('../../assets/audio/check-user.wav'));
-  const call = useAudioPlayer(require('../../assets/audio/chips-bet.wav'));
+  const call = useAudioPlayer(require('../../assets/audio/bet-user.wav'));
   const bet = useAudioPlayer(require('../../assets/audio/bet-user.wav'));
   const raise = useAudioPlayer(require('../../assets/audio/raise-user.wav'));
   const fold = useAudioPlayer(require('../../assets/audio/cards-fold.wav'));
@@ -27,7 +28,7 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
   const allIn = useAudioPlayer(require('../../assets/audio/allin-user.wav'));
   const players = useMemo(() => ({ deal, check, call, bet, raise, fold, flopReveal, turnReveal, riverReveal, potCollect, victory, myTurn, warning, shuffle, allIn }),
     [deal, check, call, bet, raise, fold, flopReveal, turnReveal, riverReveal, potCollect, victory, myTurn, warning, shuffle, allIn]);
-  const [level, setLevelState] = useState(0.5), [muted, setMutedState] = useState(false);
+  const [level, setLevelState] = useState(DEFAULT_MASTER_LEVEL), [muted, setMutedState] = useState(false);
   const [gains, setGains] = useState({ ...defaultSoundGains });
   const [loaded, setLoaded] = useState(false), [ready, setReady] = useState(false);
   const [active, setActive] = useState(AppState.currentState === 'active');
@@ -36,6 +37,8 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState<string | null>(null);
   const events = useRef(new SoundEvents());
+  const [presentation, setPresentation] = useState<CardPresentation['state']>({ handId: null, boardCount: 0, board: {} });
+  const visuals = useMemo(() => new CardPresentation(setPresentation, () => performance.now()), []);
   const writes = useRef(Promise.resolve());
   const mix = useRef({ level, gains });
   mix.current = { level, gains };
@@ -43,7 +46,7 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
   gate.current = { loaded, ready, muted, level, connected, previewOpen };
   const scheduler = useMemo(() => new AudioScheduler({
     player: sound => players[sound],
-    gain: sound => mix.current.level * mix.current.gains[sound],
+    gain: sound => playerGain(mix.current.level, mix.current.gains[sound]),
     onEnd: (sound, done, failed) => {
       const sub = players[sound].addListener('playbackStatusUpdate', status => {
         if ((status as {error?: unknown}).error) failed?.();
@@ -54,7 +57,7 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
     error: () => setError('효과음을 재생하지 못했어요.'),
     // Fixed event/sound names only: no hand IDs, cards, accounts or native error text.
     trace: (phase, sound) => console.info(JSON.stringify({event:'game_audio', phase, sound})),
-  }), [players]);
+  }, () => performance.now()), [players]);
   useEffect(() => {
     let live = true;
     void SecureStore.getItemAsync('table-audio').then(raw => {
@@ -79,7 +82,7 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
       }
       setActive(state === 'active');
     });
-    const playbackTimer = setInterval(() => scheduler.tick(), 100);
+    const playbackTimer = setInterval(() => scheduler.tick(), 16);
     const clockTimer = setInterval(() => setNow(Date.now()), 250);
     return () => { sub.remove(); clearInterval(playbackTimer); clearInterval(clockTimer); scheduler.setEnabled(false); };
   }, [scheduler]);
@@ -95,12 +98,17 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
     scheduler.setEnabled(loaded && ready && !muted && level > 0 && active && (connected || previewOpen));
     scheduler.refreshVolumes();
   }, [scheduler, loaded, ready, muted, level, gains, active, connected, previewOpen]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!previewMode.current) scheduler.cancel();
   }, [scheduler, hand?.id, playerId]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const cues = events.current.update(hand, playerId, connected && active, now, nextHandAt);
-    if (!previewMode.current) scheduler.enqueue(cues);
+    if (!connected || !active || previewMode.current) {
+      visuals.restore(hand);
+    } else {
+      // A restored/initial snapshot has no cues and is displayed without catch-up animation.
+      scheduler.enqueue(visuals.prepare(hand, cues));
+    }
   }, [scheduler, hand, playerId, connected, active, now, nextHandAt]);
   function setMuted(value: boolean) {
     gate.current.muted = value;
@@ -124,7 +132,7 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
     setPreviewOpen(open);
   }, [scheduler]);
   const previews = useRef(0);
-  return { level, muted, gains, loaded, error, setLevel, setMuted, setSoundGain, setPreviewMode,
+  return { presentation, level, muted, gains, loaded, error, setLevel, setMuted, setSoundGain, setPreviewMode,
     preview: (sound: GameSound = 'myTurn') => scheduler.preview({ id: `preview:${++previews.current}`, sound }) };
 }
 export type GameAudio = ReturnType<typeof useGameAudio>;

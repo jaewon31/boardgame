@@ -57,7 +57,7 @@ export function GameScreen({ audio, room, playerId, connected, error, onLeave, o
     <View style={styles.header}><View><Text style={styles.meta}>{room.code} · {hand.smallBlind}/{hand.bigBlind}</Text><Text style={styles.title}>홀덤 #{hand.number} · {streets[hand.street]}</Text></View><RoomRecords room={room} /><Pressable android_disableSound accessibilityRole="button" onPress={leave} style={styles.link}><Text style={styles.text}>나가기 ↗</Text></Pressable></View>
     <View style={styles.ribbon}><Text numberOfLines={1} style={[styles.gold, { flex: 1 }]}>{status}</Text><SoundSettings audio={audio} /><Pressable android_disableSound accessibilityRole="button" accessibilityLabel="칩과 BB 표시 전환" onPress={() => setInBB(value => !value)} style={styles.unit}><Text style={styles.gold}>{inBB ? 'BB' : '칩'} ⇄</Text></Pressable></View>
     <View style={styles.table} onLayout={e => setSize(e.nativeEvent.layout)}>
-      {size.width > 0 && size.height > 0 && <PokerTable room={room} playerId={playerId} width={size.width} height={size.height} seconds={seconds} inBB={inBB} connected={connected} onReveal={onReveal} />}
+      {size.width > 0 && size.height > 0 && <PokerTable presentation={audio.presentation} room={room} playerId={playerId} width={size.width} height={size.height} seconds={seconds} inBB={inBB} connected={connected} onReveal={onReveal} />}
     </View>
     <View style={styles.footer}>
       <Pressable android_disableSound accessibilityRole="button" accessibilityLabel="게임 알림 자세히 보기" onPress={() => Alert.alert('게임 알림', error || hand.lastEvent)}><Text numberOfLines={1} style={error ? styles.error : styles.event}>{error || hand.lastEvent}</Text></Pressable>

@@ -32,7 +32,7 @@ test('street-ending action, board and turn are independent; payouts and warning 
   assert.deepEqual(sounds(s.update(base,'a',true,1)),['deal']);
   const flop={...base,revision:1,street:'flop',board:['2s','3s','4s'],actorId:'a',legal:{canCheck:true,callAmount:0,canRaise:true,minRaiseTo:20,maxRaiseTo:1000,canAllIn:true},deadline:10000,
     audioAction:{revision:1,kind:'call'}} as HoldemView;
-  assert.deepEqual(sounds(s.update(flop,'a',true,2)),['call','flopReveal','myTurn']);
+  assert.deepEqual(sounds(s.update(flop,'a',true,2)),['call','flopReveal','flopReveal','flopReveal','myTurn']);
   assert.deepEqual(sounds(s.update(flop,'a',true,5000)),['warning']);
   assert.deepEqual(s.update(flop,'a',true,6000),[]);
   const turn={...flop,revision:2,street:'turn',board:[...flop.board,'5s'],actorId:null,legal:null} as HoldemView;

@@ -19,18 +19,18 @@ export class SoundEvents {
     }
     if (!hand) { this.warned = ''; return []; }
     const cues: SoundCue[] = [];
-    const emit = (sound: GameSound, key: string | number = hand.revision) => cues.push({ id: `${hand.id}:${key}:${sound}`, sound });
+    const emit = (sound: GameSound, key: string | number = hand.revision, presentation?: SoundCue['presentation']) => cues.push({ id: `${hand.id}:${key}:${sound}`, sound, ...(presentation ? { presentation } : {}) });
     if (!before || before.id !== hand.id) {
-      if (hand.street === 'preflop' && hand.revision === 0) emit('deal');
+      if (hand.street === 'preflop' && hand.revision === 0) emit('deal', 'hole', { kind: 'hole' });
     } else if (hand.revision > before.revision) {
       // Optional metadata supports old servers without guessing actions from display text.
       const action = hand.audioAction;
       if (action && action.revision > before.revision && action.revision <= hand.revision) emit(action.allIn ? 'allIn' : action.kind, action.revision);
       // Independent transitions: a street-ending call must not hide the card sound.
       if (hand.board.length > before.board.length) {
-        if (before.board.length < 3 && hand.board.length >= 3) emit('flopReveal');
-        if (before.board.length < 4 && hand.board.length >= 4) emit('turnReveal');
-        if (before.board.length < 5 && hand.board.length >= 5) emit('riverReveal');
+        for (let index = before.board.length; index < hand.board.length; index++) {
+          emit(index < 3 ? 'flopReveal' : index === 3 ? 'turnReveal' : 'riverReveal', 'board:' + index, { kind: 'board', index });
+        }
       }
       if (hand.street === 'complete' && before.street !== 'complete') {
         this.completedHand = hand.id;

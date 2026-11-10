@@ -16,11 +16,16 @@ export interface AudioPort {
   error(): void;
 }
 type Lane = 'table' | 'notice';
-interface Queued extends SoundCue { at: number }
-interface Run { cue: Queued; started: number; playing: boolean; remove?: () => void }
+export interface ScheduledCue extends SoundCue {
+  minDurationMs?: number;
+  onStart?: () => void;
+  onCancel?: () => void;
+}
+interface Queued extends ScheduledCue { at: number }
+interface Run { cue: Queued; started: number; playing: boolean; ended?: boolean; visualStarted?: boolean; silent?: boolean; remove?: () => void }
 
 // Two independent lanes; running cues are never preempted by later cues.
-// Priorities select waiting cues only. Expiry and a bounded queue avoid stale bursts.
+// Table cues stay in authoritative order: an action precedes its resulting card reveals.
 export class AudioScheduler {
   private enabled = false;
   private queue: Queued[] = [];
@@ -31,8 +36,8 @@ export class AudioScheduler {
   private clock: () => number;
   constructor(port: AudioPort, clock: () => number = () => performance.now()) { this.port = port; this.clock = clock; }
   setEnabled(enabled: boolean) {
-    this.enabled = enabled;
     if (!enabled) this.cancel();
+    this.enabled = enabled;
   }
   private maxWait(sound: GameSound) {
     const profile = soundCatalog[sound];
@@ -52,28 +57,36 @@ export class AudioScheduler {
     this.cancel();
     this.enqueue([cue]);
   }
-  enqueue(cues: SoundCue[]) {
+  enqueue(cues: ScheduledCue[]) {
     for (const cue of cues) {
       if (this.seen.has(cue.id)) continue;
       this.seen.add(cue.id);
       if (this.seen.size > 512) this.seen.delete(this.seen.values().next().value!);
-      if (this.enabled && this.port.gain(cue.sound) > 0) this.queue.push({ ...cue, at: this.clock() });
+      if (cue.onStart || (this.enabled && this.port.gain(cue.sound) > 0)) this.queue.push({ ...cue, at: this.clock() });
     }
-    this.queue.sort((a, b) => soundCatalog[b.sound].priority - soundCatalog[a.sound].priority || a.at - b.at);
-    this.queue = this.queue.slice(0, 16);
+    for (const dropped of this.queue.slice(32)) dropped.onCancel?.();
+    this.queue = this.queue.slice(0, 32);
     this.tick();
   }
   tick() {
-    if (!this.enabled) return;
     const now = this.clock();
-    this.queue = this.queue.filter(cue => now - cue.at <= this.maxWait(cue.sound) && this.port.gain(cue.sound) > 0);
+    this.queue = this.queue.filter(cue => {
+      // Presentations may wait behind real actions; expired visuals settle silently.
+      const keep = now - cue.at <= (cue.onStart ? 8000 : this.maxWait(cue.sound))
+        && (!!cue.onStart || (this.enabled && this.port.gain(cue.sound) > 0));
+      if (!keep) cue.onCancel?.();
+      return keep;
+    });
     for (const lane of ['table', 'notice'] as const) {
       const current = this.running.get(lane);
+      if (current?.ended && now - current.started >= (current.cue.minDurationMs ?? 0)) this.finish(lane, current, false);
+      // Do not let an unavailable native seek stall the visual presentation.
+      if (current?.cue.onStart && !current.playing && now - current.started > 200) this.beginSilent(current);
       // A broken native completion callback must not block the lane indefinitely.
       if (current && now - current.started > ('maxPlayMs' in soundCatalog[current.cue.sound] ? (soundCatalog[current.cue.sound] as { maxPlayMs: number }).maxPlayMs : 5000)) { this.finish(lane, current, true); this.port.error(); }
       if (this.running.has(lane)) continue;
       const index = this.queue.findIndex(cue => soundCatalog[cue.sound].lane === lane
-        && !this.seeking.has(cue.sound) && this.ready(cue.sound));
+        && (!!cue.onStart || (!this.seeking.has(cue.sound) && this.ready(cue.sound))));
       if (index < 0) continue;
       const cue = this.queue[index];
       // An unavailable voice must not block ready effects behind it.
@@ -83,24 +96,39 @@ export class AudioScheduler {
       void this.start(lane, run);
     }
   }
+  private beginVisual(run: Run) {
+    if (!run.visualStarted) { run.visualStarted = true; run.cue.onStart?.(); }
+  }
+  private beginSilent(run: Run) {
+    run.silent = true; run.playing = true; run.ended = true; run.started = this.clock();
+    this.beginVisual(run);
+  }
   private async start(lane: Lane, run: Run) {
     const sound = run.cue.sound, player = this.port.player(sound);
+    if (run.cue.onStart && (!this.enabled || this.port.gain(sound) <= 0 || !this.ready(sound) || this.seeking.has(sound))) {
+      this.beginSilent(run); return;
+    }
     this.seeking.add(sound);
     try {
       player.pause();
       await player.seekTo(0);
-      if (!this.enabled || this.running.get(lane) !== run) return;
+      if (!this.enabled || this.running.get(lane) !== run || run.silent) return;
       const gain = this.port.gain(sound);
       player.volume = gain;
       // Android applies the native volume setter asynchronously; do not read it back.
-      if (gain <= 0 || this.clock() - run.cue.at > this.maxWait(sound)) { this.finish(lane, run, false); return; }
-      run.remove = this.port.onEnd(sound, () => { if (run.playing) this.finish(lane, run, false); }, () => {
+      if (gain <= 0 || this.clock() - run.cue.at > (run.cue.onStart ? 8000 : this.maxWait(sound))) { this.finish(lane, run, false); return; }
+      run.remove = this.port.onEnd(sound, () => {
+        if (!run.playing || this.running.get(lane) !== run) return;
+        run.ended = true;
+        if (this.clock() - run.started >= (run.cue.minDurationMs ?? 0)) this.finish(lane, run, false);
+      }, () => {
         if (this.running.get(lane) !== run) return;
         this.trace('error', sound); this.finish(lane, run, true); this.port.error();
       });
       run.playing = true;
       run.started = this.clock();
       player.play();
+      this.beginVisual(run);
       this.trace('play_requested', sound);
     } catch {
       if (this.running.get(lane) === run) { this.finish(lane, run, true); this.port.error(); }
@@ -111,6 +139,7 @@ export class AudioScheduler {
     this.trace(pause ? 'cancelled' : 'finished', run.cue.sound);
     this.running.delete(lane);
     run.remove?.();
+    if (pause || !run.visualStarted) run.cue.onCancel?.();
     if (pause) {
       // Native hook disposal can precede this hook's cleanup.
       try { this.port.player(run.cue.sound).pause(); } catch { /* Already released. */ }
@@ -120,6 +149,7 @@ export class AudioScheduler {
     for (const run of this.running.values()) this.port.player(run.cue.sound).volume = this.port.gain(run.cue.sound);
   }
   cancel() {
+    for (const cue of this.queue) cue.onCancel?.();
     this.queue = [];
     for (const [lane, run] of this.running) this.finish(lane, run, true);
     // Outstanding seeks retain their lock until settled, even after re-enable.

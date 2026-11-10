@@ -25,12 +25,12 @@ test('same event is played once, including re-enable and repeated snapshots',asy
   a.scheduler.setEnabled(false);a.scheduler.setEnabled(true);a.scheduler.enqueue([cue('call')]);await flush();
   assert.deepEqual(a.played,['call']);
 });
-test('new high priority cue never cuts a playing cue; waiting priority and separate notice lane apply',async()=>{
+test('new high priority cue never cuts a playing cue; FIFO table order and separate notice lane apply',async()=>{
   const a=setup();a.scheduler.enqueue([cue('deal')]);await flush();
   a.scheduler.enqueue([cue('check'),cue('potCollect'),cue('myTurn')]);await flush();
   assert.deepEqual(a.played,['deal','myTurn']);assert.equal(a.paused.filter(s=>s==='deal').length,1);
-  a.listeners.get('deal')!();a.scheduler.tick();await flush();assert.equal(a.played.at(-1),'potCollect');
-  a.listeners.get('potCollect')!();a.scheduler.tick();await flush();assert.equal(a.played.at(-1),'check');
+  a.listeners.get('deal')!();a.scheduler.tick();await flush();assert.equal(a.played.at(-1),'check');
+  a.listeners.get('check')!();a.scheduler.tick();await flush();assert.equal(a.played.at(-1),'potCollect');
 });
 test('mute/background/reconnect cancellation prevents pending seek from starting and serializes same voice',async()=>{
   const a=setup();let release!:()=>void;
@@ -51,8 +51,9 @@ test('stale completion cannot end a newer playback',async()=>{
 test('unloaded audio waits briefly, expired bursts drop and muted events are not replayed',async()=>{
   const a=setup();a.players.call.isLoaded=false;a.scheduler.enqueue([cue('call')]);await flush();assert.deepEqual(a.played,[]);
   a.players.call.isLoaded=true;a.advance(100);await flush();assert.deepEqual(a.played,['call']);
-  a.scheduler.enqueue([cue('check')]);a.advance(1600);a.listeners.get('call')!();a.scheduler.tick();await flush();assert.deepEqual(a.played,['call']);
-  a.scheduler.setEnabled(false);a.scheduler.enqueue([cue('raise')]);a.scheduler.setEnabled(true);a.scheduler.enqueue([cue('raise')]);await flush();assert.deepEqual(a.played,['call']);
+  a.scheduler.enqueue([cue('check')]);a.advance(1600);a.listeners.get('call')!();a.scheduler.tick();await flush();assert.deepEqual(a.played,['call','check']);
+  a.scheduler.setEnabled(false);a.scheduler.enqueue([cue('raise')]);a.scheduler.setEnabled(true);a.scheduler.enqueue([cue('raise')]);await flush();assert.deepEqual(a.played,['call','check']);
+  a.players.call.isLoaded=false;a.scheduler.enqueue([cue('call','expired')]);a.advance(5001);a.players.call.isLoaded=true;a.scheduler.tick();await flush();assert.deepEqual(a.played,['call','check']);
 });
 test('seek rejection releases lane and reports a safe error; no raw error is forwarded',async()=>{
   const a=setup();a.pending.set('call',()=>Promise.reject(new Error('PRIVATE_PATH')));
