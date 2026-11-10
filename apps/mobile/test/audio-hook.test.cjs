@@ -150,3 +150,26 @@ test('rapid alternating CHECK/CALL queue keeps each real action without extra ca
   initial[1]+=2;initial[2]+=2;assert.deepEqual(h.players.map(p=>p.plays),initial);
   h.dispose();
 });
+
+test('duplicate CHECK snapshots do not overlap and rapid distinct checks reuse the ended player',async()=>{
+  const h=harness();await h.flush();
+  const base={id:'checks',number:1,revision:0,street:'preflop',board:[],players:[],payouts:[],actorId:'b',legal:null};
+  h.setHand(base);await h.flush();h.players[0].finish();h.tick();await h.flush();
+  const first={...base,revision:1,audioAction:{revision:1,kind:'check'}};
+  h.setHand(first);await h.flush();const pauses=h.players[1].pauses;
+  h.setHand({...first});h.setHand({...base,revision:2,audioAction:{revision:2,kind:'check'}});await h.flush();
+  assert.equal(h.players[1].plays,1);assert.equal(h.players[1].pauses,pauses);
+  h.players[1].finish();h.tick();await h.flush();assert.equal(h.players[1].plays,2);
+  assert.equal(h.players[1].source,'../../assets/audio/check-user.wav');assert.equal(h.players[2].plays,0);
+  h.dispose();
+});
+
+test('rapid CHECK previews cancel stale seek without double-starting the same voice',async()=>{
+  const h=harness();await h.flush();h.audio.setPreviewMode(true);await h.flush();
+  let release;h.players[1].seek=()=>new Promise(r=>{release=r;});
+  h.audio.preview('check');h.audio.preview('check');await h.flush();assert.equal(h.players[1].plays,0);
+  h.players[1].seek=null;release();await h.flush();h.tick();await h.flush();
+  assert.equal(h.players[1].plays,1);assert.equal(h.players[1].source,'../../assets/audio/check-user.wav');
+  h.players[1].finish();h.audio.preview('check');await h.flush();assert.equal(h.players[1].plays,2);
+  h.dispose();
+});

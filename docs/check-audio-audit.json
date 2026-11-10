@@ -1,0 +1,51 @@
+{
+  "source": {
+    "sha256": "4984f6140167c869cc7ffd01561ae4b696353435028f4baf636016995f8a517e",
+    "seconds": 0.72,
+    "peakDbfs": -0.4473816363471364,
+    "rmsDbfs": -17.556132232503202,
+    "maxAdjacentStep": 0.02647632360458374,
+    "stepAtMs": 40.77097505668934,
+    "dc": 0.004152205995492756,
+    "clippedSamples": 0,
+    "truePeak4xDbfs": -0.4473102306270121,
+    "highpass4kRmsDbfs": -75.08969351638812,
+    "quietGapRmsDbfs": null,
+    "tailRmsDbfs": null
+  },
+  "before": {
+    "sha256": "e0ceda13122ff7adfe93df3796d5c956dfef7a7723925d271077cfbfae74f3c0",
+    "seconds": 0.72,
+    "peakDbfs": -2.9999878172428627,
+    "rmsDbfs": -17.671604222128284,
+    "maxAdjacentStep": 0.674713134765625,
+    "stepAtMs": 43.265306122448976,
+    "dc": 0.0003516902909167139,
+    "clippedSamples": 0,
+    "truePeak4xDbfs": -1.9528334922683424,
+    "highpass4kRmsDbfs": -47.860073752847626,
+    "quietGapRmsDbfs": null,
+    "tailRmsDbfs": null
+  },
+  "after": {
+    "sha256": "8dce4626095871335754c25640db72ee7245229dbb0b6e87f27c2125bb548498",
+    "seconds": 0.72,
+    "peakDbfs": -2.9999878172428627,
+    "rmsDbfs": -20.10875289935358,
+    "maxAdjacentStep": 0.019744873046875,
+    "stepAtMs": 40.77097505668934,
+    "dc": 0.0030948997414902016,
+    "clippedSamples": 0,
+    "truePeak4xDbfs": -2.999951252468978,
+    "highpass4kRmsDbfs": -77.87498537062442,
+    "quietGapRmsDbfs": null,
+    "tailRmsDbfs": null
+  },
+  "processing": {
+    "gainDb": -2.5526183636528637,
+    "limiter": false,
+    "sourceScaledMaxError": 0.0000152715680663551,
+    "format": "PCM16 mono 44100Hz",
+    "durationPreserved": true
+  }
+}
