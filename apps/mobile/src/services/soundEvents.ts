@@ -6,8 +6,10 @@ export type { GameSound } from './soundCatalog.ts';
 export class SoundEvents {
   private previous: HoldemView | null | undefined;
   private warned = '';
-  update(hand: HoldemView | null, playerId: string | null, connected: boolean, now: number): SoundCue[] {
-    if (!connected) { this.previous = undefined; this.warned = ''; return []; }
+  private completedHand = '';
+  private shuffledHand = '';
+  update(hand: HoldemView | null, playerId: string | null, connected: boolean, now: number, nextHandAt?: number | null): SoundCue[] {
+    if (!connected) { this.previous = undefined; this.warned = ''; this.completedHand = ''; this.shuffledHand = ''; return []; }
     const before = this.previous;
     if (before && hand && (hand.number < before.number || (hand.id === before.id && hand.revision < before.revision))) return [];
     this.previous = hand;
@@ -23,7 +25,7 @@ export class SoundEvents {
     } else if (hand.revision > before.revision) {
       // Optional metadata supports old servers without guessing actions from display text.
       const action = hand.audioAction;
-      if (action && action.revision > before.revision && action.revision <= hand.revision) emit(action.kind, action.revision);
+      if (action && action.revision > before.revision && action.revision <= hand.revision) emit(action.allIn ? 'allIn' : action.kind, action.revision);
       // Independent transitions: a street-ending call must not hide the card sound.
       if (hand.board.length > before.board.length) {
         if (before.board.length < 3 && hand.board.length >= 3) emit('flopReveal');
@@ -31,9 +33,15 @@ export class SoundEvents {
         if (before.board.length < 5 && hand.board.length >= 5) emit('riverReveal');
       }
       if (hand.street === 'complete' && before.street !== 'complete') {
+        this.completedHand = hand.id;
         emit('potCollect');
         if (hand.payouts.some(p => p.playerId === playerId && p.amount > 0)) emit('victory');
       }
+    }
+    if (hand.street === 'complete' && this.completedHand === hand.id && this.shuffledHand !== hand.id
+      && nextHandAt && nextHandAt - now <= 6500 && nextHandAt - now >= 6000) {
+      this.shuffledHand = hand.id;
+      emit('shuffle', 'between-hands');
     }
     const myTurn = hand.actorId === playerId && !!hand.legal;
     const turnKey = `${hand.id}:${hand.deadline}`;

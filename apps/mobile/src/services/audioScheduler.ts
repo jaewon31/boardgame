@@ -70,7 +70,7 @@ export class AudioScheduler {
     for (const lane of ['table', 'notice'] as const) {
       const current = this.running.get(lane);
       // A broken native completion callback must not block the lane indefinitely.
-      if (current && now - current.started > 5000) { this.finish(lane, current, true); this.port.error(); }
+      if (current && now - current.started > ('maxPlayMs' in soundCatalog[current.cue.sound] ? (soundCatalog[current.cue.sound] as { maxPlayMs: number }).maxPlayMs : 5000)) { this.finish(lane, current, true); this.port.error(); }
       if (this.running.has(lane)) continue;
       const index = this.queue.findIndex(cue => soundCatalog[cue.sound].lane === lane
         && !this.seeking.has(cue.sound) && this.ready(cue.sound));

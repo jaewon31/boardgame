@@ -83,7 +83,7 @@ test('batched background/foreground events do not leave playback disabled',async
 
 test('every preview resolves the expected independent player and asset, including replay after STATE_ENDED',async()=>{
   const h=harness();await h.flush();h.audio.setPreviewMode(true);await h.flush();
-  const mapping=[['deal','card-deal.wav'],['check','card.wav'],['call','chips-bet.wav'],['bet','chips-bet.wav'],['raise','chips-raise.wav'],['fold','cards-fold.wav'],['flopReveal','card-reveal.wav'],['turnReveal','card-reveal.wav'],['riverReveal','card-reveal.wav'],['potCollect','pot-collect.wav'],['victory','win.wav'],['myTurn','turn.wav'],['warning','warning.wav']];
+  const mapping=[['deal','deal-user.wav'],['check','check-user.wav'],['call','chips-bet.wav'],['bet','bet-user.wav'],['raise','raise-user.wav'],['fold','cards-fold.wav'],['flopReveal','deal-user.wav'],['turnReveal','deal-user.wav'],['riverReveal','deal-user.wav'],['potCollect','pot-collect.wav'],['victory','win.wav'],['myTurn','turn.wav'],['warning','warning.wav'],['shuffle','shuffle-user.wav'],['allIn','allin-user.wav']];
   for(let i=0;i<mapping.length;i++){
     const [sound,file]=mapping[i];assert.ok(h.players[i].source.endsWith('/'+file));
     h.audio.preview(sound);await h.flush();assert.equal(h.players[i].plays,1,sound);

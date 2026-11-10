@@ -96,3 +96,18 @@ test('asynchronous native volume setter must not cancel playback using its old g
   Object.defineProperty(a.players.call,'volume',{get:()=>0,set:value=>{written=value;}});
   a.scheduler.enqueue([cue('call')]);await flush();assert.ok(written>0);assert.deepEqual(a.played,['call']);
 });
+
+test('shuffle can finish beyond five seconds, but its missing callback remains bounded', async () => {
+  const a = setup();
+  a.scheduler.enqueue([cue('shuffle')]); await flush();
+  a.advance(5700); await flush();
+  assert.equal(a.errors, 0);
+  assert.ok(a.listeners.has('shuffle'));
+  a.listeners.get('shuffle')!();
+  a.scheduler.tick();
+  assert.equal(a.listeners.size, 0);
+  a.scheduler.enqueue([cue('shuffle', 'second')]); await flush();
+  a.advance(7501);
+  assert.equal(a.errors, 1);
+  assert.equal(a.listeners.size, 0);
+});

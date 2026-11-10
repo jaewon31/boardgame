@@ -35,7 +35,7 @@ function Screens() {
   const [friendsOpen,setFriendsOpen] = useState(false);
   useEffect(()=>setFriendsOpen(false),[account.user?.id]);
   useEffect(()=>{if(account.user)setAccountOpen(false);},[account.user?.id]);
-  const audio = useGameAudio(room.room?.holdem ?? null, room.playerId, room.status === 'connected');
+  const audio = useGameAudio(room.room?.holdem ?? null, room.playerId, room.status === 'connected', room.room?.nextHandAt);
   const [incoming,setIncoming] = useState<string | null>(null);
   const [invite,setInvite] = useState<{code:string} | undefined>();
   useEffect(() => {

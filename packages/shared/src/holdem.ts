@@ -31,7 +31,7 @@ export interface HandReviewEvent { street: HoldemView['street']; text: string; b
 export interface HandReview { netChips?: Record<string, number>; hand: HoldemView; events: HandReviewEvent[] }
 export interface HoldemView {
   /** Presentation-only public action metadata. No player identity or private cards. */
-  audioAction?: { revision: number; kind: 'check' | 'call' | 'bet' | 'raise' | 'fold' };
+  audioAction?: { allIn?: boolean; revision: number; kind: 'check' | 'call' | 'bet' | 'raise' | 'fold' };
   runout?: RunoutView | null;
   id: string;
   number: number;

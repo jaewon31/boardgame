@@ -174,7 +174,7 @@ export class HoldemHand {
     }
     this.recordReview(this.lastEvent);
     this.revision++;
-    this.audioAction = { revision: this.revision, kind: action === 'fold' || action === 'check' || action === 'call'
+    this.audioAction = { ...(p.stack === 0 && action !== 'fold' && action !== 'check' ? { allIn: true } : {}), revision: this.revision, kind: action === 'fold' || action === 'check' || action === 'call'
       ? action : p.roundBet <= previousBet ? 'call' : previousBet === 0 ? 'bet' : 'raise' };
     this.advance(index);
   }

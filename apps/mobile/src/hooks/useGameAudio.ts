@@ -7,24 +7,26 @@ import { SoundEvents } from '../services/soundEvents';
 import { AudioScheduler } from '../services/audioScheduler';
 import { defaultSoundGains, readSoundGains, type GameSound } from '../services/soundCatalog';
 
-export function useGameAudio(hand: HoldemView | null, playerId: string | null, connected: boolean) {
-  // Six CC0 Kenney assets; notification/check placeholders remain. See docs/audio-assets.md.
-  const deal = useAudioPlayer(require('../../assets/audio/card-deal.wav'));
-  const check = useAudioPlayer(require('../../assets/audio/card.wav'));
+export function useGameAudio(hand: HoldemView | null, playerId: string | null, connected: boolean, nextHandAt?: number | null) {
+  // User-provided replacements; other effects retain their original assets.
+  const deal = useAudioPlayer(require('../../assets/audio/deal-user.wav'));
+  const check = useAudioPlayer(require('../../assets/audio/check-user.wav'));
   const call = useAudioPlayer(require('../../assets/audio/chips-bet.wav'));
-  const bet = useAudioPlayer(require('../../assets/audio/chips-bet.wav'));
-  const raise = useAudioPlayer(require('../../assets/audio/chips-raise.wav'));
+  const bet = useAudioPlayer(require('../../assets/audio/bet-user.wav'));
+  const raise = useAudioPlayer(require('../../assets/audio/raise-user.wav'));
   const fold = useAudioPlayer(require('../../assets/audio/cards-fold.wav'));
-  const flopReveal = useAudioPlayer(require('../../assets/audio/card-reveal.wav'));
-  const turnReveal = useAudioPlayer(require('../../assets/audio/card-reveal.wav'));
-  const riverReveal = useAudioPlayer(require('../../assets/audio/card-reveal.wav'));
+  const flopReveal = useAudioPlayer(require('../../assets/audio/deal-user.wav'));
+  const turnReveal = useAudioPlayer(require('../../assets/audio/deal-user.wav'));
+  const riverReveal = useAudioPlayer(require('../../assets/audio/deal-user.wav'));
   const potCollect = useAudioPlayer(require('../../assets/audio/pot-collect.wav'));
   const victory = useAudioPlayer(require('../../assets/audio/win.wav'));
   // Historical filename turn.wav is exclusively the MY TURN notification.
   const myTurn = useAudioPlayer(require('../../assets/audio/turn.wav'));
   const warning = useAudioPlayer(require('../../assets/audio/warning.wav'));
-  const players = useMemo(() => ({ deal, check, call, bet, raise, fold, flopReveal, turnReveal, riverReveal, potCollect, victory, myTurn, warning }),
-    [deal, check, call, bet, raise, fold, flopReveal, turnReveal, riverReveal, potCollect, victory, myTurn, warning]);
+  const shuffle = useAudioPlayer(require('../../assets/audio/shuffle-user.wav'));
+  const allIn = useAudioPlayer(require('../../assets/audio/allin-user.wav'));
+  const players = useMemo(() => ({ deal, check, call, bet, raise, fold, flopReveal, turnReveal, riverReveal, potCollect, victory, myTurn, warning, shuffle, allIn }),
+    [deal, check, call, bet, raise, fold, flopReveal, turnReveal, riverReveal, potCollect, victory, myTurn, warning, shuffle, allIn]);
   const [level, setLevelState] = useState(0.5), [muted, setMutedState] = useState(false);
   const [gains, setGains] = useState({ ...defaultSoundGains });
   const [loaded, setLoaded] = useState(false), [ready, setReady] = useState(false);
@@ -97,9 +99,9 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
     if (!previewMode.current) scheduler.cancel();
   }, [scheduler, hand?.id, playerId]);
   useEffect(() => {
-    const cues = events.current.update(hand, playerId, connected && active, now);
+    const cues = events.current.update(hand, playerId, connected && active, now, nextHandAt);
     if (!previewMode.current) scheduler.enqueue(cues);
-  }, [scheduler, hand, playerId, connected, active, now]);
+  }, [scheduler, hand, playerId, connected, active, now, nextHandAt]);
   function setMuted(value: boolean) {
     gate.current.muted = value;
     if (value) scheduler.setEnabled(false);

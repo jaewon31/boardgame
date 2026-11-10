@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const root=path.resolve(__dirname,'../../..'),ts=require(require.resolve('typescript',{paths:[root]}));
-test('rendered preview buttons route all 13 named events and disable Android click sounds',()=>{
+test('rendered preview buttons route all 15 named events and disable Android click sounds',()=>{
  const {soundCatalog,defaultSoundGains}=require(path.join(root,'apps/mobile/src/services/soundCatalog.ts'));
  let open=false;const calls=[],modes=[],nodes=[];const jsx=(type,props)=>({type,props:props||{}});
  const exports={};const file=path.join(root,'apps/mobile/src/components/SoundSettings.tsx');
@@ -18,5 +18,5 @@ test('rendered preview buttons route all 13 named events and disable Android cli
   const button=nodes.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel===info.label+' 미리듣기');assert.ok(button,sound);
   assert.equal(button.props.android_disableSound,true);button.props.onPress();assert.equal(calls.at(-1),sound);
  }
- assert.equal(calls.length,13);nodes.find(n=>n.type==='Modal').props.onRequestClose();assert.equal(modes.at(-1),false);
+ assert.equal(calls.length,15);nodes.find(n=>n.type==='Modal').props.onRequestClose();assert.equal(modes.at(-1),false);
 });
