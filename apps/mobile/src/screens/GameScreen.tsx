@@ -60,17 +60,17 @@ export function GameScreen({ audio, room, playerId, connected, error, onLeave, o
       {size.width > 0 && size.height > 0 && <PokerTable presentation={audio.presentation} room={room} playerId={playerId} width={size.width} height={size.height} seconds={seconds} inBB={inBB} connected={connected} onReveal={onReveal} />}
     </View>
     <View style={styles.footer}>
-      <Pressable android_disableSound accessibilityRole="button" accessibilityLabel="게임 알림 자세히 보기" onPress={() => Alert.alert('게임 알림', error || hand.lastEvent)}><Text numberOfLines={1} style={error ? styles.error : styles.event}>{error || hand.lastEvent}</Text></Pressable>
+      {!!error && <Pressable android_disableSound accessibilityRole="button" accessibilityLabel="오류 자세히 보기" onPress={() => Alert.alert('게임 오류', error)}><Text accessibilityLiveRegion="polite" numberOfLines={2} style={styles.error}>{error}</Text></Pressable>}
       {legal ? <>
         <View style={styles.row}>
           <Pressable android_disableSound accessibilityRole="button" disabled={!connected} style={[styles.action, styles.foldAction, !connected && styles.disabled]} onPress={() => onAct('fold')}><Text style={styles.actionText}>폴드</Text></Pressable>
           <Pressable android_disableSound accessibilityRole="button" disabled={!connected} style={[styles.action, styles.callAction, !connected && styles.disabled]} onPress={() => onAct(legal.canCheck ? 'check' : 'call')}><Text style={styles.actionText}>{legal.canCheck ? '체크' : '콜'}</Text>{!legal.canCheck && <Text style={styles.actionAmount}>{chips(legal.callAmount)}</Text>}</Pressable>
-          <Pressable android_disableSound accessibilityRole="button" disabled={!connected || (!legal.canRaise && !legal.canAllIn)} style={[styles.action, styles.raiseAction, (!connected || (!legal.canRaise && !legal.canAllIn)) && styles.disabled]} onPress={() => setPanel('raise')}><Text style={styles.actionText}>베팅</Text><Text style={styles.actionAmount}>레이즈 / 올인</Text></Pressable>
+          <Pressable android_disableSound accessibilityRole="button" accessibilityLabel="레이즈 금액 선택" disabled={!connected || (!legal.canRaise && !legal.canAllIn)} style={[styles.action, styles.raiseAction, (!connected || (!legal.canRaise && !legal.canAllIn)) && styles.disabled]} onPress={() => setPanel('raise')}><Text style={[styles.actionText, styles.raiseText]}>레이즈</Text></Pressable>
         </View>
       </> : done ? <>
         <Text numberOfLines={1} style={styles.text}>{ended ? '칩이 남은 플레이어가 승리했어요.' : me?.stack === 0 ? '칩을 모두 잃었어요. 다음 판부터 관전합니다.' : hand.canReveal ? '내 패 공개는 선택 · 공개 버튼으로 친구에게 보여주세요.' : '칩이 남은 플레이어끼리 자동으로 계속해요.'}</Text>
         <View style={styles.row}><View style={styles.grow}><HandReviewButton room={room} /></View>{ended && room.hostId === playerId && <View style={styles.grow}><ActionButton compact title="새 경기 준비" disabled={!connected} onPress={() => Alert.alert('새 경기를 준비할까요?', `모두 ${(room.settings ?? DEFAULT_SETTINGS).startingChips.toLocaleString()}칩으로 대기실에 돌아갑니다. 오늘 기록은 유지됩니다.`, [{ text: '취소', style: 'cancel' }, { text: '준비', onPress: onReset }])} /></View>}</View>
-      </> : <Text style={styles.text}>{runout ? runout.phase === 'squeezing' ? '리버를 확인하는 중이에요. 잠시 기다려 주세요.' : '베팅이 끝났어요. 공용 카드를 순서대로 공개합니다.' : !me ? '입장 완료 · 칩이 있으면 다음 판부터 참여합니다.' : me.folded ? '폴드했어요. 다음 판은 자동으로 시작됩니다.' : '친구의 행동을 기다리는 중이에요.'}</Text>}
+      </> : null}
     </View>
     {runout?.phase === 'squeezing' && runout.playerId === playerId && runout.card && <RiverSqueeze key={hand.id} card={runout.card} deadline={runout.deadline} connected={connected} onReveal={() => onRevealRiver(hand.id)} />}
     <Modal visible={panel !== null} transparent animationType="fade" onRequestClose={() => setPanel(null)}>
@@ -79,11 +79,9 @@ export function GameScreen({ audio, room, playerId, connected, error, onLeave, o
           <View style={styles.row}><Text style={styles.title}>{panel === 'raise' ? '베팅 금액' : '이번 판 결과'}</Text><Pressable android_disableSound accessibilityRole="button" onPress={() => setPanel(null)} style={styles.link}><Text style={styles.gold}>닫기 ✕</Text></Pressable></View>
           {panel === 'raise' && legal && <>
             <View style={styles.row}>{bettingPresets(hand, me?.roundBet ?? 0).map(({ value, label }, i) => <Pressable android_disableSound key={i} accessibilityRole="button" accessibilityState={{ selected: amount === String(value) }} onPress={() => setAmount(String(value))} style={[styles.preset, amount === String(value) && styles.selected]}><Text style={styles.text}>{label}</Text><Text style={styles.gold}>{chips(value)}</Text></Pressable>)}</View>
-            <Text style={styles.text}>칩 단위 입력 · 최소 {legal.minRaiseTo} / 최대 {legal.maxRaiseTo}</Text>
-            <Text style={styles.text}>총 베팅 {chips(raiseTo || 0)} · 추가 {chips(Math.max(0, (raiseTo || 0) - (me?.roundBet ?? 0)))}</Text>
-            <TextInput accessibilityLabel="레이즈 총 금액" value={amount} onChangeText={setAmount} keyboardType="number-pad" maxLength={9} style={styles.input} />
-            <View style={styles.row}><View style={styles.grow}><ActionButton compact disabled={!connected || !legal.canAllIn} secondary title="올인" onPress={() => Alert.alert('올인할까요?', '남은 칩을 모두 베팅합니다.', [{ text: '취소', style: 'cancel' }, { text: '올인', onPress: () => { setPanel(null); onAct('allIn'); } }])} /></View><View style={styles.grow}>
-            <ActionButton compact title={`${chips(raiseTo || 0)}까지 레이즈`} onPress={() => { setPanel(null); onAct('raise', raiseTo); }} disabled={!connected || !legal.canRaise || !validRaise} /></View></View>
+            <TextInput accessibilityLabel="레이즈 총 금액" accessibilityHint={`칩 단위, 최소 ${legal.minRaiseTo}, 최대 ${legal.maxRaiseTo}`} value={amount} onChangeText={setAmount} keyboardType="number-pad" maxLength={9} style={styles.input} />
+            <Pressable android_disableSound accessibilityRole="button" disabled={!connected || !legal.canRaise || !validRaise} style={[styles.panelAction, styles.raiseAction, (!connected || !legal.canRaise || !validRaise) && styles.disabled]} onPress={() => { setPanel(null); onAct('raise', raiseTo); }}><Text style={[styles.actionText, styles.raiseText]}>레이즈</Text></Pressable>
+            <Pressable android_disableSound accessibilityRole="button" disabled={!connected || !legal.canAllIn} style={[styles.panelAction, styles.allInAction, (!connected || !legal.canAllIn) && styles.disabled]} onPress={() => Alert.alert('올인할까요?', '남은 칩을 모두 베팅합니다.', [{ text: '취소', style: 'cancel' }, { text: '올인', style: 'destructive', onPress: () => { setPanel(null); onAct('allIn'); } }])}><Text style={styles.allInText}>올인</Text></Pressable>
           </>}
           {panel === 'result' && <>
             {results.slice(page * 3, page * 3 + 3).map((line, i) => <Text key={i} style={styles.result}>{line}</Text>)}
@@ -95,12 +93,17 @@ export function GameScreen({ audio, room, playerId, connected, error, onLeave, o
   </View>;
 }
 const styles = StyleSheet.create({
-  action: { flex: 1, height: 54, borderRadius: 6, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FFFFFF18' }, foldAction: { backgroundColor: '#364047' }, callAction: { backgroundColor: '#226354' }, raiseAction: { backgroundColor: '#A53D39' }, actionText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' }, actionAmount: { color: '#FFFFFFCC', fontSize: 11, marginTop: 2 }, disabled: { opacity: .4 }, screen: { flex: 1, backgroundColor: '#0D171D' }, unit: { minHeight: 44, paddingHorizontal: 8, justifyContent: 'center' }, selected: { borderWidth: 1, borderColor: '#F4D57C', backgroundColor: '#455B45' }, header: { paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  meta: { color: '#D5BD7F', fontSize: 10 }, title: { color: '#FAF6E9', fontSize: 15, fontWeight: '800' }, link: { padding: 12, minHeight: 44, justifyContent: 'center' },
-  ribbon: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, backgroundColor: '#1A302D' }, gold: { color: '#F4D57C', fontSize: 13, fontWeight: '700' },
-  table: { flex: 1, minHeight: 0, marginHorizontal: 12, maxWidth: 560, width: 'auto' }, footer: { minHeight: 100, paddingHorizontal: 12, paddingVertical: 6, gap: 6, backgroundColor: '#172A2D' },
-  event: { color: '#D8E4DB', fontSize: 12, textAlign: 'center', minHeight: 18 }, error: { color: '#FFC09E', fontSize: 12 }, text: { color: '#B2C4B8', fontSize: 12 },
+  action: { flex: 1, height: 54, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  foldAction: { backgroundColor: '#172822' }, callAction: { backgroundColor: '#1C352C' }, raiseAction: { backgroundColor: '#D6FF94' },
+  actionText: { color: '#F3F7F2', fontSize: 15, fontWeight: '700' }, raiseText: { color: '#14251B' }, actionAmount: { color: '#BDD0C6', fontSize: 11, marginTop: 2 },
+  panelAction: { minHeight: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  allInAction: { marginTop: 14, backgroundColor: '#492324' }, allInText: { color: '#FF9C9C', fontSize: 15, fontWeight: '700' },
+  disabled: { opacity: .4 }, screen: { flex: 1, backgroundColor: '#07130F' }, unit: { minHeight: 44, paddingHorizontal: 8, justifyContent: 'center' }, selected: { backgroundColor: '#3C5946' }, header: { paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  meta: { color: '#9CB6A9', fontSize: 10 }, title: { color: '#F3F7F2', fontSize: 15, fontWeight: '700' }, link: { padding: 12, minHeight: 44, justifyContent: 'center' },
+  ribbon: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }, gold: { color: '#D6FF94', fontSize: 13, fontWeight: '700' },
+  table: { flex: 1, minHeight: 0, marginHorizontal: 12, maxWidth: 560, width: 'auto' }, footer: { minHeight: 72, paddingHorizontal: 12, paddingVertical: 9, gap: 8 },
+  error: { color: '#FFB4AA', fontSize: 12 }, text: { color: '#B2C4B8', fontSize: 12 },
   row: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'space-between' }, grow: { flex: 1 },
-  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000B', paddingHorizontal: 16 }, panel: { width: '100%', maxWidth: 480, backgroundColor: '#172A2D', padding: 12, borderRadius: 18, gap: 10 },
-  preset: { flex: 1, minHeight: 44, backgroundColor: '#34483E', borderRadius: 10, justifyContent: 'center', alignItems: 'center' }, input: { backgroundColor: '#101C18', color: '#FAF6E9', padding: 10, borderRadius: 8, fontSize: 18, minHeight: 44, borderColor: '#647565', borderWidth: 1 }, result: { color: '#E8DBB9', fontSize: 13, lineHeight: 20 },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000B', paddingHorizontal: 16 }, panel: { width: '100%', maxWidth: 480, backgroundColor: '#14271F', padding: 16, borderRadius: 22, gap: 10 },
+  preset: { flex: 1, minHeight: 44, backgroundColor: '#263D32', borderRadius: 10, justifyContent: 'center', alignItems: 'center' }, input: { backgroundColor: '#091B12', color: '#F3F7F2', padding: 12, borderRadius: 10, fontSize: 18, minHeight: 48 }, result: { color: '#DCE9DF', fontSize: 13, lineHeight: 20 },
 });
