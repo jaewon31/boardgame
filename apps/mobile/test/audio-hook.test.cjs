@@ -34,7 +34,7 @@ function harness(saved=null){
   const exports={};
   vm.runInNewContext(code,{exports,performance:{now:()=>time},Date,Promise,setInterval(fn){timers.add(fn);return fn;},clearInterval(fn){timers.delete(fn);},require(id){
     if(id==='react')return react;if(id==='react-native')return native;if(id==='expo-audio')return audio;
-    if(id==='expo-secure-store')return {getItemAsync:async()=>saved,setItemAsync:async(_key,value)=>{writes.push(JSON.parse(value));}};
+    if(id==='../services/settingsStorage')return {getItemAsync:async()=>saved,setItemAsync:async(_key,value)=>{writes.push(JSON.parse(value));}};
     if(id.endsWith('.wav'))return id;
     if(id.startsWith('../services/'))return require(path.join(root,'apps/mobile/src/services',id.split('/').at(-1)+'.ts'));
     throw Error(id);

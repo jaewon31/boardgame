@@ -38,9 +38,9 @@ export default function HomeScreen({ phase, notice, onDismissNotice, activeRoom,
     onEnter(mode === 'create' ? { type: 'create', nickname: name, game, settings } : { type: 'join', nickname: name, code: code.trim().toUpperCase() });
   }
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View onLayout={e => setAvailableHeight(e.nativeEvent.layout.height - insets.top - insets.bottom)} style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
-        {!tight && <View style={styles.header}><Text style={styles.brand}>FRIENDS TABLE</Text>{accountName&&<Pressable accessibilityRole="button" disabled={busy} onPress={onFriends} style={{minHeight:44,justifyContent:'center',paddingHorizontal:6}}><Text style={styles.badge}>친구</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy} onPress={onAccount} style={{minHeight:44,justifyContent:'center'}}><Text style={styles.badge}>{accountName ? '내 프로필' : '로그인'}</Text></Pressable></View>}
+    <KeyboardAvoidingView testID="web-page" style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View testID="web-page-content" onLayout={e => setAvailableHeight(e.nativeEvent.layout.height - insets.top - insets.bottom)} style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
+        {(Platform.OS === 'web' || !tight) && <View style={styles.header}><Text style={styles.brand}>FRIENDS TABLE</Text>{accountName&&<Pressable accessibilityRole="button" disabled={busy} onPress={onFriends} style={{minHeight:44,justifyContent:'center',paddingHorizontal:6}}><Text style={styles.badge}>친구</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy} onPress={onAccount} style={{minHeight:44,justifyContent:'center'}}><Text style={styles.badge}>{accountName ? '내 프로필' : '로그인'}</Text></Pressable></View>}
 
         {availableHeight >= 620 && <Text style={styles.title}>친구들 모이면,{ '\n' }여기가 테이블.</Text>}
         {availableHeight >= 780 && <View style={styles.hero}><Text style={styles.suits}>♠  ♥  ♣  ♦</Text><Text style={styles.heroCaption}>GOOD FRIENDS. GREAT HANDS.</Text></View>}

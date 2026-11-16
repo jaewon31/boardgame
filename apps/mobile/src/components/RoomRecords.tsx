@@ -1,6 +1,7 @@
 import { HandReviewButton } from './HandReview';
 import { useState } from 'react';
-import { Modal, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Share } from '../services/platformUI';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { LobbyRoom } from '@boardgame/shared';
 import { ActionButton } from './ActionButton';
@@ -21,7 +22,7 @@ export function RoomRecords({ room }: { room: LobbyRoom }) {
   return <>
     <Pressable accessibilityRole="button" onPress={()=>{setPage(0);setOpen(true);}} style={styles.trigger}><Text style={styles.gold}>초대·기록</Text></Pressable>
     <Modal visible={open} transparent animationType="fade" onRequestClose={()=>setOpen(false)}>
-      <View style={[styles.overlay,{paddingTop:insets.top+8,paddingBottom:insets.bottom+8}]}><View style={styles.panel}>
+      <View testID="web-modal-overlay" style={[styles.overlay,{paddingTop:insets.top+8,paddingBottom:insets.bottom+8}]}><View testID="web-modal-panel" style={styles.panel}>
         <View style={styles.row}><Text style={styles.title}>오늘 이 방 결과</Text><Pressable accessibilityRole="button" onPress={()=>setOpen(false)} style={styles.trigger}><Text style={styles.gold}>닫기 ✕</Text></Pressable></View>
         <Text style={styles.note}>{room.todayResults?.date ?? ''} · 한국 시간 · 완료된 판 기준</Text>
         {rows.length ? rows.slice(current*3,current*3+3).map((p,i)=><View key={p.playerId} style={styles.entry}><Text numberOfLines={1} style={styles.name}>{current*3+i+1}. {p.nickname}</Text><Text style={styles.gold}>{signed(p.netChips)}칩</Text><Text style={styles.note}>{p.hands}판 · {p.wins}승</Text></View>) : <Text style={styles.empty}>첫 판이 끝나면 기록이 쌓여요.</Text>}

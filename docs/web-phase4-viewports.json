@@ -1,0 +1,434 @@
+[
+  {
+    "width": 375,
+    "height": 667,
+    "table": {
+      "x": 12,
+      "y": 100,
+      "w": 351,
+      "h": 495,
+      "right": 363,
+      "bottom": 595
+    },
+    "hero": {
+      "x": 32,
+      "y": 482,
+      "w": 311,
+      "h": 111.59375,
+      "right": 343,
+      "bottom": 593.59375
+    },
+    "community": {
+      "x": 12,
+      "y": 241.5,
+      "w": 351,
+      "h": 111.59375,
+      "right": 363,
+      "bottom": 353.09375
+    },
+    "actions": {
+      "x": 12,
+      "y": 604,
+      "w": 351,
+      "h": 54,
+      "right": 363,
+      "bottom": 658
+    },
+    "seats": 5,
+    "buttons": [
+      {
+        "height": 54,
+        "width": 111.65625,
+        "bottom": 658
+      },
+      {
+        "height": 54,
+        "width": 111.671875,
+        "bottom": 658
+      },
+      {
+        "height": 54,
+        "width": 111.671875,
+        "bottom": 658
+      }
+    ]
+  },
+  {
+    "width": 390,
+    "height": 844,
+    "table": {
+      "x": 12,
+      "y": 100,
+      "w": 366,
+      "h": 672,
+      "right": 378,
+      "bottom": 772
+    },
+    "hero": {
+      "x": 32,
+      "y": 659,
+      "w": 326,
+      "h": 111.59375,
+      "right": 358,
+      "bottom": 770.59375
+    },
+    "community": {
+      "x": 12,
+      "y": 330,
+      "w": 366,
+      "h": 111.59375,
+      "right": 378,
+      "bottom": 441.59375
+    },
+    "actions": {
+      "x": 12,
+      "y": 781,
+      "w": 366,
+      "h": 54,
+      "right": 378,
+      "bottom": 835
+    },
+    "seats": 5,
+    "buttons": [
+      {
+        "height": 54,
+        "width": 116.65625,
+        "bottom": 835
+      },
+      {
+        "height": 54,
+        "width": 116.671875,
+        "bottom": 835
+      },
+      {
+        "height": 54,
+        "width": 116.671875,
+        "bottom": 835
+      }
+    ]
+  },
+  {
+    "width": 430,
+    "height": 932,
+    "table": {
+      "x": 12,
+      "y": 130,
+      "w": 406,
+      "h": 700,
+      "right": 418,
+      "bottom": 830
+    },
+    "hero": {
+      "x": 32,
+      "y": 717,
+      "w": 366,
+      "h": 111.59375,
+      "right": 398,
+      "bottom": 828.59375
+    },
+    "community": {
+      "x": 12,
+      "y": 374,
+      "w": 406,
+      "h": 111.59375,
+      "right": 418,
+      "bottom": 485.59375
+    },
+    "actions": {
+      "x": 12,
+      "y": 839,
+      "w": 406,
+      "h": 54,
+      "right": 418,
+      "bottom": 893
+    },
+    "seats": 5,
+    "buttons": [
+      {
+        "height": 54,
+        "width": 130,
+        "bottom": 893
+      },
+      {
+        "height": 54,
+        "width": 130,
+        "bottom": 893
+      },
+      {
+        "height": 54,
+        "width": 130,
+        "bottom": 893
+      }
+    ]
+  },
+  {
+    "width": 768,
+    "height": 1024,
+    "table": {
+      "x": 12,
+      "y": 176,
+      "w": 744,
+      "h": 700,
+      "right": 756,
+      "bottom": 876
+    },
+    "hero": {
+      "x": 32,
+      "y": 763,
+      "w": 704,
+      "h": 111.59375,
+      "right": 736,
+      "bottom": 874.59375
+    },
+    "community": {
+      "x": 12,
+      "y": 420,
+      "w": 744,
+      "h": 111.59375,
+      "right": 756,
+      "bottom": 531.59375
+    },
+    "actions": {
+      "x": 12,
+      "y": 885,
+      "w": 744,
+      "h": 54,
+      "right": 756,
+      "bottom": 939
+    },
+    "seats": 5,
+    "buttons": [
+      {
+        "height": 54,
+        "width": 242.65625,
+        "bottom": 939
+      },
+      {
+        "height": 54,
+        "width": 242.671875,
+        "bottom": 939
+      },
+      {
+        "height": 54,
+        "width": 242.671875,
+        "bottom": 939
+      }
+    ]
+  },
+  {
+    "width": 1366,
+    "height": 768,
+    "table": {
+      "x": 303,
+      "y": 100,
+      "w": 760,
+      "h": 596,
+      "right": 1063,
+      "bottom": 696
+    },
+    "hero": {
+      "x": 323,
+      "y": 583,
+      "w": 720,
+      "h": 111.59375,
+      "right": 1043,
+      "bottom": 694.59375
+    },
+    "community": {
+      "x": 303,
+      "y": 292,
+      "w": 760,
+      "h": 111.59375,
+      "right": 1063,
+      "bottom": 403.59375
+    },
+    "actions": {
+      "x": 245,
+      "y": 705,
+      "w": 876,
+      "h": 54,
+      "right": 1121,
+      "bottom": 759
+    },
+    "seats": 5,
+    "buttons": [
+      {
+        "height": 54,
+        "width": 286.65625,
+        "bottom": 759
+      },
+      {
+        "height": 54,
+        "width": 286.671875,
+        "bottom": 759
+      },
+      {
+        "height": 54,
+        "width": 286.671875,
+        "bottom": 759
+      }
+    ]
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "table": {
+      "x": 580,
+      "y": 204,
+      "w": 760,
+      "h": 700,
+      "right": 1340,
+      "bottom": 904
+    },
+    "hero": {
+      "x": 600,
+      "y": 791,
+      "w": 720,
+      "h": 111.59375,
+      "right": 1320,
+      "bottom": 902.59375
+    },
+    "community": {
+      "x": 580,
+      "y": 448,
+      "w": 760,
+      "h": 111.59375,
+      "right": 1340,
+      "bottom": 559.59375
+    },
+    "actions": {
+      "x": 522,
+      "y": 913,
+      "w": 876,
+      "h": 54,
+      "right": 1398,
+      "bottom": 967
+    },
+    "seats": 5,
+    "buttons": [
+      {
+        "height": 54,
+        "width": 286.65625,
+        "bottom": 967
+      },
+      {
+        "height": 54,
+        "width": 286.671875,
+        "bottom": 967
+      },
+      {
+        "height": 54,
+        "width": 286.671875,
+        "bottom": 967
+      }
+    ]
+  },
+  {
+    "width": 667,
+    "height": 375,
+    "table": {
+      "x": 8,
+      "y": 50,
+      "w": 475,
+      "h": 325,
+      "right": 483,
+      "bottom": 375
+    },
+    "hero": {
+      "x": 28,
+      "y": 262,
+      "w": 435,
+      "h": 97.59375,
+      "right": 463,
+      "bottom": 359.59375
+    },
+    "community": {
+      "x": 8,
+      "y": 150,
+      "w": 475,
+      "h": 84,
+      "right": 483,
+      "bottom": 234
+    },
+    "actions": {
+      "x": 499,
+      "y": 189,
+      "w": 160,
+      "h": 178,
+      "right": 659,
+      "bottom": 367
+    },
+    "seats": 5,
+    "buttons": [
+      {
+        "height": 54,
+        "width": 160,
+        "bottom": 243
+      },
+      {
+        "height": 54,
+        "width": 160,
+        "bottom": 305
+      },
+      {
+        "height": 54,
+        "width": 160,
+        "bottom": 367
+      }
+    ]
+  },
+  {
+    "width": 844,
+    "height": 390,
+    "table": {
+      "x": 8,
+      "y": 50,
+      "w": 652,
+      "h": 340,
+      "right": 660,
+      "bottom": 390
+    },
+    "hero": {
+      "x": 28,
+      "y": 277,
+      "w": 612,
+      "h": 97.59375,
+      "right": 640,
+      "bottom": 374.59375
+    },
+    "community": {
+      "x": 8,
+      "y": 150,
+      "w": 652,
+      "h": 84,
+      "right": 660,
+      "bottom": 234
+    },
+    "actions": {
+      "x": 676,
+      "y": 204,
+      "w": 160,
+      "h": 178,
+      "right": 836,
+      "bottom": 382
+    },
+    "seats": 5,
+    "buttons": [
+      {
+        "height": 54,
+        "width": 160,
+        "bottom": 258
+      },
+      {
+        "height": 54,
+        "width": 160,
+        "bottom": 320
+      },
+      {
+        "height": 54,
+        "width": 160,
+        "bottom": 382
+      }
+    ]
+  }
+]

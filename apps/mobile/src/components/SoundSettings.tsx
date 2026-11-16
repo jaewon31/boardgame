@@ -11,7 +11,7 @@ export function SoundSettings({audio}:{audio:GameAudio}) {
   return <>
     {button(audio.muted || audio.level===0?'소리 꺼짐':'소리',()=>changeOpen(true))}
     <Modal visible={open} transparent animationType="fade" onRequestClose={()=>changeOpen(false)}>
-      <View style={styles.overlay}><View style={styles.panel}>
+      <View testID="web-modal-overlay" style={styles.overlay}><View testID="web-modal-panel" style={styles.panel}>
         <Text style={styles.title}>게임 효과음</Text>
         <Text style={styles.text}>카드 · 칩 · 내 차례 · 시간 경고 · 승리</Text>
         {button(audio.muted?'음소거 해제':'음소거',()=>audio.setMuted(!audio.muted),audio.muted)}

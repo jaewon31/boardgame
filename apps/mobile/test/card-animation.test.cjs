@@ -5,7 +5,7 @@ const jsx=(type,props)=>({type,props:props||{}});
 test('rendered table gives all players identical hole motion and hides pending board faces',()=>{
  const {PokerTable}=compile('apps/mobile/src/components/PokerTable.tsx',id=>{
   if(id==='react/jsx-runtime')return {jsx,jsxs:jsx};
-  if(id==='react-native')return {View:'View',Text:'Text',Pressable:'Pressable',StyleSheet:{create:v=>v}};
+  if(id==='react-native')return {Platform:{OS:'android'},View:'View',Text:'Text',Pressable:'Pressable',StyleSheet:{create:v=>v}};
   if(id==='./WinnerGlow')return {WinnerGlow:'WinnerGlow'};
   if(id==='./PokerCards')return {PlayingCard:'PlayingCard'};
   if(id==='../services/betting')return {chipLabel:v=>String(v)};

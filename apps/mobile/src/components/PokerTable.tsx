@@ -1,7 +1,7 @@
 import type { CardPresentationState, CardMotion } from '../services/cardPresentation';
 import { WinnerGlow } from './WinnerGlow';
 import { chipLabel } from '../services/betting';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { HandPlayer, HoldemView, LobbyRoom } from '@boardgame/shared';
 import { PlayingCard } from './PokerCards';
 
@@ -11,7 +11,7 @@ function Seat({ player, hand, room, seconds, inBB, holeMotion, hideHole }: { hid
   const connected = room.players.some(p => p.id === player.id && p.connected);
   return <View style={[styles.seat, player.folded && styles.folded]}>
     {winner && <WinnerGlow key={hand.id} />}
-    <View style={styles.seatHead}><Text style={[styles.avatar, active && styles.active, winner && styles.winner]}>{player.nickname.slice(0, 1).toUpperCase()}</Text><View style={styles.seatInfo}><Text numberOfLines={1} style={styles.name}>{player.nickname}</Text><Text style={styles.stack}>{chipLabel(player.stack, hand.bigBlind, inBB)}</Text></View></View>
+    <View testID="web-seat-head" style={styles.seatHead}><Text style={[styles.avatar, active && styles.active, winner && styles.winner]}>{player.nickname.slice(0, 1).toUpperCase()}</Text><View style={styles.seatInfo}><Text testID="web-seat-name" accessibilityLabel={player.nickname} numberOfLines={1} style={styles.name}>{player.nickname}</Text><Text style={styles.stack}>{chipLabel(player.stack, hand.bigBlind, inBB)}</Text></View></View>
     <View style={styles.cards}>{[0, 1].map(i => <PlayingCard key={i} card={hideHole ? undefined : player.cards?.[i]} width={24} motion={holeMotion} />)}</View>
     <Text numberOfLines={1} style={[styles.seatStatus, winner && styles.winnerLabel]}>{winner ? '★ WINNER' : player.folded ? '폴드' : !connected ? '연결 끊김' : active ? `${seconds}초 · 생각 중` : player.allIn ? 'ALL IN' : '대기'}</Text>
     <View style={styles.badges}>{player.id === hand.dealerId && <Text style={styles.badge}>D</Text>}{player.id === hand.smallBlindId && <Text style={styles.badge}>SB</Text>}{player.id === hand.bigBlindId && <Text style={styles.badge}>BB</Text>}</View>
@@ -41,28 +41,29 @@ export function PokerTable({ room, playerId, seconds, inBB = false, connected, o
   // Preserve clockwise server seat order while rotating the local player to the bottom.
   const ordered = index >= 0 ? [...hand.players.slice(index + 1), ...hand.players.slice(0, index)] : hand.players;
   const slots = positions(ordered.length);
+  const landscape = Platform.OS === 'web' && height < 360 && width > 400;
   const heroHeight = me ? (hand.canReveal ? 140 : 116) : 0;
   const fieldHeight = height - heroHeight;
   const compact = fieldHeight < 290;
-  const seatWidth = width < 350 ? 76 : 86;
-  const cardWidth = Math.max(19, Math.min(44, (width - 54) / 5));
+  const seatWidth = Platform.OS === 'web' ? Math.min(112, Math.floor(width / 3) - 8) : width < 350 ? 76 : 86;
+  const cardWidth = Math.max(19, Math.min(landscape ? 30 : 44, (width - 54) / 5));
   return <View style={[styles.arena, { height, width }]}>
     <View style={[styles.rail, { bottom: heroHeight + 10, top: 30 }]}><View style={styles.felt}><View style={styles.innerLine} /><Text style={[styles.feltBrand, compact && { opacity: 0 }]}>TEXAS HOLD’EM</Text></View></View>
     {ordered.map((p, i) => {
       // A spectator can see six seats; use the bottom seat for the sixth participant.
       const [x, y] = slots[i] ?? [.5, 1];
-      return <View key={p.id} style={[styles.position, { width: seatWidth, left: x * (width - seatWidth), top: 6 + y * Math.max(0, fieldHeight - 100) }]}><Seat player={p} hand={hand} room={room} seconds={seconds} inBB={inBB} holeMotion={visual?.hole} hideHole={visual?.holePending} />{p.roundBet > 0 && <Text numberOfLines={1} style={styles.betChip}>● {chipLabel(p.roundBet, hand.bigBlind, inBB)}</Text>}</View>;
+      return <View key={p.id} testID="web-seat" accessibilityLabel={`${p.nickname} 자리`} style={[styles.position, { width: seatWidth, left: x * (width - seatWidth), top: 6 + y * Math.max(0, fieldHeight - 100) }]}><Seat player={p} hand={hand} room={room} seconds={seconds} inBB={inBB} holeMotion={visual?.hole} hideHole={visual?.holePending} />{p.roundBet > 0 && <Text numberOfLines={1} style={styles.betChip}>● {chipLabel(p.roundBet, hand.bigBlind, inBB)}</Text>}</View>;
     })}
-    <View style={[styles.community, { top: Math.max(100, (fieldHeight - 96) / 2), gap: compact ? 1 : 5 }]}>
+    <View testID="web-community" style={[styles.community, { top: landscape ? 100 : Math.max(100, (fieldHeight - 96) / 2), gap: compact ? 1 : 5 }]}>
 
       <Text style={styles.pot}>POT  {chipLabel(hand.pot, hand.bigBlind, inBB)}</Text>
       <View style={styles.board}>{Array.from({ length: 5 }, (_, i) => <PlayingCard key={`${hand.id}-${i}`} card={i < (visual?.boardCount ?? hand.board.length) ? hand.board[i] : undefined} width={cardWidth} motion={visual?.board[i]} />)}</View>
       <Text accessibilityLiveRegion="polite" numberOfLines={2} style={winners.length ? styles.winnerSummary : styles.blinds}>{winners.length ? `★ ${winnerNames} 승리` : `BLINDS ${hand.smallBlind} / ${hand.bigBlind}`}</Text>
     </View>
-    {me && <View style={[styles.hero, { top: fieldHeight + 3 }]}>
+    {me && <View testID="web-hero" style={[styles.hero, { top: fieldHeight + 3 }]}>
       {myWin && <WinnerGlow key={hand.id} />}
       <View style={styles.heroHeader}><Text style={styles.heroName}>{me.nickname} <Text style={myWin ? styles.heroWinLabel : styles.you}>{myWin ? '★ WINNER' : 'YOU'}</Text> {me.id === hand.dealerId ? 'Ⓓ' : ''}</Text><Text style={styles.heroStack}>{chipLabel(me.stack, hand.bigBlind, inBB)}</Text></View>
-      {<View style={styles.heroCards}>{[0, 1].map(i => <View key={i} style={{ transform: [{ rotate: i === 0 ? '-7deg' : '7deg' }] }}><PlayingCard card={visual?.holePending ? undefined : me.cards?.[i]} width={44} motion={visual?.hole} /></View>)}</View>}
+      {<View style={styles.heroCards}>{[0, 1].map(i => <View key={i} style={{ transform: [{ rotate: i === 0 ? '-7deg' : '7deg' }] }}><PlayingCard card={visual?.holePending ? undefined : me.cards?.[i]} width={landscape ? 34 : 44} motion={visual?.hole} /></View>)}</View>}
       {hand.canReveal && <Pressable accessibilityRole="button" disabled={!connected} onPress={() => onReveal(hand.id)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={styles.heroStatus}>내 패 모두에게 공개</Text></Pressable>}
       {!hand.canReveal && <Text style={[styles.heroStatus, myWin && styles.gold]}>{myWin ? `지급 ${chipLabel(myWin.amount, hand.bigBlind, inBB)} · ${myWin.handName}` : me.folded ? '이번 판 폴드' : hand.street === 'complete' ? me.revealed ? '모두에게 공개된 패' : '나만 볼 수 있는 패' : `${hand.actorId === me.id ? `내 차례 · ${seconds}초` : '나만 볼 수 있는 패'}  ·  베팅 ${chipLabel(me.roundBet, hand.bigBlind, inBB)}`}</Text>}
     </View>}

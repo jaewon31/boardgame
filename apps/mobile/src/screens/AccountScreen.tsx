@@ -12,7 +12,7 @@ export function AccountScreen({account,onClose,setup=false}:{account:Account;onC
   const clean=name.trim().normalize('NFC');
   const validName=[...clean].length>=1&&[...clean].length<=12&&!/[\p{Cc}\p{Cf}]/u.test(clean);
   async function save(){if(await account.saveName(name))onClose();}
-  return <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS==='ios'?'padding':'height'}>
+  return <KeyboardAvoidingView testID="web-page" style={styles.screen} behavior={Platform.OS==='ios'?'padding':'height'}>
     <ScrollView contentContainerStyle={[styles.content,{paddingTop:insets.top+16,paddingBottom:insets.bottom+24}]} keyboardShouldPersistTaps="handled">
       <View style={styles.top}><Text style={styles.brand}>FRIENDS TABLE</Text>{ready&&!setup&&<Pressable accessibilityRole="button" disabled={account.busy} onPress={onClose} style={styles.close}><Text style={styles.note}>닫기</Text></Pressable>}</View>
       <View style={styles.body}>
@@ -23,7 +23,7 @@ export function AccountScreen({account,onClose,setup=false}:{account:Account;onC
           <ActionButton title={setup?'시작하기':'저장하고 돌아가기'} busy={account.busy} disabled={!validName} onPress={()=>void save()}/>
           {!setup&&<View style={styles.codeBox}><Text style={styles.note}>내 친구 코드</Text><Text selectable style={styles.friendCode}>{account.profile!.friend_code}</Text></View>}
         </>:<ActionButton title="다시 시도" onPress={account.reloadProfile}/>}
-        {(account.user?.is_anonymous||!account.user)&&<Text style={styles.note}>이 계정은 현재 기기에 저장돼요. 앱 삭제, 앱 데이터 초기화 또는 기기 변경 시 계정과 친구 목록, 경기 기록을 복구하지 못할 수 있어요. 계정 연결 기능은 추후 제공 예정이에요.</Text>}
+        {(account.user?.is_anonymous||!account.user)&&<Text style={styles.note}>{Platform.OS==='web' ? '이 계정은 현재 브라우저에 저장돼요. 브라우저 데이터 삭제, 시크릿 창 종료 또는 다른 브라우저·기기 사용 시 계정과 친구 목록, 경기 기록을 복구하지 못할 수 있어요. 계정 연결 기능은 추후 제공 예정이에요.' : '이 계정은 현재 기기에 저장돼요. 앱 삭제, 앱 데이터 초기화 또는 기기 변경 시 계정과 친구 목록, 경기 기록을 복구하지 못할 수 있어요. 계정 연결 기능은 추후 제공 예정이에요.'}</Text>}
         {!!account.message&&<Text accessibilityRole="alert" style={styles.message}>{account.message}</Text>}
       </View>
     </ScrollView>

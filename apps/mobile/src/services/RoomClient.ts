@@ -2,6 +2,7 @@ import { safeCloseReason, logRecord, validConnectionId, transportFailure } from 
 import type { RoomSettings, ClientMessage, PokerAction, EntryRequest, LobbyRoom, ServerMessage } from '@boardgame/shared';
 
 export interface RoomState {
+  checked?: boolean;
   status: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error';
   room: LobbyRoom | null;
   playerId: string | null;
@@ -44,6 +45,15 @@ export class RoomClient {
     return { type: 'currentRoom', previousCode: this.state.room?.code ?? this.session?.code };
   }
   clearNotice() { this.update({ notice: undefined }); }
+  // Web resume must obtain a fresh, per-player snapshot even if a suspended
+  // socket still reports OPEN. Do not reclaim a seat replaced in another tab.
+  resynchronize() {
+    if(this.disposed || this.replaced || this.leaving || this.state.status==='connecting' || this.state.status==='reconnecting')return;
+    if(this.state.status==='connected'&&this.accessToken) {
+      this.update({status:'connecting',error:null});
+      this.connect(this.currentRoomRequest());
+    } else this.refresh(true);
+  }
   private leaving = false;
   private leaveTimer: ReturnType<typeof setTimeout> | undefined;
   private settingsPending: { requestId: string; resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } | undefined;
@@ -261,9 +271,9 @@ export class RoomClient {
         const notice = message.reason ?? (this.state.room || this.session ? 'membership-ended' : undefined);
         this.remember(null);
         if (entry) { const next = entry; entry = undefined; this.send(socket, next); }
-        else { this.disconnect('no_room'); this.update({ ...emptyState, notice }); }
+        else { this.disconnect('no_room'); this.update({ ...emptyState, checked:true, notice }); }
       } else if (message.type === 'left') {
-        this.disconnect('left'); this.remember(null); this.retryUntil = 0; this.update({ ...emptyState, notice: undefined });
+        this.disconnect('left'); this.remember(null); this.retryUntil = 0; this.update({ ...emptyState, checked:true, notice: undefined });
       } else if (message.type === 'settingsUpdated' && joined) {
         const pending = this.settingsPending;
         if (!pending || (message.requestId !== pending.requestId)) return;
@@ -290,7 +300,7 @@ export class RoomClient {
         }, this.timing.heartbeatMs);
         this.retryUntil = 0;
         this.remember({ code: message.room.code, token: message.token });
-        this.update({ status: 'connected', room: message.room, playerId: message.playerId, error: null, notice: undefined });
+        this.update({ status: 'connected', checked:true, room: message.room, playerId: message.playerId, error: null, notice: undefined });
       } else if (message.type === 'room' && joined) {
         if ((message.room.settingsRevision ?? 0) < (this.state.room?.settingsRevision ?? 0)) return;
         this.update({ room: message.room });

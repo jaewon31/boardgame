@@ -18,4 +18,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test --workspace=@boardgame/mobile
       - run: npm run export:mobile
+      - run: npm run export:web --workspace=@boardgame/mobile
+      - run: node scripts/check-web-release.cjs apps/mobile/dist
+      - run: node -e "require('./scripts/build-pages.cjs').checkPages('apps/mobile/dist')"

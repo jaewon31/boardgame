@@ -2,7 +2,7 @@ import { logRecord } from '@boardgame/shared';
 import { CryptoDigestAlgorithm, digestStringAsync } from 'expo-crypto';
 import { authClient } from '../services/authClient';
 import { createSessionStore } from '../services/sessionStore';
-import { AppState } from 'react-native';
+import { watchRoomLifecycle } from '../services/roomLifecycle';
 import { useEffect, useRef, useState } from 'react';
 import type { RoomSettings, EntryRequest, PokerAction } from '@boardgame/shared';
 import { RoomClient, emptyState, type RoomState } from '../services/RoomClient';
@@ -30,10 +30,9 @@ export function useRoom(accountId: string | null) {
       return session.access_token;
     };
     client.current = { accountId, connection };
-    connection.recordAppState(AppState.currentState);
+    const stopLifecycle=watchRoomLifecycle(connection);
     void connection.restore();
-    const subscription = AppState.addEventListener('change', state => { connection.recordAppState(state); if (state === 'active') connection.refresh(true); });
-    return () => { active = false; subscription.remove(); connection.dispose(); client.current = null; };
+    return () => { active = false; stopLifecycle(); connection.dispose(); client.current = null; };
   }, [accountId]);
   // Mask old account data synchronously, before the new effect has run.
   const state = roomStateForAccount(accountId, snapshot);

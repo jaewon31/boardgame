@@ -1,0 +1,33 @@
+{
+  "checkedAt": "2026-11-15T14:41:19.789Z",
+  "health": {
+    "status": 200,
+    "allowsOrigin": false,
+    "cacheControl": null
+  },
+  "healthUnlistedOrigin": {
+    "status": 200,
+    "allowsOrigin": false,
+    "cacheControl": null
+  },
+  "preflight": {
+    "status": 404,
+    "allowsOrigin": false,
+    "cacheControl": "no-store"
+  },
+  "unauthenticatedStats": {
+    "status": 401,
+    "allowsOrigin": false,
+    "cacheControl": "no-store"
+  },
+  "nativeUnauthenticatedCurrentRoom": {
+    "upgraded": true,
+    "type": "error",
+    "code": "AUTH_REQUIRED"
+  },
+  "unlistedOriginUnauthenticatedCurrentRoom": {
+    "upgraded": true,
+    "type": "error",
+    "code": "AUTH_REQUIRED"
+  }
+}

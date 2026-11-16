@@ -5,10 +5,11 @@ import type { SavedReview } from './holdem/review.ts';
 import { DEFAULT_SETTINGS, validRoomSettings, safeCloseReason, logRecord } from '@boardgame/shared';
 import type { RoomSettings, DailyResult } from '@boardgame/shared';
 import { clientIp } from './network.ts';
+import { allowedOrigin } from './origins.ts';
 import type { StateStore } from './stateStore.ts';
 import { HoldemHand } from './holdem/hand.ts';
 import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
-import type { Server } from 'node:http';
+import type { Server, IncomingMessage } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { ClientMessage, ErrorCode, GameId, LobbyRoom, ServerMessage } from '@boardgame/shared';
 
@@ -70,6 +71,7 @@ export interface ConnectionDiagnostic {
   connections?: number; connectionsForIp?: number; durationMs?: number; ownsMembership?: boolean;
 }
 interface LobbyOptions {
+  allowedOrigins?: readonly string[];
   diagnostic?: (entry: ConnectionDiagnostic) => void;
   recordHand?: (id:string,players:AccountResult[])=>void;
   authorize?: (token:string)=>Promise<string|{accountId:string;sessionId:string}|null>;
@@ -139,7 +141,9 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
   const rooms = new Map<string, Room>();
   const connectionsByIp = new Map<string, number>();
   const seatRetentionMs = options.seatRetentionMs ?? options.reconnectMs ?? 300_000;
-  const wss = new WebSocketServer({ server, path: '/lobby', maxPayload: 12288, perMessageDeflate: false });
+  const wss = new WebSocketServer({ server, path: '/lobby', maxPayload: 12288, perMessageDeflate: false,
+    verifyClient: (info: {req:IncomingMessage}) => allowedOrigin(info.req.headers.origin, options.allowedOrigins ?? []),
+  });
   const alive = new WeakSet<WebSocket>();
   let stopping = false;
   const serverId = randomUUID();

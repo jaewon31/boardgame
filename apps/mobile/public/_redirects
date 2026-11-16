@@ -1,0 +1,2 @@
+# Only invite URLs are SPA routes. Do not rewrite missing assets into index.html.
+/join/* /index.html 200

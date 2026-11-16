@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
-import * as SecureStore from 'expo-secure-store';
+import * as settingsStorage from '../services/settingsStorage';
 import type { HoldemView } from '@boardgame/shared';
 import { SoundEvents } from '../services/soundEvents';
 import { CardPresentation } from '../services/cardPresentation';
@@ -60,7 +60,7 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
   }, () => performance.now()), [players]);
   useEffect(() => {
     let live = true;
-    void SecureStore.getItemAsync('table-audio').then(raw => {
+    void settingsStorage.getItemAsync('table-audio').then(raw => {
       if (!live || !raw) return;
       const value = JSON.parse(raw);
       if (typeof value.level === 'number' && value.level >= 0 && value.level <= 1) setLevelState(value.level);
@@ -90,7 +90,7 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
     if (!loaded) return;
     let live = true;
     const raw = JSON.stringify({ level, muted, gains });
-    writes.current = writes.current.then(() => SecureStore.setItemAsync('table-audio', raw))
+    writes.current = writes.current.then(() => settingsStorage.setItemAsync('table-audio', raw))
       .catch(() => { if (live) setError('소리 설정을 저장하지 못했어요.'); });
     return () => { live = false; };
   }, [level, muted, gains, loaded]);

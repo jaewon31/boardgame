@@ -1,0 +1,12 @@
+# Optional local example. Do not run `up` against a public host before approval.
+# Paths resolve relative to the first Compose file (repository-root compose.yaml).
+services:
+  server:
+    environment:
+      WEB_ALLOWED_ORIGINS: ${WEB_ALLOWED_ORIGINS:?Set exact HTTPS browser origins}
+  proxy:
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN:?Set a web DNS name distinct from GAME_DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile.web.example:/etc/caddy/Caddyfile:ro
+      - ./apps/mobile/dist-web:/srv/web:ro

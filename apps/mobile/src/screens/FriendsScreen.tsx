@@ -1,6 +1,7 @@
 import { FriendStatsScreen } from './FriendStatsScreen';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, Share, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Alert, Share } from '../services/platformUI';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Profile } from '../hooks/useAccount';
 import { useFriends } from '../hooks/useFriends';
@@ -15,7 +16,7 @@ export function FriendsScreen({profile,onClose}:{profile:Profile;onClose:()=>voi
  function remove(id:string,name:string){Alert.alert(tab==='outgoing'?'요청을 취소할까요?':'친구를 삭제할까요?',name,[{text:'유지',style:'cancel'},{text:tab==='outgoing'?'취소하기':'삭제',style:'destructive',onPress:()=>void state.remove(id)}]);}
  async function share(){setShareError('');try{await Share.share({message:`Friends Table에서 친구가 되어 주세요.\n내 친구 코드: ${profile.friend_code}`});}catch{setShareError('공유 창을 열지 못했어요.');}}
  if(selected)return <FriendStatsScreen friendId={selected.id} name={selected.name} onClose={()=>setSelected(null)}/>;
- return <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS==='ios'?'padding':'height'}><View style={[styles.content,{paddingTop:insets.top+8,paddingBottom:insets.bottom+8}]}>
+ return <KeyboardAvoidingView testID="web-page" style={styles.screen} behavior={Platform.OS==='ios'?'padding':'height'}><View testID="web-page-content" style={[styles.content,{paddingTop:insets.top+8,paddingBottom:insets.bottom+8}]}>
    <View style={styles.row}><Pressable accessibilityRole="button" onPress={()=>adding?setAdding(false):onClose()} style={styles.link}><Text style={styles.text}>‹ 뒤로</Text></Pressable><Text style={styles.title}>{adding?'친구 추가':'내 친구'}</Text><Pressable accessibilityRole="button" disabled={state.busy} onPress={()=>setAdding(!adding)} style={styles.link}><Text style={styles.gold}>{adding?'목록':'＋ 추가'}</Text></Pressable></View>
    <View style={styles.myCode}><View><Text style={styles.note}>내 친구 코드</Text><Text selectable style={styles.code}>{profile.friend_code}</Text></View><ActionButton compact secondary title="공유" onPress={()=>void share()}/></View>
    {adding?<View style={styles.add}>

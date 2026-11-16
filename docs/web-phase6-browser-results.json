@@ -1,0 +1,10 @@
+{
+  "productionBundleRendered": true,
+  "invitePathServed": true,
+  "missingAssetStatus": 404,
+  "manifestErrors": 0,
+  "blockedSupabaseRequests": 1,
+  "pageErrors": 0,
+  "liveAuthTested": false,
+  "cloudflareEdgeTested": false
+}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
-import { authClient, accountStorage } from '../services/authClient';
+import { authClient, accountStorage, prepareAccountStorage } from '../services/authClient';
 import { ensureAccountSession } from '../services/anonymousSession';
 import { logAuthFailure } from '../services/authErrors';
 export interface Profile {id:string;display_name:string;friend_code:string;nickname_setup_complete:boolean}
@@ -33,7 +33,7 @@ export function useAccount() {
       setSession(next);
       if(!next){setSessionBlocked(true);setProfile(null);setMessage('저장된 계정에 접속할 수 없어요. 연결 상태를 확인하고 다시 시도해 주세요.');}
     });
-    void ensureAccountSession(client.auth,accountStorage).then(next=>{
+    void prepareAccountStorage().then(()=>ensureAccountSession(client.auth,accountStorage)).then(next=>{
       if(!stopped)setSession(next);
     }).catch(error=>{
       if(!stopped)setMessage(logAuthFailure('restore_or_create_account',error,__DEV__));

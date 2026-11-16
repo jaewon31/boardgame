@@ -2,7 +2,8 @@ import { DEFAULT_SETTINGS, type RoomSettings } from '@boardgame/shared';
 import { RoomSettingsEditor, settingsLabel } from '../components/RoomSettingsEditor';
 import { RoomRecords } from '../components/RoomRecords';
 import { shareInvite } from '../services/shareInvite';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { copyText } from '../services/platformUI';
 import type { LobbyRoom } from '@boardgame/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton } from '../components/ActionButton';
@@ -31,7 +32,7 @@ export function LobbyScreen({ room, playerId, connected, error, onHome, onRetry,
     catch { setShareError('공유 창을 열지 못했어요. 초대 코드를 직접 전달해 주세요.'); }
   }
   return (
-    <View style={[styles.screen, styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
+    <View testID="web-lobby" style={[styles.screen, styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
       <View style={styles.header}><Text style={styles.brand}>FRIENDS TABLE</Text><RoomRecords room={room} /><Text style={styles.status}>{connected ? '● 연결됨' : '○ 연결 확인 중'}</Text></View>
       <Text style={styles.eyebrow}>{room.game === 'holdem' ? '텍사스 홀덤' : '섯다'} · 비공개 대기실</Text>
       {height > 740 && <Text style={styles.title}>친구들을 기다리는 중</Text>}
@@ -40,6 +41,7 @@ export function LobbyScreen({ room, playerId, connected, error, onHome, onRetry,
         <Text style={styles.label}>우리 방 초대 코드</Text>
         <Text selectable accessibilityLabel={`초대 코드 ${room.code}`} style={styles.code}>{room.code}</Text>
         <ActionButton compact title="초대 링크 공유" onPress={share} disabled={!connected} />
+        {Platform.OS==='web'&&<ActionButton compact secondary title="방 코드 복사" onPress={()=>void copyText(room.code)} />}
         {shareError && <Text accessibilityRole="alert" style={styles.error}>{shareError}</Text>}
       </View>
       {!connected && <ActionButton compact secondary title="연결 재시도" onPress={onRetry} />}

@@ -1,0 +1,14 @@
+{
+  "manifestParseErrors": 0,
+  "standaloneConfigured": true,
+  "serviceWorkerRegistrations": 0,
+  "secureWebSockets": true,
+  "anonymousUsers": 2,
+  "inviteJoin": true,
+  "callCheckFlop": true,
+  "reloadSameHandCardsChipsTurn": true,
+  "closedTabReopen": true,
+  "pageErrors": 0,
+  "certificate": "local self-signed, QA context exception only",
+  "realDeviceInstall": false
+}

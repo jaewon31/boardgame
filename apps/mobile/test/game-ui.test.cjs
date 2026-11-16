@@ -33,6 +33,7 @@ function harness({ legal = {}, connected = true, error = null } = {}) {
     react: { useEffect() {}, useState(initial) { const i = cursor++; if (!(i in states)) states[i] = initial;
       return [states[i], value => { states[i] = typeof value === 'function' ? value(states[i]) : value; }]; } },
     'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
+    '../services/platformUI': {Alert:native.Alert},
     '@boardgame/shared': { DEFAULT_SETTINGS: { startingChips: 1000 } }, '../services/betting': betting,
     '../components/SoundSettings': { SoundSettings: 'SoundSettings' }, '../components/HandReview': { HandReviewButton: 'HandReviewButton' },
     '../components/RoomRecords': { RoomRecords: 'RoomRecords' }, '../components/RiverSqueeze': { RiverSqueeze: 'RiverSqueeze' },
@@ -117,7 +118,7 @@ test('fold, call and check keep their original actions', () => {
 
 test('pot stays above the board and player/bet/winner labels have no enclosing background', () => {
   const { PokerTable } = compile('apps/mobile/src/components/PokerTable.tsx', {
-    'react-native': { View: 'View', Text: 'Text', Pressable: 'Pressable', StyleSheet: { create: x => x } },
+    'react-native': { Platform: { OS: 'android' }, View: 'View', Text: 'Text', Pressable: 'Pressable', StyleSheet: { create: x => x } },
     './WinnerGlow': { WinnerGlow: 'WinnerGlow' }, './PokerCards': { PlayingCard: 'PlayingCard' },
     '../services/betting': betting,
   });

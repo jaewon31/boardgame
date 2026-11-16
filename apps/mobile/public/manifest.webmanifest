@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "Friends Table",
+  "short_name": "Friends Table",
+  "description": "친구와 비공개 방에서 즐기는 온라인 홀덤",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#101C18",
+  "background_color": "#101C18",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

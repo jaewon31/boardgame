@@ -19,7 +19,7 @@ export function HandReviewButton({room}: {room:LobbyRoom}) {
   return <>
     {button('핸드 복기',()=>{setSelected(reviews[0]?.hand.id ?? null);setStep(0);setOpen(true);},!reviews.length || !!room.holdem?.legal)}
     <Modal visible={open} animationType="slide" onRequestClose={()=>setOpen(false)}>
-      <View style={[styles.screen,{paddingTop:insets.top+8,paddingBottom:insets.bottom+8}]}>
+      <View testID="web-review" style={[styles.screen,{paddingTop:insets.top+8,paddingBottom:insets.bottom+8}]}>
         <View style={styles.row}><Text style={styles.title}>핸드 리뷰</Text>{button('닫기',()=>setOpen(false))}</View>
         <Text style={styles.note}>최근 10개 · 내 패와 공개된 패만 표시 · 방 종료 시 삭제</Text>
         {!hand ? <Text style={styles.text}>완료된 핸드가 없어요.</Text> : <>

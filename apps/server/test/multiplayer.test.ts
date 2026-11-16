@@ -98,12 +98,31 @@ test('same account/session reproduces 4001 replacement but foreground must not t
   await until(() => app.logs.some(e => e.event === 'ws_cleanup' && e.ownsMembership === false));
   // useRoom's AppState callback uses automatic=true; explicit retry remains available.
   a.connection.refresh(true);
+  a.connection.resynchronize();
   await new Promise(resolve => setTimeout(resolve, 200));
   assert.equal(a.state!.status, 'error');
   assert.equal(copy.state!.status, 'connected');
   a.connection.refresh();
   await until(() => a.state?.status === 'connected' && copy.state?.status === 'error');
   assert.equal(a.state!.playerId, seat);
+});
+
+test('authenticated reload and browser resume restore private cards, chips and turn without any saved room token',async t=>{
+  const app=await setup(t),a=app.client(tokenA),b=app.client(tokenB);
+  a.connection.enter({type:'create',game:'holdem',nickname:'A'});await until(()=>a.state?.status==='connected');
+  b.connection.enter({type:'join',code:a.state!.room!.code,nickname:'B'});await until(()=>a.state?.room?.players.length===2);
+  a.connection.startHand();await until(()=>!!a.state?.room?.holdem&&!!b.state?.room?.holdem);
+  const before=a.state!.room!.holdem!,seat=a.state!.playerId;
+  const me=before.players.find(p=>p.id===seat)!;
+  assert.equal(me.cards?.length,2);assert.equal(before.players.find(p=>p.id!==seat)!.cards,null);
+  a.connection.dispose();
+  const restored=app.client(tokenA);await restored.connection.restore();await until(()=>restored.state?.status==='connected');
+  const after=restored.state!.room!.holdem!;
+  assert.equal(restored.state!.playerId,seat);assert.equal(after.id,before.id);assert.equal(after.actorId,before.actorId);assert.equal(after.deadline,before.deadline);
+  assert.deepEqual(after.players.find(p=>p.id===seat)!.cards,me.cards);assert.equal(after.players.find(p=>p.id===seat)!.stack,me.stack);
+  assert.equal(after.players.find(p=>p.id!==seat)!.cards,null);assert.equal(after.pot,before.pot);
+  restored.connection.resynchronize();await until(()=>restored.state?.status==='connected');
+  assert.equal(restored.state!.playerId,seat);assert.deepEqual(restored.state!.room!.holdem!.players.find(p=>p.id===seat)!.cards,me.cards);
 });
 
 test('simultaneous independent creates never share a room or overwrite membership', async t => {

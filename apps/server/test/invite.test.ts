@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { inviteCode, inviteUrl } from '../../mobile/src/services/invite.ts';
+import { inviteCode, inviteUrl, webInviteUrl } from '../../mobile/src/services/invite.ts';
 import { DEFAULT_SETTINGS, validRoomSettings } from '@boardgame/shared';
 import { HoldemHand } from '../src/holdem/hand.ts';
 test('installed and Expo invitation links roundtrip; unrelated URLs cannot redirect the game endpoint',()=>{
@@ -19,4 +19,12 @@ test('room setting boundaries and custom blind minimum raises survive restoratio
   hand=HoldemHand.restore(hand.checkpoint());
   hand.recoverClock(1000);assert.equal(hand.deadline,46000);
   assert.equal(hand.viewFor('a').bigBlind,100);
+});
+test('web invitations contain only room codes and never accept credential/query redirects',()=>{
+  assert.equal(inviteCode(webInviteUrl('AB3D5FGH','https://play.test')),'AB3D5FGH');
+  assert.equal(inviteCode(webInviteUrl('AB3D5FGH','http://localhost:8087',true)),'AB3D5FGH');
+  assert.throws(()=>webInviteUrl('AB3D5FGH','http://play.test'));
+  assert.throws(()=>webInviteUrl('AB3D5FGH','https://play.test?token=x'));
+  for(const suffix of ['?access_token=x','#token=x','/extra','/'])assert.equal(inviteCode('https://play.test/join/AB3D5FGH'+suffix),null);
+  assert.equal(inviteCode('https://play.test/join/WRONG'),null);
 });

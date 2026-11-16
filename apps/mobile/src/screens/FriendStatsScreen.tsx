@@ -22,7 +22,7 @@ export function FriendStatsScreen({friendId,name,onClose}:{friendId:string;name:
  },[friendId,reload]);
  const chips=(n:number)=>(n>0?'+':'')+n.toLocaleString();
  const percent=(wins:number,hands:number)=>hands?((wins/hands)*100).toFixed(1)+'%':'—';
- return <View style={[styles.screen,{paddingTop:insets.top+12,paddingBottom:insets.bottom+12}]}>
+ return <View testID="web-stats" style={[styles.screen,{paddingTop:insets.top+12,paddingBottom:insets.bottom+12}]}>
    <View style={styles.header}><ActionButton compact secondary title="‹ 친구 목록" onPress={onClose}/><Text style={styles.title}>함께한 기록</Text></View>
    <Text numberOfLines={1} style={styles.name}>{name}</Text>
    <View style={styles.body}>{loading?<ActivityIndicator color="#DFC98D"/>:error?<><Text accessibilityRole="alert" style={styles.note}>{error}</Text><ActionButton title="다시 시도" onPress={()=>setReload(v=>v+1)}/></>:stats?<>

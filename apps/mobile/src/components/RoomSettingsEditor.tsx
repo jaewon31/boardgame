@@ -28,8 +28,8 @@ export function RoomSettingsEditor({ initial, onSave, onClose }: { initial: Room
     finally { savingRef.current = false; setSaving(false); }
   }
   return <Modal visible transparent animationType="fade" onRequestClose={()=>{if(!savingRef.current)onClose();}}>
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.overlay, { paddingTop:insets.top + 8, paddingBottom:insets.bottom + 8 }]}>
-      <View style={styles.panel}>
+    <KeyboardAvoidingView testID="web-modal-overlay" behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.overlay, { paddingTop:insets.top + 8, paddingBottom:insets.bottom + 8 }]}>
+      <View testID="web-modal-panel" style={styles.panel}>
         <View style={styles.row}><Text style={styles.heading}>방 설정 · {step + 1}/4</Text><Pressable accessibilityRole="button" disabled={saving} onPress={onClose} style={styles.close}><Text style={styles.text}>취소 ✕</Text></Pressable></View>
         <Text style={styles.heading}>{field.title}</Text><Text style={styles.note}>{field.note}</Text>
         <TextInput key={field.key} accessibilityLabel={field.title} editable={!saving} value={values[field.key]} onChangeText={v => { setValues(old => ({...old, [field.key]:v.replace(/[^0-9]/g,'')})); setError(''); }} keyboardType="number-pad" maxLength={6} style={styles.input} />

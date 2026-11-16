@@ -1,5 +1,6 @@
 // Never log raw SDK errors: messages, URLs and response bodies can contain secrets.
 const messages = {
+  storage: '브라우저에 계정을 저장하거나 읽을 수 없어요. 사이트 저장소 허용 설정과 여유 공간을 확인해 주세요. 기존 계정 보호를 위해 저장 데이터를 자동으로 지우지 않았어요.',
   databaseSchema: '계정 서버의 데이터베이스 설정이 완료되지 않았어요. 관리자에게 세션 RPC와 마이그레이션 적용 상태를 확인해 달라고 요청해 주세요.',
   configuration: '인증 서버 설정을 확인해 주세요. Supabase URL과 공개 키를 확인한 뒤 앱을 다시 시작해 주세요.',
   network: '인증 서버에 연결하지 못했어요. 인터넷 연결과 서버 상태를 확인해 주세요.',
@@ -12,6 +13,7 @@ const messages = {
   unknown: '요청을 완료하지 못했어요. 다시 시도해 주세요.'
 };
 const codes: Record<string, keyof typeof messages> = {
+  browser_storage_unavailable:'storage',
   '25006':'databaseSchema',
   PGRST202:'databaseSchema', PGRST205:'databaseSchema',
   auth_not_configured:'configuration', signup_disabled:'signupDisabled',

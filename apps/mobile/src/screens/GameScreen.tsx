@@ -6,7 +6,8 @@ import { DEFAULT_SETTINGS } from '@boardgame/shared';
 import { RoomRecords } from '../components/RoomRecords';
 import { RiverSqueeze } from '../components/RiverSqueeze';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert } from '../services/platformUI';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { LobbyRoom, PokerAction } from '@boardgame/shared';
 import { PokerTable } from '../components/PokerTable';
@@ -30,7 +31,7 @@ export function GameScreen({ audio, room, playerId, connected, error, onLeave, o
   const [page, setPage] = useState(0);
   const [inBB, setInBB] = useState(false);
   const chips = (value: number) => chipLabel(value, hand.bigBlind, inBB);
-  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 250); return () => clearInterval(timer); }, []);
+  useEffect(() => { const timer = setInterval(() => { const value=Date.now(); setNow(old=>Platform.OS==='web' && Math.floor(old/1000)===Math.floor(value/1000)?old:value); }, 250); return () => clearInterval(timer); }, []);
   useEffect(() => { setAmount(String(hand.legal?.minRaiseTo ?? 20)); setPanel(null); setPage(0); }, [hand.id, hand.revision, hand.legal?.minRaiseTo]);
   const legal = hand.legal;
   const runout = hand.runout;
@@ -52,17 +53,17 @@ export function GameScreen({ audio, room, playerId, connected, error, onLeave, o
     ...hand.pots.map((p, i) => `${i ? `사이드 팟 ${i}` : '메인 팟'} ${p.amount} · ${p.winnerIds.map(name).join(', ')}`),
   ];
   const status = !connected ? '연결 복구 중…' : done ? ended ? '경기 종료' : room.nextHandAt ? `${nextSeconds}초 후 다음 판` : '접속 중인 플레이어 2명 대기' : runout ? runout.phase === 'squeezing' ? `${squeezeName}님 리버 째기 · ${runoutSeconds}초` : `${nextLabel} · ${runoutSeconds}초` : legal ? '● 내 차례' : actor ? `${actor.nickname}님 차례 · ${seconds}초` : '관전 중';
-  function leave() { Alert.alert('방에서 나갈까요?', '진행 중인 패는 폴드되고 이 자리의 칩을 잃어요.', [{ text: '취소', style: 'cancel' }, { text: '나가기', style: 'destructive', onPress: onLeave }]); }
-  return <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-    <View style={styles.header}><View><Text style={styles.meta}>{room.code} · {hand.smallBlind}/{hand.bigBlind}</Text><Text style={styles.title}>홀덤 #{hand.number} · {streets[hand.street]}</Text></View><RoomRecords room={room} /><Pressable android_disableSound accessibilityRole="button" onPress={leave} style={styles.link}><Text style={styles.text}>나가기 ↗</Text></Pressable></View>
-    <View style={styles.ribbon}><Text numberOfLines={1} style={[styles.gold, { flex: 1 }]}>{status}</Text><SoundSettings audio={audio} /><Pressable android_disableSound accessibilityRole="button" accessibilityLabel="칩과 BB 표시 전환" onPress={() => setInBB(value => !value)} style={styles.unit}><Text style={styles.gold}>{inBB ? 'BB' : '칩'} ⇄</Text></Pressable></View>
-    <View style={styles.table} onLayout={e => setSize(e.nativeEvent.layout)}>
+  function leave() { onLeave(); }
+  return <View testID="web-game" style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View testID="web-game-header" style={styles.header}><View><Text style={styles.meta}>{room.code} · {hand.smallBlind}/{hand.bigBlind}</Text><Text style={styles.title}>홀덤 #{hand.number} · {streets[hand.street]}</Text></View><RoomRecords room={room} /><Pressable android_disableSound accessibilityRole="button" onPress={leave} style={styles.link}><Text style={styles.text}>나가기 ↗</Text></Pressable></View>
+    <View testID="web-game-ribbon" style={styles.ribbon}><Text numberOfLines={1} style={[styles.gold, { flex: 1 }]}>{status}</Text><SoundSettings audio={audio} /><Pressable android_disableSound accessibilityRole="button" accessibilityLabel="칩과 BB 표시 전환" onPress={() => setInBB(value => !value)} style={styles.unit}><Text style={styles.gold}>{inBB ? 'BB' : '칩'} ⇄</Text></Pressable></View>
+    <View testID="web-game-table" style={styles.table} onLayout={e => { const {width,height}=e.nativeEvent.layout; setSize(old=>old.width===width&&old.height===height?old:{width,height}); }}>
       {size.width > 0 && size.height > 0 && <PokerTable presentation={audio.presentation} room={room} playerId={playerId} width={size.width} height={size.height} seconds={seconds} inBB={inBB} connected={connected} onReveal={onReveal} />}
     </View>
-    <View style={styles.footer}>
+    <View testID="web-game-footer" style={styles.footer}>
       {!!error && <Pressable android_disableSound accessibilityRole="button" accessibilityLabel="오류 자세히 보기" onPress={() => Alert.alert('게임 오류', error)}><Text accessibilityLiveRegion="polite" numberOfLines={2} style={styles.error}>{error}</Text></Pressable>}
       {legal ? <>
-        <View style={styles.row}>
+        <View testID="web-game-actions" style={styles.row}>
           <Pressable android_disableSound accessibilityRole="button" disabled={!connected} style={[styles.action, styles.foldAction, !connected && styles.disabled]} onPress={() => onAct('fold')}><Text style={styles.actionText}>폴드</Text></Pressable>
           <Pressable android_disableSound accessibilityRole="button" disabled={!connected} style={[styles.action, styles.callAction, !connected && styles.disabled]} onPress={() => onAct(legal.canCheck ? 'check' : 'call')}><Text style={styles.actionText}>{legal.canCheck ? '체크' : '콜'}</Text>{!legal.canCheck && <Text style={styles.actionAmount}>{chips(legal.callAmount)}</Text>}</Pressable>
           <Pressable android_disableSound accessibilityRole="button" accessibilityLabel="레이즈 금액 선택" disabled={!connected || (!legal.canRaise && !legal.canAllIn)} style={[styles.action, styles.raiseAction, (!connected || (!legal.canRaise && !legal.canAllIn)) && styles.disabled]} onPress={() => setPanel('raise')}><Text style={[styles.actionText, styles.raiseText]}>레이즈</Text></Pressable>
@@ -74,8 +75,8 @@ export function GameScreen({ audio, room, playerId, connected, error, onLeave, o
     </View>
     {runout?.phase === 'squeezing' && runout.playerId === playerId && runout.card && <RiverSqueeze key={hand.id} card={runout.card} deadline={runout.deadline} connected={connected} onReveal={() => onRevealRiver(hand.id)} />}
     <Modal visible={panel !== null} transparent animationType="fade" onRequestClose={() => setPanel(null)}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
-        <View style={styles.panel}>
+      <KeyboardAvoidingView testID="web-modal-overlay" behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
+        <View testID="web-modal-panel" style={styles.panel}>
           <View style={styles.row}><Text style={styles.title}>{panel === 'raise' ? '베팅 금액' : '이번 판 결과'}</Text><Pressable android_disableSound accessibilityRole="button" onPress={() => setPanel(null)} style={styles.link}><Text style={styles.gold}>닫기 ✕</Text></Pressable></View>
           {panel === 'raise' && legal && <>
             <View style={styles.row}>{bettingPresets(hand, me?.roundBet ?? 0).map(({ value, label }, i) => <Pressable android_disableSound key={i} accessibilityRole="button" accessibilityState={{ selected: amount === String(value) }} onPress={() => setAmount(String(value))} style={[styles.preset, amount === String(value) && styles.selected]}><Text style={styles.text}>{label}</Text><Text style={styles.gold}>{chips(value)}</Text></Pressable>)}</View>

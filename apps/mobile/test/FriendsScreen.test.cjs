@@ -35,6 +35,7 @@ function harness(rows, { loading = false, message = '', height = 800 } = {}) {
     react: { useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = value; }]; } },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
     '../hooks/useFriends': { useFriends: () => state },
+    '../services/platformUI': {Alert:native.Alert,Share:native.Share},
     '../services/friendTypes': { normalizeFriendCode: x => x },
     '../components/ActionButton': { ActionButton },
     './FriendStatsScreen': { FriendStatsScreen: () => null },

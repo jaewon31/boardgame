@@ -1,11 +1,14 @@
+import { useWebLayout } from './src/services/useWebLayout';
 import { FriendsScreen } from './src/screens/FriendsScreen';
 import { needsNickname, showAccountEntry } from './src/services/accountFlow';
 import { useAccount } from './src/hooks/useAccount';
 import { AccountScreen } from './src/screens/AccountScreen';
 import { useGameAudio } from './src/hooks/useGameAudio';
 import { useEffect, useState } from 'react';
-import { Alert, BackHandler, Linking } from 'react-native';
+import { BackHandler, Linking, Platform } from 'react-native';
+import { Alert, WebDialogs } from './src/services/platformUI';
 import { inviteCode } from './src/services/invite';
+import { consumeInvite } from './src/services/consumeInvite';
 import { GameScreen } from './src/screens/GameScreen';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -19,6 +22,7 @@ function Screens() {
   const room = useRoom(!account.loading && !!account.user && !!account.profile && !setup && !account.sessionBlocked ? account.user.id : null);
   const [roomOpen, setRoomOpen] = useState(true);
   useEffect(() => {
+    if (Platform.OS === 'web') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (!room.room || !roomOpen) return false;
       setRoomOpen(false); return true;
@@ -37,24 +41,28 @@ function Screens() {
   useEffect(()=>{if(account.user)setAccountOpen(false);},[account.user?.id]);
   const audio = useGameAudio(room.room?.holdem ?? null, room.playerId, room.status === 'connected', room.room?.nextHandAt);
   const [incoming,setIncoming] = useState<string | null>(null);
+  const [afterLeave,setAfterLeave] = useState<string | null>(null);
   const [invite,setInvite] = useState<{code:string} | undefined>();
   useEffect(() => {
     let mounted=true;
-    const receive=(url:string | null)=>{ const code=inviteCode(url); if(mounted && code)setIncoming(code); };
+    const receive=(url:string | null)=>{ const code=inviteCode(url); if(!mounted)return;if(code)setIncoming(code);else if(url?.includes('/join/'))Alert.alert('초대 링크 확인','잘못된 초대 링크예요. 친구에게 8자리 방 코드를 다시 받아 주세요.'); };
     const sub=Linking.addEventListener('url',event=>receive(event.url));
     void Linking.getInitialURL().then(url=>receive(url ?? null)).catch(()=>{});
     return ()=>{mounted=false;sub.remove();};
   },[]);
   useEffect(() => {
-    if(!incoming || room.status==='connecting' || room.status==='reconnecting') return;
+    if(!incoming || account.loading || !account.profile || setup || account.sessionBlocked || !room.checked || room.status==='connecting' || room.status==='reconnecting') return;
     const code=incoming;
+    if(!room.room && room.status!=='idle')return;
     setIncoming(null);
+    consumeInvite();
     if(room.room?.code===code) { returnToRoom(); return; }
     if(room.room) Alert.alert('초대받은 방으로 이동할까요?', '현재 방을 나가면 진행 중인 패는 폴드됩니다.',[
-      {text:'취소',style:'cancel'}, {text:'이동',onPress:()=>{room.leave();setRoomOpen(false);setInvite({code});}},
+      {text:'취소',style:'cancel'}, {text:'이동',onPress:()=>{setAfterLeave(code);room.leave();setRoomOpen(false);}},
     ]);
-    else setInvite({code});
-  },[incoming,room.status,room.room?.code]);
+    else {setInvite({code});setRoomOpen(true);room.enter({type:'join',code,nickname:account.profile.display_name});}
+  },[incoming,room.status,room.room?.code,room.checked,account.loading,account.profile,setup,account.sessionBlocked]);
+  useEffect(()=>{if(afterLeave&&!room.room&&room.status==='idle'&&room.checked){setIncoming(afterLeave);setAfterLeave(null);}},[afterLeave,room.room,room.status,room.checked]);
   if(showAccountEntry({hasRoom:!!room.room && roomOpen,configured:account.configured,loading:account.loading,user:!!account.user,profile:!!account.profile,setup,blocked:account.sessionBlocked,opened:accountOpen})) return <><StatusBar style="light"/><AccountScreen account={account} setup={setup} onClose={()=>{account.clearMessage();setAccountOpen(false);}} /></>;
   if(friendsOpen && account.profile && (!room.room || !roomOpen)) return <><StatusBar style="light"/><FriendsScreen profile={account.profile} onClose={()=>setFriendsOpen(false)}/></>;
   return <>
@@ -64,5 +72,6 @@ function Screens() {
   </>;
 }
 export default function App() {
-  return <SafeAreaProvider><Screens /></SafeAreaProvider>;
+  useWebLayout();
+  return <SafeAreaProvider><Screens /><WebDialogs /></SafeAreaProvider>;
 }

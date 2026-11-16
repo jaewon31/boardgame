@@ -1,0 +1,20 @@
+# Optional replacement for deploy/Caddyfile after choosing domains and approving deployment.
+# Mount the exported apps/mobile/dist-web read-only at /srv/web in the proxy container.
+{$GAME_DOMAIN} {
+  header Cache-Control "no-store"
+  reverse_proxy server:3000
+}
+
+{$WEB_DOMAIN} {
+  root * /srv/web
+  encode zstd gzip
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy no-referrer
+    Cache-Control "no-cache"
+  }
+  # Do not turn missing JS/icons/manifest into HTML; only app routes use SPA fallback.
+  @app path / /join/*
+  rewrite @app /index.html
+  file_server
+}

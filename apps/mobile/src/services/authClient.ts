@@ -1,11 +1,10 @@
 import './nativeAuthCrypto';
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
-import { authStorage } from './authStorage';
+import { accountStorage } from './accountStorage';
+export { accountStorage, prepareAccountStorage } from './accountStorage';
 const url=process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const key=process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
 export const authConfigured=/^https:\/\/[^/]+\.supabase\.co\/?$/.test(url)&&key.startsWith('sb_publishable_');
 if(__DEV__)console.info('[auth:config]',{urlPresent:!!url,urlFormatValid:/^https:\/\/[^/]+\.supabase\.co\/?$/.test(url),keyPresent:!!key,keyFormatValid:key.startsWith('sb_publishable_'),configured:authConfigured});
-export const accountStorage=authStorage(SecureStore);
 export const authClient=authConfigured?createClient(url,key,{auth:{storage:accountStorage,persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,flowType:'pkce'}}):null;
