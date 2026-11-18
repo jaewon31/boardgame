@@ -1,7 +1,7 @@
 name: Verify server image
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'deploy/web-staging']
   pull_request:
     branches: [main]
 permissions:

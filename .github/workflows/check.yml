@@ -1,7 +1,7 @@
 name: Check project
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'deploy/web-staging']
   pull_request:
     branches: [main]
 permissions:
@@ -20,6 +20,11 @@ jobs:
       - run: npm test
       - run: npm run test --workspace=@boardgame/mobile
       - run: npm run export:mobile
-      - run: npm run export:web --workspace=@boardgame/mobile
-      - run: node scripts/check-web-release.cjs apps/mobile/dist
-      - run: node -e "require('./scripts/build-pages.cjs').checkPages('apps/mobile/dist')"
+      - name: Validate Pages release build with public fixtures
+        run: npm run build:pages
+        env:
+          # Format-only fixtures. No production auth requests or deployments.
+          EXPO_PUBLIC_WEB_APP_URL: https://example.com
+          EXPO_PUBLIC_WEB_GAME_SERVER_URL: wss://example.com/lobby
+          EXPO_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder_not_a_real_key

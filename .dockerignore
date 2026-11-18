@@ -9,3 +9,7 @@ node_modules
 **/*.jks
 **/*.p8
 **/*.p12
+
+# Local QA and generated web bundles are not server build inputs.
+.qa-web
+**/dist-web

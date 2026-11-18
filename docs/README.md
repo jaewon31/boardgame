@@ -15,6 +15,7 @@
 | [P2 설치 후 재검증](p2-rpc-verification-2026-11-18.md) | 11/18 실행 결과·운영 ACL 사용자 확인·실제 JWT 미검증 구분 |
 | [P2 RPC 보안](p2-rpc-security-review.md) | 운영 전 SQL·세션·권한 검증, 읽기 전용 preflight 및 적용 보류 조건 |
 | [P2](p2-ui-friend-comparison-report.md) | 설정·카드·친구끼리 전적 구현/로컬 검증, SQL 초안 승인 대기 |
+| [Staging 실행 계획](web-staging-runbook.md) | 29085e1 기준 설정·Secrets 구분, 승인 후 명령, 실제 환경 확인 사항 |
 | [웹 배포](web-deployment.md) | 설정·운영 절차. 과거 후보 가격은 현재 견적이 아님 |
 | [6단계 준비](web-phase6-deployment-readiness.md) | 당시 원격 점검/승인 대기 이력. 최신 상태와 구분 |
 | [실기기 체크리스트](web-device-checklist.md) | 기기별 수동 검증. 실제 실행한 항목만 표시 |
