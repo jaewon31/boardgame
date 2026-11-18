@@ -26,13 +26,16 @@ function rateLimit() {
 }
 
 export function friendStatsApi(store:FriendStatsStore,authorize:(token:string)=>Promise<{accountId:string;sessionId:string}|null>,url:string,key:string,trustedProxies:string[]=[]){
+ // Keep this boundary safe even if a future caller bypasses accountAuthorizer's config check.
+ if(!key.startsWith('sb_publishable_'))throw new Error('Friend statistics require a Supabase publishable key');
  const accountAllowed=rateLimit(),anonymousAllowed=rateLimit();
  const proxies=[...trustedProxies];
  return async(request:IncomingMessage,response:ServerResponse):Promise<boolean>=>{
    if(!request.url?.startsWith('/friends/'))return false;
    const reply=(status:number,body:unknown)=>{response.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});response.end(JSON.stringify(body));};
+   const pair=/^\/friends\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/stats$/i.exec(request.url);
    const match=/^\/friends\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/stats$/i.exec(request.url);
-   if(request.method!=='GET'||!match){reply(404,{error:'NOT_FOUND'});return true;}
+   if(request.method!=='GET'||(!match&&!pair)){reply(404,{error:'NOT_FOUND'});return true;}
    const ip=clientIp(request.socket.remoteAddress,request.headers['x-forwarded-for'],proxies);
    const token=request.headers.authorization?.match(/^Bearer (\S+)$/)?.[1]??'';
    let identity:Awaited<ReturnType<typeof authorize>>;
@@ -51,11 +54,20 @@ export function friendStatsApi(store:FriendStatsStore,authorize:(token:string)=>
    }
    if(!accountAllowed(identity.accountId)){reply(429,{error:'RATE_LIMITED'});return true;}
    try{
+     if(pair){
+       const first=pair[1].toLowerCase(),second=pair[2].toLowerCase();
+       const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+       if(!uuid.test(first)||!uuid.test(second)||first===second){reply(400,{error:'INVALID_PAIR'});return true;}
+       const permission=await fetch(url.replace(/\/$/,'')+'/rest/v1/rpc/can_compare_friend_stats',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({first_id:first,second_id:second}),signal:AbortSignal.timeout(4000)});
+       if(!permission.ok)throw Error('FRIENDS_UNAVAILABLE');
+       if(await permission.json()!==true){reply(403,{error:'FRIEND_REQUIRED'});return true;}
+       reply(200,store.compare(first,second));return true;
+     }
      const friends=await fetch(url.replace(/\/$/,'')+'/rest/v1/rpc/list_friends',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(4000)});
      if(!friends.ok)throw Error('FRIENDS_UNAVAILABLE');
      const rows:unknown=await friends.json();
-     if(!Array.isArray(rows)||!rows.some(r=>r.other_id===match[1]&&r.status==='accepted')){reply(403,{error:'FRIEND_REQUIRED'});return true;}
-     reply(200,store.compare(identity.accountId,match[1]));
+     if(!Array.isArray(rows)||!rows.some(r=>r.other_id===match![1].toLowerCase()&&r.status==='accepted')){reply(403,{error:'FRIEND_REQUIRED'});return true;}
+     reply(200,store.compare(identity.accountId,match![1].toLowerCase()));
    }catch{reply(503,{error:'STATS_UNAVAILABLE'});}
    return true;
  };

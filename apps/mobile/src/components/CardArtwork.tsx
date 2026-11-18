@@ -2,8 +2,8 @@ import { memo } from 'react';
 import Svg, { Circle, Defs, G, Path, Pattern, Rect, Text as SvgText } from 'react-native-svg';
 import type { Card } from '@boardgame/shared';
 
-const ink = '#152536';
-const red = '#B72635';
+const ink = '#101820';
+const red = '#B0102C';
 const gold = '#C79A45';
 const suitPaths: Record<string, string> = {
   h: 'M0 9C-5 5-13-1-10-7C-8-12-2-11 0-6C2-11 8-12 10-7C13-1 5 5 0 9Z',
@@ -63,10 +63,10 @@ export function CardDrawing({ card, back = false, compact = false }: { card?: Ca
   return <G>
     <Rect x={.5} y={.5} width={99} height={139} rx={6} fill="#FFFDF7" stroke="#CBBFAD" />
     {[0, 180].map(angle => <G key={angle} transform={angle ? 'rotate(180 50 70)' : undefined}>
-      <SvgText x={compact ? 14 : 11} y={compact ? 24 : 17} textAnchor="middle" fontFamily="serif" fontWeight="700" fontSize={compact ? (rank === 10 ? 22 : 26) : rank === 10 ? 13 : 16} fill={color}>{label}</SvgText>
-      <Suit suit={suit} x={compact ? 14 : 11} y={compact ? 35 : 26} size={compact ? 16 : 12} />
+      <SvgText x={compact ? 20 : 14} y={compact ? 33 : 22} textAnchor="middle" fontFamily="serif" fontWeight="700" fontSize={compact ? (rank === 10 ? 30 : 36) : rank === 10 ? 18 : 22} fill={color}>{label}</SvgText>
+      <Suit suit={suit} x={compact ? 20 : 14} y={compact ? 49 : 36} size={compact ? 25 : 20} />
     </G>)}
-    <G transform={compact ? 'translate(15 21) scale(.7)' : undefined}>{rank === 14 ? <Suit suit={suit} x={50} y={70} size={suit === 's' ? 44 : 32} /> : rank >= 11 ? <Court rank={rank} suit={suit} /> : pips[rank]?.map(([x, y], i) => <Suit key={i} suit={suit} x={x} y={y} size={19} inverted={y > 70} />)}</G>
+    <G>{compact ? <Suit suit={suit} x={53} y={73} size={52} /> : rank === 14 ? <Suit suit={suit} x={50} y={70} size={suit === 's' ? 44 : 32} /> : rank >= 11 ? <Court rank={rank} suit={suit} /> : pips[rank]?.map(([x, y], i) => <Suit key={i} suit={suit} x={x} y={y} size={19} inverted={y > 70} />)}</G>
   </G>;
 }
 export const CardArtwork = memo(function CardArtwork({ card, back, width }: { card?: Card; back?: boolean; width: number }) {

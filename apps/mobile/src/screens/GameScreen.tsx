@@ -32,7 +32,7 @@ export function GameScreen({ audio, room, playerId, connected, error, onLeave, o
   const [inBB, setInBB] = useState(false);
   const chips = (value: number) => chipLabel(value, hand.bigBlind, inBB);
   useEffect(() => { const timer = setInterval(() => { const value=Date.now(); setNow(old=>Platform.OS==='web' && Math.floor(old/1000)===Math.floor(value/1000)?old:value); }, 250); return () => clearInterval(timer); }, []);
-  useEffect(() => { setAmount(String(hand.legal?.minRaiseTo ?? 20)); setPanel(null); setPage(0); }, [hand.id, hand.revision, hand.legal?.minRaiseTo]);
+  useEffect(() => { setAmount(String(hand.legal?.minRaiseTo ?? 20)); setPanel(null); setPage(0); }, [hand.id, hand.actorId, hand.deadline, !!hand.legal]);
   const legal = hand.legal;
   const runout = hand.runout;
   const runoutSeconds = runout ? Math.max(0, Math.ceil((runout.deadline - now) / 1000)) : 0;
@@ -66,21 +66,21 @@ export function GameScreen({ audio, room, playerId, connected, error, onLeave, o
         <View testID="web-game-actions" style={styles.row}>
           <Pressable android_disableSound accessibilityRole="button" disabled={!connected} style={[styles.action, styles.foldAction, !connected && styles.disabled]} onPress={() => onAct('fold')}><Text style={styles.actionText}>폴드</Text></Pressable>
           <Pressable android_disableSound accessibilityRole="button" disabled={!connected} style={[styles.action, styles.callAction, !connected && styles.disabled]} onPress={() => onAct(legal.canCheck ? 'check' : 'call')}><Text style={styles.actionText}>{legal.canCheck ? '체크' : '콜'}</Text>{!legal.canCheck && <Text style={styles.actionAmount}>{chips(legal.callAmount)}</Text>}</Pressable>
-          <Pressable android_disableSound accessibilityRole="button" accessibilityLabel="레이즈 금액 선택" disabled={!connected || (!legal.canRaise && !legal.canAllIn)} style={[styles.action, styles.raiseAction, (!connected || (!legal.canRaise && !legal.canAllIn)) && styles.disabled]} onPress={() => setPanel('raise')}><Text style={[styles.actionText, styles.raiseText]}>레이즈</Text></Pressable>
+          <Pressable android_disableSound accessibilityRole="button" accessibilityLabel="레이즈 금액 선택" disabled={!connected || (!legal.canRaise && !legal.canAllIn)} style={[styles.action, styles.raiseAction, (!connected || (!legal.canRaise && !legal.canAllIn)) && styles.disabled]} onPress={() => { setAmount(String(legal.minRaiseTo)); setPanel('raise'); }}><Text style={[styles.actionText, styles.raiseText]}>레이즈</Text></Pressable>
         </View>
       </> : done ? <>
         <Text numberOfLines={1} style={styles.text}>{ended ? '칩이 남은 플레이어가 승리했어요.' : me?.stack === 0 ? '칩을 모두 잃었어요. 다음 판부터 관전합니다.' : hand.canReveal ? '내 패 공개는 선택 · 공개 버튼으로 친구에게 보여주세요.' : '칩이 남은 플레이어끼리 자동으로 계속해요.'}</Text>
-        <View style={styles.row}><View style={styles.grow}><HandReviewButton room={room} /></View>{ended && room.hostId === playerId && <View style={styles.grow}><ActionButton compact title="새 경기 준비" disabled={!connected} onPress={() => Alert.alert('새 경기를 준비할까요?', `모두 ${(room.settings ?? DEFAULT_SETTINGS).startingChips.toLocaleString()}칩으로 대기실에 돌아갑니다. 오늘 기록은 유지됩니다.`, [{ text: '취소', style: 'cancel' }, { text: '준비', onPress: onReset }])} /></View>}</View>
+        <View style={styles.row}>{ended && room.hostId === playerId && <View style={styles.grow}><ActionButton compact title="새 경기 준비" disabled={!connected} onPress={() => Alert.alert('새 경기를 준비할까요?', `모두 ${(room.settings ?? DEFAULT_SETTINGS).startingChips.toLocaleString()}칩으로 대기실에 돌아갑니다. 오늘 기록은 유지됩니다.`, [{ text: '취소', style: 'cancel' }, { text: '준비', onPress: onReset }])} /></View>}</View>
       </> : null}
     </View>
     {runout?.phase === 'squeezing' && runout.playerId === playerId && runout.card && <RiverSqueeze key={hand.id} card={runout.card} deadline={runout.deadline} connected={connected} onReveal={() => onRevealRiver(hand.id)} />}
     <Modal visible={panel !== null} transparent animationType="fade" onRequestClose={() => setPanel(null)}>
-      <KeyboardAvoidingView testID="web-modal-overlay" behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
+      <KeyboardAvoidingView enabled={Platform.OS !== 'web'} testID="web-modal-overlay" behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
         <View testID="web-modal-panel" style={styles.panel}>
           <View style={styles.row}><Text style={styles.title}>{panel === 'raise' ? '베팅 금액' : '이번 판 결과'}</Text><Pressable android_disableSound accessibilityRole="button" onPress={() => setPanel(null)} style={styles.link}><Text style={styles.gold}>닫기 ✕</Text></Pressable></View>
           {panel === 'raise' && legal && <>
             <View style={styles.row}>{bettingPresets(hand, me?.roundBet ?? 0).map(({ value, label }, i) => <Pressable android_disableSound key={i} accessibilityRole="button" accessibilityState={{ selected: amount === String(value) }} onPress={() => setAmount(String(value))} style={[styles.preset, amount === String(value) && styles.selected]}><Text style={styles.text}>{label}</Text><Text style={styles.gold}>{chips(value)}</Text></Pressable>)}</View>
-            <TextInput accessibilityLabel="레이즈 총 금액" accessibilityHint={`칩 단위, 최소 ${legal.minRaiseTo}, 최대 ${legal.maxRaiseTo}`} value={amount} onChangeText={setAmount} keyboardType="number-pad" maxLength={9} style={styles.input} />
+            <TextInput accessibilityLabel="레이즈 총 금액" accessibilityHint={`칩 단위, 최소 ${legal.minRaiseTo}, 최대 ${legal.maxRaiseTo}`} value={amount} onChangeText={setAmount} keyboardType="number-pad" maxLength={9} returnKeyType="done" blurOnSubmit={Platform.OS === 'web' ? false : undefined} onSubmitEditing={() => { if (connected && legal.canRaise && validRaise) { setPanel(null); onAct('raise', raiseTo); } }} style={styles.input} />
             <Pressable android_disableSound accessibilityRole="button" disabled={!connected || !legal.canRaise || !validRaise} style={[styles.panelAction, styles.raiseAction, (!connected || !legal.canRaise || !validRaise) && styles.disabled]} onPress={() => { setPanel(null); onAct('raise', raiseTo); }}><Text style={[styles.actionText, styles.raiseText]}>레이즈</Text></Pressable>
             <Pressable android_disableSound accessibilityRole="button" disabled={!connected || !legal.canAllIn} style={[styles.panelAction, styles.allInAction, (!connected || !legal.canAllIn) && styles.disabled]} onPress={() => Alert.alert('올인할까요?', '남은 칩을 모두 베팅합니다.', [{ text: '취소', style: 'cancel' }, { text: '올인', style: 'destructive', onPress: () => { setPanel(null); onAct('allIn'); } }])}><Text style={styles.allInText}>올인</Text></Pressable>
           </>}
@@ -91,6 +91,7 @@ export function GameScreen({ audio, room, playerId, connected, error, onLeave, o
         </View>
       </KeyboardAvoidingView>
     </Modal>
+    <HandReviewButton room={room} />
   </View>;
 }
 const styles = StyleSheet.create({

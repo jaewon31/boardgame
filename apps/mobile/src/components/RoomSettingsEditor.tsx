@@ -21,18 +21,18 @@ export function RoomSettingsEditor({ initial, onSave, onClose }: { initial: Room
   async function save() {
     if (savingRef.current) return;
     const settings = Object.fromEntries(fields.map(f => [f.key, Number(values[f.key])])) as unknown as RoomSettings;
-    if (!validRoomSettings(settings)) { setError('시작 칩은 10BB 이상, BB는 SB보다 커야 해요. 입력 범위를 확인해 주세요.'); return; }
+    if (fields.some(f => !/^\d+$/.test(values[f.key])) || !validRoomSettings(settings)) { setError('시작 칩은 10BB 이상, BB는 SB보다 커야 해요. 입력 범위를 확인해 주세요.'); return; }
     Keyboard.dismiss(); savingRef.current = true; setSaving(true); setError('');
     try { await onSave(settings); onClose(); }
     catch (failure) { setError(failure instanceof Error ? failure.message : '설정을 저장하지 못했어요. 다시 시도해 주세요.'); }
     finally { savingRef.current = false; setSaving(false); }
   }
   return <Modal visible transparent animationType="fade" onRequestClose={()=>{if(!savingRef.current)onClose();}}>
-    <KeyboardAvoidingView testID="web-modal-overlay" behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.overlay, { paddingTop:insets.top + 8, paddingBottom:insets.bottom + 8 }]}>
+    <KeyboardAvoidingView enabled={Platform.OS !== 'web'} testID="web-modal-overlay" behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.overlay, { paddingTop:insets.top + 8, paddingBottom:insets.bottom + 8 }]}>
       <View testID="web-modal-panel" style={styles.panel}>
         <View style={styles.row}><Text style={styles.heading}>방 설정 · {step + 1}/4</Text><Pressable accessibilityRole="button" disabled={saving} onPress={onClose} style={styles.close}><Text style={styles.text}>취소 ✕</Text></Pressable></View>
         <Text style={styles.heading}>{field.title}</Text><Text style={styles.note}>{field.note}</Text>
-        <TextInput key={field.key} accessibilityLabel={field.title} editable={!saving} value={values[field.key]} onChangeText={v => { setValues(old => ({...old, [field.key]:v.replace(/[^0-9]/g,'')})); setError(''); }} keyboardType="number-pad" maxLength={6} style={styles.input} />
+        <TextInput key={field.key} accessibilityLabel={field.title} editable={!saving} value={values[field.key]} onChangeText={v => { setValues(old => ({...old, [field.key]:Platform.OS === 'web' ? v : v.replace(/[^0-9]/g,'')})); setError(''); }} keyboardType="number-pad" maxLength={6} returnKeyType={step === 3 ? 'done' : 'next'} onSubmitEditing={() => { if (!savingRef.current) { if (step === 3) void save(); else { Keyboard.dismiss(); setStep(s=>s+1); } } }} style={styles.input} />
         <View style={styles.row}>{field.presets.map(v => <Pressable accessibilityRole="button" key={v} disabled={saving} style={styles.preset} onPress={() => { setValues(old => ({...old,[field.key]:String(v)})); setError(''); }}><Text style={styles.text}>{v.toLocaleString()}</Text></Pressable>)}</View>
         {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
         <View style={styles.row}><View style={styles.grow}><ActionButton compact secondary title="이전" disabled={saving || step === 0} onPress={() => { Keyboard.dismiss(); setStep(s=>s-1); }} /></View><View style={styles.grow}><ActionButton compact busy={saving} title={step === 3 ? '설정 적용' : '다음'} onPress={() => { if(step === 3) save(); else { Keyboard.dismiss(); setStep(s=>s+1); } }} /></View></View>

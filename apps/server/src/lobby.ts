@@ -217,16 +217,17 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     return true;
   }
   function scheduleNextHand(room: Room) {
-    if (!room.hand?.complete || room.players.filter(p => p.socket && p.stack > 0).length < 2) {
+    if (!room.hand?.complete || room.players.filter(p => p.stack > 0).length < 2) {
       cancelNextHand(room);
       return;
     }
     // Reveals and duplicate broadcasts must not extend the result/reveal window.
     if (room.nextHandTimer) return;
+    if (room.players.filter(p => p.socket && p.stack > 0).length < 2) return;
     const handId = room.hand.id;
-    room.nextHandAt = Date.now() + (options.nextHandMs ?? 10_000);
+    room.nextHandAt ??= Date.now() + (options.nextHandMs ?? 5_000);
     room.nextHandTimer = setTimeout(() => {
-      cancelNextHand(room);
+      room.nextHandTimer = undefined;
       if (stopping || rooms.get(room.code) !== room || room.hand?.id !== handId || !room.hand.complete) return;
       startNextHand(room);
       syncGame(room);

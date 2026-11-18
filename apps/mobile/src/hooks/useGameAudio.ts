@@ -107,7 +107,8 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
       visuals.restore(hand);
     } else {
       // A restored/initial snapshot has no cues and is displayed without catch-up animation.
-      scheduler.enqueue(visuals.prepare(hand, cues));
+      scheduler.enqueue(visuals.prepare(hand, cues).map(cue => cue.sound === 'shuffle' && nextHandAt
+        ? { ...cue, endAt: performance.now() + nextHandAt - Date.now() } : cue));
     }
   }, [scheduler, hand, playerId, connected, active, now, nextHandAt]);
   function setMuted(value: boolean) {
