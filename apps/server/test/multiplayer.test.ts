@@ -103,7 +103,11 @@ test('same account/session reproduces 4001 replacement but foreground must not t
   assert.equal(a.state!.status, 'error');
   assert.equal(copy.state!.status, 'connected');
   a.connection.refresh();
-  await until(() => a.state?.status === 'connected' && copy.state?.status === 'error');
+  await until(() => a.state?.status === 'connected' && copy.state?.status === 'error').catch(error => {
+    // Diagnostics contain only sanitized lifecycle metadata, never snapshots or credentials.
+    t.diagnostic(JSON.stringify({a: a.diagnostics, copy: copy.diagnostics, server: app.logs}));
+    throw error;
+  });
   assert.equal(a.state!.playerId, seat);
 });
 

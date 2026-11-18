@@ -167,3 +167,42 @@ Supabase Free 공식 한도에는 50,000 MAU, 500MB DB, 5GB egress, 비활성 1�
 **롤백:** Pages는 이전 검증된 정적 배포로 되돌린다(첫 배포면 공유 중단/프로젝트 접근 정책을 승인된 방식으로 처리). Railway는 이전 성공 배포 또는 정확한 `9e741b27…` 소스로 재배포하고 변경한 변수만 기록된 값으로 복원한다. Volume을 삭제/초기화하지 않는다. 이번 서버 변경은 checkpoint 스키마가 같아 형식 migration 롤백이 필요 없지만 실제 이전 배포 복구를 보장하는 것은 아니다. 파일 손상이 있으면 쓰기를 멈추고 **별도 승인된** 백업 복구를 수행한다. 이전 서버로 돌아가면 native는 유지돼도 웹 CORS/Origin 보완은 사라지므로 웹 베타를 중단한다.
 
 정확한 배포 명령의 project/environment/service ID와 source SHA는 접근 권한 및 최종 commit이 생긴 뒤 고정한다. 지금 이 값들을 추측해 명령을 실행하지 않는다. **현 단계에서 승인 요청 대상은 브랜치 게시·Pages 생성/첫 배포이며, Railway 재배포/변수 수정은 Volume·중단 시간 확인 후 별도 승인하는 순서를 권장한다.**
+
+
+## 2026-11-18 재검증 보완
+
+최신 근거: [멀티플레이 안정성 조사](multiplayer-stability-investigation.md). 이 절은 위 11/16 원격 관찰을 재검증한 결과가 아니다. HEAD 1b09bd1 + 미커밋 클라이언트 경쟁 상태 수정 기준 로컬 점검이다.
+
+### Pages 실패 원인과 설정 분리
+
+build-pages.cjs는 process.env만으로 먼저 checkEnvironment를 실행한다. 이후 Expo를 EXPO_NO_DOTENV=1, NODE_ENV=production으로 실행하므로 로컬 .env/.env.local을 채워도 이 빌드의 배포 설정이 되지 않는다. APP_ENV가 있으면 native 환경 혼용 방지를 위해 거부한다. 실제 값 미주입 상태에서 기존 4개 오류를 재현했다. 검증은 URL/키의 형식 검사이며 해당 서비스 존재·TLS·인증 성공 확인이 아니다.
+
+| 입력 | 요구사항 / 위치 |
+| --- | --- |
+| EXPO_PUBLIC_WEB_APP_URL | 경로/끝 slash 없는 정확한 HTTPS origin. 생략 시 Cloudflare CF_PAGES_URL로 검사; 앱 초대는 현재 origin을 사용 |
+| EXPO_PUBLIC_WEB_GAME_SERVER_URL | public host의 wss://host/lobby, query/hash/credentials 금지. HTTPS URL을 그대로 넣으면 실패 |
+| EXPO_PUBLIC_SUPABASE_URL | 앱과 게임 서버가 같은 프로젝트를 쓰는 https://project-ref.supabase.co |
+| EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY | sb_publishable_ 공개 클라이언트 키. admin/service-role/secret key 금지 |
+| WEB_ALLOWED_ORIGINS | 게임 서버 런타임의 정확한 웹 origin 목록. 빌드 환경에도 제공하면 canonical origin 포함 여부 검사. 빌드만 설정해서 원격 서버가 바뀌지 않음 |
+| NODE_VERSION / 설치 / 출력 | Node 24.19.0, npm ci --include=dev 후 npm run build:pages, apps/mobile/dist-web |
+| APP_ENV / native 주소 | Pages에서는 APP_ENV 미설정. 네이티브 EXPO_PUBLIC_GAME_SERVER_URL 및 EAS 설정 별도 유지 |
+
+apps/mobile/.env.example에는 Supabase 두 변수 설명이 없었으므로 주석 예제를 보완했다. 루트 .env.example은 Docker Compose용 SUPABASE_* 입력으로 모바일 EXPO_PUBLIC_*와 이름/대상이 다르다. 실제 환경파일과 운영 Secrets는 변경하지 않았다.
+
+프로세스 한정으로 example.com HTTPS/WSS, ci-placeholder Supabase URL, 가짜 publishable 문자열을 넣어 production export와 22파일 PWA/Pages 검사 PASS. 원격 요청·배포 없음. 이 출력은 검증 전용이며 게시해서는 안 된다. 문서에 기존 Staging URL이 있어도 현재 서버/프로젝트/배포 SHA와 일치하는지 확인 전 실제 설정으로 채택하지 않았다.
+
+### GitHub Actions와 GitHub Pages 구분
+
+현재 .github/workflows/check.yml은 npm ci, 타입/서버/모바일/native/web export와 정적 자산 검사를 수행한다. --environment 또는 build:pages를 호출하지 않으므로 실제 배포 환경변수/Secrets 없이 통과할 수 있다. server-image.yml의 Supabase 값도 가짜 fixture이며 실제 인증 검증이 아니다. 두 워크플로에 배포 토큰 요구나 Pages 배포 작업은 없다. 현재 로컬 P1/P2 실행기는 CI에서 실행되지 않는다.
+
+현재 대상은 Cloudflare Pages다. manifest id/scope/start_url과 자산 경로가 / 기준이며 /join/* rewrite와 _headers는 Cloudflare 형식이다. GitHub Pages의 /boardgame/ 같은 프로젝트 하위경로로 그대로 올리면 초대·manifest·아이콘 경로를 보장할 수 없다. GitHub Pages 전환 시 base path와 라우팅 대체를 별도 설계·검증해야 한다. 이번에 플랫폼이나 CI를 변경하지 않았다.
+
+향후 CI에서 release build를 추가하려면 위 공개 변수들을 해당 환경에 명시적으로 공급한다. 배포 자동화를 새로 도입할 경우 플랫폼 배포 자격증명은 별도 보호된 Secret으로 관리하고 웹 번들에 넣지 않는다. 이번 작업에 실제 자격증명 입력은 필요하지 않았다.
+
+### 인증·Origin·세션 복구 필수 확인
+
+HTTPS 웹 → WSS 게임 및 HTTPS API/Supabase 조합을 유지한다. HTTP CORS/OPTIONS와 WebSocket upgrade Origin 목록은 각각 확인한다. native의 무Origin 연결은 유지되지만 모든 명령에 인증은 계속 필요하다. wildcard나 preview 전체 허용은 하지 않는다.
+
+브라우저 auth는 지속 저장 및 autoRefreshToken을 사용하며 detectSessionInUrl=false이다. 동일 origin의 저장소 사용 가능 여부와 세션 갱신, 서버 current_account_session 및 친구 권한 RPC/RLS 설치를 실제 환경에서 확인해야 한다. 웹 origin을 바꾸면 기존 origin 저장소의 익명 계정 복귀를 가정할 수 없다. OAuth/이메일 redirect를 사용할 경우 별도 승인 아래 실제 Auth 설정과 callback 흐름을 대조한다; 현재 검사만으로 OAuth 완료를 주장하지 않는다.
+
+승인된 테스트 계정으로 새로고침, 다중 탭 교체, 비공개 패/칩/턴 복구, 친구 전적 RPC 오류를 확인해야 한다. 기존 프로젝트를 재사용하면 테스트 데이터도 운영 데이터가 될 수 있으므로 원격 로그인/게임은 이번에 실행하지 않았다. 실제 Pages edge/TLS/CORS/WSS/Volume/SHA 및 iPhone·Android PWA 검증도 남아 있다.

@@ -50,6 +50,7 @@ export class RoomClient {
   resynchronize() {
     if(this.disposed || this.replaced || this.leaving || this.state.status==='connecting' || this.state.status==='reconnecting')return;
     if(this.state.status==='connected'&&this.accessToken) {
+      if (this.socket?.readyState !== WebSocket.OPEN) { this.checkConnection(); return; }
       this.update({status:'connecting',error:null});
       this.connect(this.currentRoomRequest());
     } else this.refresh(true);
@@ -106,6 +107,7 @@ export class RoomClient {
   private writes: Promise<void> = Promise.resolve();
   private heartbeat: ReturnType<typeof setInterval> | undefined;
   private lastPong = 0;
+  private closeObservedAt: number | null = null;
   private pendingPing: number | null = null;
   private pingQueuedAt: number | null = null;
   private pingSentAt: number | null = null;
@@ -167,6 +169,7 @@ export class RoomClient {
     this.finishSettings('연결이 끊겨 설정 저장을 확인하지 못했어요. 다시 연결한 뒤 확인해 주세요.');
     clearInterval(this.heartbeat);
     this.pendingPing = null;
+    this.closeObservedAt = null;
     this.pingQueuedAt = null; this.pingSentAt = null;
     clearTimeout(this.retryTimer);
     clearTimeout(this.timeout);
@@ -212,7 +215,15 @@ export class RoomClient {
   checkConnection() {
     if (this.state.status === 'disconnected' && (this.session || this.accessToken)) { this.retryUntil = 0; this.connectionLost(); return; }
     if (this.state.status !== 'connected') return;
-    if (this.socket?.readyState !== WebSocket.OPEN) { this.connectionLost('socket_not_open'); return; }
+    if (this.socket && this.socket.readyState !== WebSocket.OPEN) {
+      // CLOSING/CLOSED can precede delivery of onclose. Preserve this generation
+      // so replacement codes stop retries instead of reclaiming another tab's seat.
+      this.closeObservedAt ??= Date.now();
+      if (Date.now() - this.closeObservedAt >= this.timing.heartbeatTimeoutMs) this.connectionLost('socket_not_open');
+      return;
+    }
+    this.closeObservedAt = null;
+    if (!this.socket) { this.connectionLost('socket_not_open'); return; }
     // A delayed/paused JS timer is not evidence of a failed probe. Give a new
     // probe its own budget; also bound a probe stuck waiting for auth/sendQueue.
     if (this.pendingPing !== null) {

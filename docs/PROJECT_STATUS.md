@@ -24,6 +24,16 @@
 
 통합 작업 당시 격리 복제본에서 TypeScript, 서버 178/178, 모바일 50/50, Web·Android·iOS 번들, P1/P2 Chrome이 통과했다. 기존 설치 의존성을 사용했다. 문서 정비 중 이 제품 검증을 재실행하지 않았다. Desktop에서 새 설치 및 직접 실행, 실기기 및 운영 인증 검증은 남아 있다. 현재 npm 권고는 [npm 보안 감사](security/npm-audit.md)에 있다.
 
+## 2026-11-18 멀티플레이 안정성 재검증
+
+HEAD 1b09bd1 (codex/consolidate-friends-table), 시작 clean. [상세 조사 및 회차별 기록](multiplayer-stability-investigation.md).
+
+- 기존 4001 교체 테스트: 수정 전 격리 16/20, 전체 4/5회 통과. CLOSING을 heartbeat가 먼저 처리하면서 close 4001이 stale로 무시되고 좌석을 되찾는 클라이언트 경쟁 상태를 확인·수정했다. timeout 증가나 서버 권한 완화 없음.
+- 최종 수정 후 격리 20/20, 전체 183/183 × 5회 PASS. 첫 수정 단계까지 합하면 수정 후 격리 40/40, 전체 10/10회 PASS. 신규 결정적 회귀 5개 포함.
+- TypeScript, 모바일 50/50, Web/PWA 정적 검사, Android/iOS 번들, P1/P2 Chrome PASS. 실제 로그인/실기기/원격 배포는 미실행.
+- build:pages는 실제 설정 미주입 시 4개 guard 오류 재현. 가짜 공개 fixture로만 22파일 빌드 PASS. 실제 배포용 환경 일치 확인과 재빌드 필요. npm audit는 전체 43(high 37/moderate 6), 서버 0; 업데이트 없음.
+- 후속 사용자 승인 검토: 추가 제품 결함 없음. 정상 종료·OPEN foreground 회귀 5개 보강 후 관련 43/43, 전체 서버 188/188, 모바일 50/50, TypeScript 및 diff 검사 PASS. 이 안정성 수정과 문서를 단일 로컬 커밋에 포함한다. push/merge/배포/DB/운영 설정 변경 없음. 현재 배포 상태는 아래 기존 보고와 구분한다.
+
 ## 구현과 잔여 위험
 
 - P0: 홀카드 360→240ms, 보드 540→360ms (모션 1.5배속). 공개/사운드 시작 동기화, 홀카드 피치 보정, 셔플 fade. 서버 nextHandAt 기준 10→5초 및 재접속 기한 유지. 오른쪽 히스토리 패널에 핸드·액션·공개 카드·사이드 팟·복수 승자·칩 변동 표시.

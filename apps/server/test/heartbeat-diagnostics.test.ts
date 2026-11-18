@@ -78,3 +78,60 @@ test('wire connection IDs are validated, carried to stale close, and never taken
   const close=app.logs.find(e=>e.event==='client_close')!;
   assert.equal(close.connectionId,connectionId);assert.equal(close.serverId,serverId);assert.equal(close.stale,true);
 });
+
+for (const readyState of [2, 3]) for (const code of [4001, 4003]) {
+  test('heartbeat preserves pending replacement close ' + code + ' in transport state ' + readyState, t => {
+    const app = setup(t);
+    app.client.accessToken = async () => 'fixture';
+    app.transport.readyState = readyState;
+    app.client.checkConnection();
+    app.client.refresh(true);
+    app.client.resynchronize();
+    assert.equal(app.state?.status, 'connected');
+    app.transport.onclose?.({code, reason:'Session replaced', wasClean:true});
+    app.client.refresh(true);
+    app.client.resynchronize();
+    assert.equal(app.state?.status, 'error');
+    assert.equal(app.logs.filter(e => e.event === 'client_connect').length, 1);
+    assert.ok(app.logs.some(e => e.event === 'client_close' && !e.stale));
+    assert.ok(!app.logs.some(e => e.event === 'client_retry_scheduled'));
+  });
+}
+test('a transport that never delivers close still has bounded recovery', t => {
+  const app = setup(t);
+  app.transport.readyState = 2;
+  app.client.checkConnection();
+  app.advance(14999); app.client.checkConnection();
+  assert.equal(app.state?.status, 'connected');
+  app.advance(1); app.client.checkConnection();
+  assert.equal(app.state?.status, 'reconnecting');
+});
+
+for (const code of [1000, 1006, 1011, 1013]) {
+  test('pending ordinary close ' + code + ' immediately schedules only one recovery', t => {
+    const app = setup(t);
+    app.client.accessToken = async () => 'fixture';
+    app.transport.readyState = 2;
+    app.client.checkConnection();
+    app.transport.onclose?.({code, reason:'', wasClean:code === 1000});
+    assert.equal(app.state?.status, 'reconnecting');
+    app.client.refresh(true);
+    app.client.resynchronize();
+    app.transport.onclose?.({code, reason:'', wasClean:false});
+    assert.equal(app.logs.filter(e => e.event === 'client_retry_scheduled').length, 1);
+    assert.ok(app.logs.some(e => e.event === 'client_close' && e.stale));
+  });
+}
+test('foreground on OPEN transport reconciles once and ignores the old replacement close', t => {
+  const app = setup(t);
+  app.client.accessToken = async () => 'fixture';
+  app.client.resynchronize();
+  assert.equal(app.state?.status, 'connecting');
+  app.client.resynchronize();
+  app.client.refresh(true);
+  app.transport.onclose?.({code:4001, reason:'Session replaced', wasClean:true});
+  assert.equal(app.state?.status, 'connecting');
+  assert.equal(app.logs.filter(e => e.event === 'client_connect').length, 2);
+  assert.ok(!app.logs.some(e => e.event === 'client_retry_scheduled'));
+  assert.ok(app.logs.some(e => e.event === 'client_close' && e.stale));
+});
