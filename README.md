@@ -3,7 +3,7 @@
 친구끼리 즐기는 무료 가상 칩 기반 최대 6인 비공개 텍사스 홀덤입니다. 웹/PWA 우선으로 개발하며 Android/iOS 호환성을 유지합니다.
 현재 제공 범위는 홀덤입니다.
 
-최신 개발·검증·배포 상태는 [현재 상태](docs/project-status.md), 문서 안내는 [docs](docs/README.md), AI 작업 규칙은 [AGENTS.md](AGENTS.md)를 참고하세요.
+Codex는 [Codex 작업 지침](AGENTS.md), [현재 상태](docs/PROJECT_STATUS.md), [개발·인수인계 절차](docs/DEVELOPMENT_WORKFLOW.md) 순으로 읽습니다. [문서 색인](docs/README.md)에서 기능 근거와 검증 절차를, [npm 보안 감사](docs/security/npm-audit.md)에서 의존성 보안 상태를 확인할 수 있습니다.
 
 ## 홀덤 플레이
 
@@ -150,7 +150,7 @@ export:mobile은 Android/iOS JavaScript·에셋 번들 검사이며 APK/IPA 빌�
 
 ## 현재 운영 범위
 
-인증·닉네임 온보딩·친구·전적과 SQLite 상태 복구가 구현되어 있습니다. 운영은 영속 STATE_DB_PATH가 필요하며 웹은 인증된 currentRoom으로 방 참여를 복구합니다. 스테이징/게임 서버 URL이 보고되어 있으나 로컬 P0/P1과 배포 버전의 일치는 확인되지 않았습니다. [현재 상태](docs/project-status.md)를 기준으로 확인하세요.
+인증·닉네임 온보딩·친구·전적과 SQLite 상태 복구가 구현되어 있습니다. 운영은 영속 STATE_DB_PATH가 필요하며 웹은 인증된 currentRoom으로 방 참여를 복구합니다. 스테이징/게임 서버 URL이 보고되어 있으나 로컬 P0/P1과 배포 버전의 일치는 확인되지 않았습니다. [현재 상태](docs/PROJECT_STATUS.md)를 기준으로 확인하세요.
 
 형상관리 방식은 [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md)를 참고하세요.
 

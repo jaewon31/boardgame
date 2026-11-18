@@ -2,6 +2,8 @@
 
 저장소: https://github.com/jaewon31/boardgame (비공개)
 
+실제 작업 시작, 승인, 인수인계는 [개발·인수인계 절차](docs/DEVELOPMENT_WORKFLOW.md)를 따른다.
+
 ## 기본 원칙
 
 - `main`: 실행이 확인된 기준 버전
@@ -41,4 +43,4 @@ node_modules, .expo, 로그, 실제 .env 파일, 인증서 및 비밀 키.
 
 ## 현재 앱 상태
 
-변동 정보는 [현재 상태](docs/project-status.md)에서 관리한다. 로그인·게임·SQLite·친구 전적은 구현되어 있으며 배포 여부는 별도로 확인한다.
+변동 정보는 [현재 상태](docs/PROJECT_STATUS.md)에서 관리한다. 로그인·게임·SQLite·친구 전적은 구현되어 있으며 배포 여부는 별도로 확인한다.

@@ -75,6 +75,6 @@ Chrome 157.0.8103.79 / Playwright 1.65.1. 실제 RN Web 화면을 로컬 fixture
 - 서버: `apps/server/src/friendStatsApi.ts`, `apps/server/src/http.ts`. SQLite 저장소·게임 lobby/규칙은 P2에서 수정하지 않음.
 - 테스트: `apps/mobile/test/FriendsScreen.test.cjs`의 신규 import stub, 신규 `apps/mobile/test/browser/p2-fixture.jsx`, `scripts/test-p2-browser.cjs`, `apps/server/test/friend-comparison.test.ts`.
 - SQL: `supabase/drafts/007_friend_stats_permission.sql`.
-- 문서: `docs/project-status.md`, `docs/friend-stats.md`, `docs/testing.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/README.md`, 이 보고서 및 `docs/assets/p2`.
+- 문서: `docs/PROJECT_STATUS.md`, `docs/friend-stats.md`, `docs/testing.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/README.md`, 이 보고서 및 `docs/assets/p2`.
 
 현재 전체 git status에는 위 변경 외에 작업 시작 전 P0/P1·문서 변경도 포함된다. 이를 P2 변경으로 오인하지 않는다. 시작 diff는 ignored `.qa-web/p2-baseline/preexisting.diff`에 보존했다.

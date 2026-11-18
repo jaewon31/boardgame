@@ -1,6 +1,6 @@
 # Friends Table 6단계: Railway 재사용 / Cloudflare Pages 배포 준비
 
-> 2026-11-17 문서 정비: 6단계 작업 당시 이력이다. 아래 현재 브랜치/배포 승인 대기/미커밋 표현은 당시 기준이며 최신 상태는 [project-status](project-status.md)를 확인한다.
+> 2026-11-17 문서 정비: 6단계 작업 당시 이력이다. 아래 현재 브랜치/배포 승인 대기/미커밋 표현은 당시 기준이며 최신 상태는 [project-status](PROJECT_STATUS.md)를 확인한다.
 
 최종 정리: 2026-11-16 KST. 외부 점검 시각은 `web-phase6-remote-check.json`의 UTC를 기준으로 한다. **로컬 코드·설정·검증 준비 완료, 실제 배포는 승인 대기**다. 원격 push, main 병합, Railway 배포/변수 변경, Pages 프로젝트 생성, Supabase 데이터/설정 변경, 유료 리소스 생성은 수행하지 않았다.
 

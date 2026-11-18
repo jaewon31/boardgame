@@ -14,7 +14,7 @@
 | 구분 | 파일 | 역할 |
 | --- | --- | --- |
 | 신규 | docs/README.md | 문서 지도·최신성 관리 |
-| 신규 | docs/project-status.md | 현재 단계·P0/P1/P2·검증·배포 분리 |
+| 신규 | docs/PROJECT_STATUS.md | 현재 단계·P0/P1/P2·검증·배포 분리 |
 | 신규 | docs/architecture.md | 실제 소스 기반 흐름·보안 경계·Mermaid |
 | 신규 | docs/decisions.md | 결정·근거·대안·영향·상태 |
 | 신규 | docs/testing.md | 실제 명령·버전·수동 검증·결과 양식 |
@@ -27,7 +27,7 @@
 | 수정 | docs/private-beta-deployment.md | 초기 배포 대안·현재 운영 지침 구분 |
 | 수정 | docs/friend-stats.md | 과거 Google 계정 검증과 현재 익명 인증 구분 |
 
-CLAUDE.md의 단일 @AGENTS.md는 그대로 보존했다. .claude/settings.json의 Expo 플러그인 설정과 .github/workflows/check.yml도 변경하지 않았다. 기존 .cursor/rules는 없었다. 새 자동화/CI는 추가하지 않았다.
+CLAUDE.md의 단일 @AGENTS.md는 그대로 보존했다. .claude/settings.json의 Expo 플러그인 설정과 .github/workflows/check.yml도 변경하지 않았다. 새 자동화/CI는 추가하지 않았다.
 
 ## 발견한 불일치와 중복
 
@@ -45,7 +45,6 @@ CLAUDE.md의 단일 @AGENTS.md는 그대로 보존했다. .claude/settings.json�
 
 - Codex: 저장소를 작업 디렉터리로 열고 AGENTS.md를 공통 진입점으로 사용한다. 상위/하위 및 override 지침, 사용자 설정의 영향을 받으므로 모든 환경에서 같은 파일만 자동 로드된다고 단정하지 않는다. [공식 AGENTS 안내](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
 - Claude Code: 기존 CLAUDE.md의 @AGENTS.md import 유지. 상대 import가 공식 지원되지만 사용 중인 버전/메모리 설정에서 실제 로드 여부는 확인해야 한다. [공식 memory 문서](https://code.claude.com/docs/en/memory).
-- Cursor: 공식 문서는 AGENTS.md를 프로젝트 규칙 대안으로 지원한다. 별도 .cursor/rules 파일이 없으며 현재 필요성을 확인하지 못해 중복 연결 파일도 만들지 않았다. 저장소 루트로 열고 적용 규칙/컨텍스트를 확인한다. 구버전에서 읽지 않으면 AGENTS와 관련 docs를 명시적으로 첨부하고 필요 시 최소 .mdc 연결 규칙만 추가한다. 실제 Cursor 세션 로드는 이번에 시험하지 않았다. [공식 rules](https://cursor.com/docs/rules).
 - 기타 에이전트: 자동 인식을 가정하지 않고 AGENTS.md와 docs/README.md를 명시적으로 읽도록 요청한다.
 
 작업 완료 시 모든 문서를 수정할 필요는 없다. 상태/검증은 project-status, 구조는 architecture, 결정은 decisions, 명령은 testing, 상세 근거는 해당 기능 보고서를 선택하여 코드와 함께 검토한다.

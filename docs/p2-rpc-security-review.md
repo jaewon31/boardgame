@@ -65,7 +65,7 @@ WebSocket lobby의 todayResults/handReviews는 인증된 방 참여자에게 제
 - `apps/server/src/friendStatsApi.ts`
 - `apps/server/test/friend-comparison.test.ts`
 - `apps/server/test/friend-stats-security.test.ts` (신규)
-- 이 보고서, `docs/project-status.md`, `docs/friend-stats.md`, `docs/testing.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/README.md`, P2 보고서의 후속 검증 링크.
+- 이 보고서, `docs/PROJECT_STATUS.md`, `docs/friend-stats.md`, `docs/testing.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/README.md`, P2 보고서의 후속 검증 링크.
 
 001~006 원본 SQL 및 P0/P1/P2 UI/게임 로직은 변경하지 않았다.
 

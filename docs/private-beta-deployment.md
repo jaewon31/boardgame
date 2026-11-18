@@ -1,6 +1,6 @@
 # 친구 대상 비공개 배포
 
-> 2026-11-17 문서 정비: 초기 비공개 배포 절차/대안 이력이다. 현재 플랫폼·배포 상태는 [project-status](project-status.md), 웹 운영 절차는 [web-deployment](web-deployment.md)를 우선한다. 아래 배포·설정 명령은 실행 승인 없이 수행하지 않는다.
+> 2026-11-17 문서 정비: 초기 비공개 배포 절차/대안 이력이다. 현재 플랫폼·배포 상태는 [project-status](PROJECT_STATUS.md), 웹 운영 절차는 [web-deployment](web-deployment.md)를 우선한다. 아래 배포·설정 명령은 실행 승인 없이 수행하지 않는다.
 
 범위: 가상 칩 홀덤, 한 서버 프로세스, Android/iOS. 섯다는 첫 배포에서 제외한다.
 유효한 Supabase 계정 세션(익명 계정 포함)과 방 코드로 입장한다. 친구 관계 자체가 방 참가 조건은 아니며 방장 승인·강퇴는 아직 없다.

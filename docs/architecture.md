@@ -1,6 +1,6 @@
 # 아키텍처와 보안 경계
 
-확인: 2026-11-17, codex/tempo-hand-history 작업 트리. 배포 상태는 [현재 상태](project-status.md).
+확인: 2026-11-17, codex/tempo-hand-history 작업 트리. 배포 상태는 [현재 상태](PROJECT_STATUS.md).
 
 ```mermaid
 flowchart LR
