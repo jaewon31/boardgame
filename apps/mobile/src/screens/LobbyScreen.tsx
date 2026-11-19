@@ -55,7 +55,7 @@ export function LobbyScreen({ room, playerId, connected, error, onHome, onRetry,
         </View>
       ))}</View>
       <View style={styles.note}><Text style={styles.noteText}>{room.game === 'holdem' ? settingsLabel(settings) + ' · 첫 판 이후 자동 진행' : '섯다 게임은 준비 중이에요.'}</Text></View>
-      {room.hostId === playerId && <Pressable accessibilityRole="button" disabled={!connected} onPress={()=>setEditing({settings: {...settings}, revision: room.settingsRevision})} style={{minHeight:44,justifyContent:'center'}}><Text style={styles.host}>방 설정 변경 ›</Text></Pressable>}
+      {room.hostId === playerId && <Pressable accessibilityRole="button" disabled={!connected} onPress={()=>setEditing({settings: {...settings}, revision: room.settingsRevision})} accessibilityLabel="방 설정 변경" style={[styles.settingsButton,!connected && {opacity:.45}]}><Text style={styles.settingsIcon}>⚙</Text><Text style={styles.settingsText}>방 설정 변경</Text></Pressable>}
       {editing && room.hostId === playerId && <RoomSettingsEditor initial={editing.settings} onClose={()=>setEditing(null)} onSave={value=>onSettings(value, editing.revision)} />}
       <ActionButton compact secondary title="홈으로 · 방 참여 유지" onPress={onHome} />
       <View style={{ flexDirection: 'row', gap: 8 }}>{room.game === 'holdem' && room.hostId === playerId && <View style={{ flex: 1 }}><ActionButton compact title="홀덤 시작" onPress={onStart} disabled={!connected || room.players.filter(p => p.connected).length < 2} /></View>}
@@ -64,6 +64,9 @@ export function LobbyScreen({ room, playerId, connected, error, onHome, onRetry,
   );
 }
 const styles = StyleSheet.create({
+  settingsButton: {minHeight:48,minWidth:44,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,paddingHorizontal:14,backgroundColor:'#293E32',borderWidth:1,borderColor:'#8C815C',borderRadius:10},
+  settingsIcon: {fontSize:24,color:'#E8D59F'},
+  settingsText: {fontSize:14,fontWeight:'700',color:'#F2E8CE'},
   screen: { flex: 1, backgroundColor: '#101C18' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   content: { gap: 6, justifyContent: 'center', paddingHorizontal: 16, width: '100%', maxWidth: 560, alignSelf: 'center' },

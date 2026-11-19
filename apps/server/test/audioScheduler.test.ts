@@ -112,3 +112,23 @@ test('shuffle can finish beyond five seconds, but its missing callback remains b
   assert.equal(a.errors, 1);
   assert.equal(a.listeners.size, 0);
 });
+
+test('server window bounds shuffle, seeks to elapsed position and fades without a loop',async()=>{
+ const a=setup();let offset=-1;
+ a.players.shuffle.seekTo=async seconds=>{offset=seconds;};
+ a.advance(2000);a.scheduler.enqueue([{...cue('shuffle'),endAt:5000}]);await flush();
+ assert.equal(offset,2);assert.deepEqual(a.played,['shuffle']);assert.equal(a.players.shuffle.volume,0);
+ a.advance(60);assert.equal(a.players.shuffle.volume,a.gains.shuffle);
+ a.advance(2850);assert.ok(a.players.shuffle.volume>0 && a.players.shuffle.volume<a.gains.shuffle);
+ a.advance(90);assert.equal(a.listeners.has('shuffle'),false);assert.equal(a.paused.filter(s=>s==='shuffle').length,2);
+ a.scheduler.enqueue([{...cue('shuffle','expired'),endAt:5000}]);await flush();assert.equal(a.played.length,1);
+});
+
+test('hole sound uses pitch-corrected 1.5 speed while board sound keeps original pitch and speed',async()=>{
+ const a=setup();const rates:number[]=[];
+ a.players.deal.setPlaybackRate=rate=>{rates.push(rate);};
+ a.scheduler.enqueue([cue('deal')]);await flush();
+ assert.deepEqual(rates,[1.5]);assert.equal(a.players.deal.shouldCorrectPitch,true);
+ a.scheduler.cancel();a.players.flopReveal.setPlaybackRate=rate=>{rates.push(rate);};
+ a.scheduler.enqueue([cue('flopReveal')]);await flush();assert.deepEqual(rates,[1.5,1]);
+});

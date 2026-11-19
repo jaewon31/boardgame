@@ -12,7 +12,7 @@ interface Props { phase: RoomPhase; notice?: 'room-closed' | 'membership-ended';
 export default function HomeScreen({ phase, notice, onDismissNotice, activeRoom, playerId, onReturn, onLeave, onRetry, connected, onEnter, busy, error, onCancel, invite, accountName, onAccount, onFriends }: Props) {
   const [settings, setSettings] = useState<RoomSettings>({...DEFAULT_SETTINGS});
   const [editing, setEditing] = useState(false);
-  useEffect(() => { if (invite) { setCode(invite.code); setMode('join'); setValidation(null); } }, [invite]);
+  useEffect(() => { if (invite) { setCode(invite.code); setMode('join'); setValidation(null); } }, [invite?.code]);
   const [game, setGame] = useState<GameId>('holdem');
   const [mode, setMode] = useState<'create' | 'join'>('create');
   const [nickname, setNickname] = useState('');
@@ -38,7 +38,7 @@ export default function HomeScreen({ phase, notice, onDismissNotice, activeRoom,
     onEnter(mode === 'create' ? { type: 'create', nickname: name, game, settings } : { type: 'join', nickname: name, code: code.trim().toUpperCase() });
   }
   return (
-    <KeyboardAvoidingView testID="web-page" style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView enabled={Platform.OS !== 'web'} testID="web-page" style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View testID="web-page-content" onLayout={e => setAvailableHeight(e.nativeEvent.layout.height - insets.top - insets.bottom)} style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
         {(Platform.OS === 'web' || !tight) && <View style={styles.header}><Text style={styles.brand}>FRIENDS TABLE</Text>{accountName&&<Pressable accessibilityRole="button" disabled={busy} onPress={onFriends} style={{minHeight:44,justifyContent:'center',paddingHorizontal:6}}><Text style={styles.badge}>친구</Text></Pressable>}<Pressable accessibilityRole="button" disabled={busy} onPress={onAccount} style={{minHeight:44,justifyContent:'center'}}><Text style={styles.badge}>{accountName ? '내 프로필' : '로그인'}</Text></Pressable></View>}
 
@@ -85,10 +85,10 @@ export default function HomeScreen({ phase, notice, onDismissNotice, activeRoom,
               </Pressable>
             ))}
           </View>
-          <Pressable accessibilityRole="button" disabled={busy} onPress={()=>{Keyboard.dismiss();setEditing(true);}} style={styles.settings}><Text style={styles.selection}>방 설정 ›  {settingsLabel(settings)}</Text></Pressable>
+          <Pressable accessibilityRole="button" disabled={busy} onPress={()=>{Keyboard.dismiss();setEditing(true);}} style={styles.settings}><Text style={styles.selection}>⚙ 방 설정 ›  {settingsLabel(settings)}</Text></Pressable>
         </> : <>
           {!tight && <Text style={styles.label}>초대 코드</Text>}
-          <TextInput accessibilityLabel="초대 코드" value={code} onChangeText={text => { setCode(text.toUpperCase().replace(/\s/g, '')); setValidation(null); }}
+          <TextInput accessibilityLabel="초대 코드" value={code} onChangeText={text => { setCode(Platform.OS === 'web' ? text : text.toUpperCase().replace(/\s/g, '')); setValidation(null); }}
             editable={!busy} placeholder="예: AB3D5FGH" placeholderTextColor="#7F9287" maxLength={8} autoCapitalize="characters" autoCorrect={false}
             style={[styles.input, styles.codeInput]} returnKeyType="go" onSubmitEditing={submit} />
 
@@ -108,7 +108,7 @@ export default function HomeScreen({ phase, notice, onDismissNotice, activeRoom,
 const styles = StyleSheet.create({
   activeRoom:{padding:18,gap:12,borderRadius:20,backgroundColor:'#24392C',borderWidth:1,borderColor:'#D5BD7F'},
   identity:{paddingVertical:8,gap:4},identityName:{color:'#FAF6E9',fontSize:18,fontWeight:'700'},
-  settings: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  settings: { minHeight: 48, minWidth:44, justifyContent: 'center', paddingHorizontal: 12, backgroundColor:'#293E32',borderWidth:1,borderColor:'#8C815C',borderRadius:10 },
   container: { flex: 1, backgroundColor: '#101C18' },
   content: { flex: 1, gap: 6, justifyContent: 'center', paddingHorizontal: 20, width: '100%', maxWidth: 560, alignSelf: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },

@@ -85,11 +85,11 @@ test('all-in call, opening all-in, raising all-in, timeout and departure classif
  test('shuffle plays once between observed result and next hand, never on reconnect',()=>{
  const s=new SoundEvents();s.update(base,'a',true,0);
  const end={...base,revision:1,street:'complete'} as HoldemView;
- s.update(end,'a',true,1000,11000);
- assert.deepEqual(sounds(s.update(end,'a',true,4500,11000)),['shuffle']);
- assert.deepEqual(s.update(end,'a',true,4700,11000),[]);
- s.update(end,'a',false,4800,11000);assert.deepEqual(s.update(end,'a',true,4900,11000),[]);
- assert.deepEqual(s.update(end,'a',true,5000,11000),[]);
+ assert.ok(sounds(s.update(end,'a',true,1000,6000)).includes('shuffle'));
+ assert.deepEqual(s.update(end,'a',true,4500,6000),[]);
+ assert.deepEqual(s.update(end,'a',true,4700,6000),[]);
+ s.update(end,'a',false,4800,6000);assert.deepEqual(s.update(end,'a',true,4900,6000),[]);
+ assert.deepEqual(s.update(end,'a',true,5000,6000),[]);
  });
  test('all-in metadata overrides ordinary chip sound including stack-exhausting calls',()=>{
  for(const action of ['allIn','call'] as const){
@@ -105,8 +105,8 @@ test('shuffle stays silent without a next hand, after a late update, and on an i
   const s = new SoundEvents(); s.update(base, 'a', true, 0);
   s.update(end, 'a', true, 1000);
   assert.deepEqual(s.update(end, 'a', true, 4500), []);
-  assert.deepEqual(s.update(end, 'a', true, 6000, 11000), []);
+  assert.deepEqual(s.update(end, 'a', true, 6000, 6000), []);
   const initial = new SoundEvents();
-  assert.deepEqual(initial.update(end, 'a', true, 4000, 11000), []);
-  assert.deepEqual(initial.update(end, 'a', true, 4500, 11000), []);
+  assert.deepEqual(initial.update(end, 'a', true, 4000, 6000), []);
+  assert.deepEqual(initial.update(end, 'a', true, 4500, 6000), []);
 });

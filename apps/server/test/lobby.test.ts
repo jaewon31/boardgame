@@ -341,7 +341,7 @@ test('automatic rounds preserve chips, rotate dealer, and cannot be skipped by t
   }
 });
 
-test('countdown pauses when a funded player disconnects and resumes after reconnect', async t => {
+test('countdown retains its server deadline across disconnect and overdue reconnect', async t => {
   const app=await setup(t,{nextHandMs:120,reconnectMs:2000});
   const a=await app.connect(),b=await app.connect();
   const first=await a.create();
@@ -353,13 +353,13 @@ test('countdown pauses when a funded player disconnects and resumes after reconn
   await a.next('room',m=>m.type==='room' && !!m.room.nextHandAt);
   b.socket.terminate();
   const paused=(await a.next('room',m=>m.type==='room' && m.room.players[1]?.connected === false) as RoomMessage).room;
-  assert.equal(paused.nextHandAt,null);
+  assert.ok(paused.nextHandAt);
   await new Promise(r=>setTimeout(r,180));
   const resumed=await app.connect();
   resumed.send({type:'resume',code:first.room.code,token:second.token});
   const state=(await resumed.next('joined') as Joined).room;
   assert.equal(state.holdem?.number,1);
-  assert.ok(state.nextHandAt);
+  assert.equal(state.nextHandAt,paused.nextHandAt);
   await a.next('room',m=>m.type==='room' && m.room.holdem?.number===2);
 });
 
@@ -670,4 +670,18 @@ test('in-game disconnect preserves the seat until grace expiry then applies exis
  assert.equal(offline.room.players.length,2);assert.equal(offline.room.holdem?.id,started.room.holdem?.id);assert.equal(offline.room.holdem?.revision,started.room.holdem?.revision);
  const departed=await b.next('room',m=>m.type==='room'&&m.room.players.length===1) as RoomMessage;
  assert.equal(departed.room.holdem?.street,'complete');assert.notEqual(departed.room.hostId,first.playerId);
+});
+
+test('default next hand window is five seconds, shared by peers and reconnect snapshots',async t=>{
+ const app=await setup(t);const a=await app.connect(),b=await app.connect();const first=await a.create();
+ b.send({type:'join',code:first.room.code,nickname:'B'});const second=await b.next('joined') as Joined;
+ a.send({type:'startHand',previousHandId:null});const hand=(await a.next('room',m=>m.type==='room'&&!!m.room.holdem) as RoomMessage).room.holdem!;
+ const before=Date.now();a.send({type:'act',handId:hand.id,revision:0,action:'fold'});
+ const end=(await a.next('room',m=>m.type==='room'&&!!m.room.nextHandAt) as RoomMessage).room;
+ assert.ok(end.nextHandAt!>=before+5000 && end.nextHandAt!<=Date.now()+5000);
+ const other=(await b.next('room',m=>m.type==='room'&&!!m.room.nextHandAt) as RoomMessage).room;
+ assert.equal(other.nextHandAt,end.nextHandAt);
+ b.socket.terminate();await a.next('room',m=>m.type==='room'&&m.room.players[1]?.connected===false);
+ const c=await app.connect();c.send({type:'resume',code:first.room.code,token:second.token});const restored=(await c.next('joined') as Joined).room;
+ assert.equal(restored.nextHandAt,end.nextHandAt);assert.deepEqual(restored.handReviews,other.handReviews);
 });

@@ -13,7 +13,7 @@ export function createAppServer(ready: () => boolean = () => true, extra?: (requ
     if(origin) response.setHeader('Access-Control-Allow-Origin',origin);
     if(request.method==='OPTIONS') {
       const headers=String(request.headers['access-control-request-headers']??'').toLowerCase().split(',').map(v=>v.trim()).filter(Boolean);
-      const path=/^\/friends\/[0-9a-f-]{36}\/stats$/i.test(request.url??'') || request.url==='/health';
+      const path=/^\/friends\/[0-9a-f-]{36}(?:\/[0-9a-f-]{36})?\/stats$/i.test(request.url??'') || request.url==='/health';
       if(!origin || !path || request.headers['access-control-request-method']!=='GET' || headers.some(h=>h!=='authorization'&&h!=='content-type')) {response.writeHead(403);response.end();return;}
       response.setHeader('Access-Control-Allow-Methods','GET');
       response.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type');

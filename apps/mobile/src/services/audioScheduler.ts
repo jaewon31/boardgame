@@ -4,6 +4,8 @@ export interface SoundPlayer {
   readonly isLoaded: boolean;
   readonly currentStatus?: { isLoaded: boolean };
   volume: number;
+  shouldCorrectPitch?: boolean;
+  setPlaybackRate?(rate: number, quality?: 'high'): void;
   pause(): void;
   seekTo(seconds: number): Promise<void>;
   play(): void;
@@ -18,6 +20,8 @@ export interface AudioPort {
 type Lane = 'table' | 'notice';
 export interface ScheduledCue extends SoundCue {
   minDurationMs?: number;
+  /** Monotonic end of the server-owned between-hand window. */
+  endAt?: number;
   onStart?: () => void;
   onCancel?: () => void;
 }
@@ -72,13 +76,17 @@ export class AudioScheduler {
     const now = this.clock();
     this.queue = this.queue.filter(cue => {
       // Presentations may wait behind real actions; expired visuals settle silently.
-      const keep = now - cue.at <= (cue.onStart ? 8000 : this.maxWait(cue.sound))
+      const keep = (cue.endAt === undefined || now < cue.endAt) && now - cue.at <= (cue.onStart ? 8000 : this.maxWait(cue.sound))
         && (!!cue.onStart || (this.enabled && this.port.gain(cue.sound) > 0));
       if (!keep) cue.onCancel?.();
       return keep;
     });
     for (const lane of ['table', 'notice'] as const) {
       const current = this.running.get(lane);
+      if (current?.cue.endAt !== undefined) {
+        if (now >= current.cue.endAt) { this.finish(lane, current, true); continue; }
+        this.port.player(current.cue.sound).volume = this.volume(current, now);
+      }
       if (current?.ended && now - current.started >= (current.cue.minDurationMs ?? 0)) this.finish(lane, current, false);
       // Do not let an unavailable native seek stall the visual presentation.
       if (current?.cue.onStart && !current.playing && now - current.started > 200) this.beginSilent(current);
@@ -111,10 +119,16 @@ export class AudioScheduler {
     this.seeking.add(sound);
     try {
       player.pause();
-      await player.seekTo(0);
+      await player.seekTo(run.cue.endAt === undefined ? 0 : Math.max(0, (this.clock() - (run.cue.endAt - 5000)) / 1000));
       if (!this.enabled || this.running.get(lane) !== run || run.silent) return;
       const gain = this.port.gain(sound);
-      player.volume = gain;
+      run.started = this.clock();
+      player.volume = this.volume(run, run.started);
+      if (player.setPlaybackRate) {
+        player.shouldCorrectPitch = true;
+        player.setPlaybackRate(sound === 'deal' ? 1.5 : 1, 'high');
+      }
+      if (run.cue.endAt !== undefined && this.clock() >= run.cue.endAt) { this.finish(lane, run, true); return; }
       // Android applies the native volume setter asynchronously; do not read it back.
       if (gain <= 0 || this.clock() - run.cue.at > (run.cue.onStart ? 8000 : this.maxWait(sound))) { this.finish(lane, run, false); return; }
       run.remove = this.port.onEnd(sound, () => {
@@ -126,7 +140,6 @@ export class AudioScheduler {
         this.trace('error', sound); this.finish(lane, run, true); this.port.error();
       });
       run.playing = true;
-      run.started = this.clock();
       player.play();
       this.beginVisual(run);
       this.trace('play_requested', sound);
@@ -145,8 +158,12 @@ export class AudioScheduler {
       try { this.port.player(run.cue.sound).pause(); } catch { /* Already released. */ }
     }
   }
+  private volume(run: Run, now: number) {
+    const envelope = run.cue.endAt === undefined ? 1 : Math.max(0, Math.min(1, (now - run.started) / 60, (run.cue.endAt - now) / 180));
+    return this.port.gain(run.cue.sound) * envelope;
+  }
   refreshVolumes() {
-    for (const run of this.running.values()) this.port.player(run.cue.sound).volume = this.port.gain(run.cue.sound);
+    for (const run of this.running.values()) this.port.player(run.cue.sound).volume = this.volume(run, this.clock());
   }
   cancel() {
     for (const cue of this.queue) cue.onCancel?.();

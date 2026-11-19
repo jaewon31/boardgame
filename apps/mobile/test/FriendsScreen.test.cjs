@@ -38,6 +38,7 @@ function harness(rows, { loading = false, message = '', height = 800 } = {}) {
     '../services/platformUI': {Alert:native.Alert,Share:native.Share},
     '../services/friendTypes': { normalizeFriendCode: x => x },
     '../components/ActionButton': { ActionButton },
+    './FriendComparisonScreen': { FriendComparisonScreen: () => null },
     './FriendStatsScreen': { FriendStatsScreen: () => null },
   });
   let nodes;

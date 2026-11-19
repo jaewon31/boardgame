@@ -39,7 +39,7 @@ export class SoundEvents {
       }
     }
     if (hand.street === 'complete' && this.completedHand === hand.id && this.shuffledHand !== hand.id
-      && nextHandAt && nextHandAt - now <= 6500 && nextHandAt - now >= 6000) {
+      && nextHandAt && nextHandAt - now <= 5000 && nextHandAt - now > 0) {
       this.shuffledHand = hand.id;
       emit('shuffle', 'between-hands');
     }

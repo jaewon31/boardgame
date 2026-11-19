@@ -7,12 +7,12 @@ export function AccountScreen({account,onClose,setup=false}:{account:Account;onC
   const insets=useSafeAreaInsets();
   const [name,setName]=useState('');
   useEffect(()=>setName(setup?'':account.profile?.display_name??''),[account.profile?.id,setup]);
-  const waiting=account.loading || account.profileLoading;
+  const waiting=(account.loading || account.profileLoading) && !account.profile;
   const ready=!!account.profile&&!account.sessionBlocked;
   const clean=name.trim().normalize('NFC');
   const validName=[...clean].length>=1&&[...clean].length<=12&&!/[\p{Cc}\p{Cf}]/u.test(clean);
   async function save(){if(await account.saveName(name))onClose();}
-  return <KeyboardAvoidingView testID="web-page" style={styles.screen} behavior={Platform.OS==='ios'?'padding':'height'}>
+  return <KeyboardAvoidingView enabled={Platform.OS !== 'web'} testID="web-page" style={styles.screen} behavior={Platform.OS==='ios'?'padding':'height'}>
     <ScrollView contentContainerStyle={[styles.content,{paddingTop:insets.top+16,paddingBottom:insets.bottom+24}]} keyboardShouldPersistTaps="handled">
       <View style={styles.top}><Text style={styles.brand}>FRIENDS TABLE</Text>{ready&&!setup&&<Pressable accessibilityRole="button" disabled={account.busy} onPress={onClose} style={styles.close}><Text style={styles.note}>닫기</Text></Pressable>}</View>
       <View style={styles.body}>

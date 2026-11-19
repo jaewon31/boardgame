@@ -1,5 +1,5 @@
 export const soundCatalog = {
-  shuffle: { label: '카드 셔플', gain: 0.8, priority: 30, lane: 'table', maxWaitMs: 500, maxPlayMs: 7500 },
+  shuffle: { label: '카드 셔플', gain: 0.8, priority: 30, lane: 'table', maxWaitMs: 5000, maxPlayMs: 7500 },
   allIn: { maxWaitMs: 5000, label: '올인', gain: 0.9, priority: 65, lane: 'table' },
   deal: { label: '카드 배분', gain: 0.8, priority: 60, lane: 'table' },
   check: { maxWaitMs: 5000, label: '체크', gain: 0.65, priority: 40, lane: 'table' },

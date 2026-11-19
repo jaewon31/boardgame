@@ -2,8 +2,8 @@ import type { HoldemView } from '@boardgame/shared';
 import type { SoundCue } from './soundCatalog.ts';
 import type { ScheduledCue } from './audioScheduler.ts';
 
-export const HOLE_DURATION_MS = 360;
-export const BOARD_DURATION_MS = 540;
+export const HOLE_DURATION_MS = 240;
+export const BOARD_DURATION_MS = 360;
 export interface CardMotion { id: string; startedAt: number; durationMs: number }
 export interface CardPresentationState { handId: string | null; boardCount: number; board: Record<number, CardMotion>; hole?: CardMotion; holePending?: boolean }
 

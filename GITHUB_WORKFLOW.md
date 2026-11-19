@@ -19,22 +19,15 @@ npm run typecheck
 
 ## 기능 개발 순서
 
+현재 브랜치와 미커밋 파일부터 확인하고 [공통 규칙](AGENTS.md)을 따른다. 진행 중 작업에서 임의로 main으로 전환하거나 변경을 초기화하지 않는다.
+
 ```powershell
-git switch main
-git pull --ff-only
-git switch -c codex/private-rooms
-# 코드 수정 후
-npm run typecheck
-git status
-git add apps/mobile/src/screens/HomeScreen.tsx
-# 실제 변경한 파일만 추가하거나 VS Code 소스 제어에서 스테이징
-git commit -m "feat: add private room screen"
-git push -u origin codex/private-rooms
+git status --short
+git branch --show-current
+git log -5 --oneline
 ```
 
-GitHub에서 Pull Request를 만들고 변경 내용과 자동 검사 결과를 확인합니다.
-완성되면 Squash and merge로 main에 합칩니다.
-다음 작업 전에는 다시 main으로 이동해 `git pull --ff-only`를 실행합니다.
+관련 코드·테스트·문서를 함께 수정하고 검증 결과와 diff를 검토한다. 커밋과 원격 push는 사용자 별도 승인 후 실제 작업 파일만 선택한다. main 병합/push는 기본 금지이며 별도 명시적 승인 대상이다. Railway 자동 배포를 유발할 수 있으므로 PR 검사 통과만으로 병합하지 않는다.
 
 ## 저장소에 포함할 것
 
@@ -48,4 +41,4 @@ node_modules, .expo, 로그, 실제 .env 파일, 인증서 및 비밀 키.
 
 ## 현재 앱 상태
 
-비공개 대기실 생성·초대 코드 입장·참가자 실시간 동기화가 구현되었습니다. 로그인과 실제 게임 로직, 인터넷 배포는 후속 작업입니다.
+변동 정보는 [현재 상태](docs/project-status.md)에서 관리한다. 로그인·게임·SQLite·친구 전적은 구현되어 있으며 배포 여부는 별도로 확인한다.

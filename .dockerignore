@@ -9,3 +9,6 @@ node_modules
 **/*.jks
 **/*.p8
 **/*.p12
+.qa-web
+**/dist-web
+supabase/.temp

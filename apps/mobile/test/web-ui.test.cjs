@@ -46,14 +46,31 @@ test('web lifecycle resumes visible tabs, ignores hidden resume events and remov
   dispose();assert.equal(document.handlers.size+window.handlers.size,0);
 });
 
-test('web viewport follows keyboard resize, preserves pinch zoom and cleans up listeners',()=>{
-  const values=new Map(),events=new Map(),visualEvents=new Map();let cleanup,removed=false,meta='width=device-width';
-  const visual={height:667,scale:1,addEventListener:(k,f)=>visualEvents.set(k,f),removeEventListener:k=>visualEvents.delete(k)};
-  const window={innerHeight:700,visualViewport:visual,addEventListener:(k,f)=>events.set(k,f),removeEventListener:k=>events.delete(k)};
-  const document={createElement:()=>({remove:()=>removed=true}),head:{append(){}},querySelector:()=>({getAttribute:()=>meta,setAttribute:(_k,v)=>meta=v}),documentElement:{style:{setProperty:(k,v)=>values.set(k,v),removeProperty:k=>values.delete(k)}}};
-  load('useWebLayout.web.ts',{react:{useEffect:fn=>cleanup=fn()}},{document,window}).useWebLayout();
-  assert.equal(values.get('--table-viewport'),'667px');assert.ok(meta.includes('viewport-fit=cover'));assert.ok(!meta.includes('user-scalable=no'));
-  visual.height=360;visualEvents.get('resize')();assert.equal(values.get('--table-viewport'),'360px');
-  visual.scale=2;visual.height=180;visualEvents.get('resize')();assert.equal(values.get('--table-viewport'),'360px');
-  cleanup();assert.equal(events.size+visualEvents.size,0);assert.equal(values.size,0);assert.ok(removed);assert.equal(meta,'width=device-width');
+function viewportHarness({touch=true,visual=true}={}) {
+  const target=()=>{const listeners=new Map();return {listeners,addEventListener:(k,f)=>listeners.set(k,f),removeEventListener:k=>listeners.delete(k)};};
+  class Element {closest(){return null;}}
+  class Input extends Element {readOnly=false;disabled=false;type='text';}
+  class TextArea extends Element {}
+  const values=new Map(),vv={...target(),height:800,offsetTop:0,scale:1};let scheduled;
+  const window={...target(),innerHeight:800,innerWidth:390,matchMedia:()=>({matches:touch}),requestAnimationFrame:fn=>(scheduled=fn,1),cancelAnimationFrame:()=>scheduled=null,...(visual?{visualViewport:vv}:{})};
+  const document={...target(),activeElement:null,documentElement:{style:{setProperty:(k,v)=>values.set(k,v),removeProperty:k=>values.delete(k)}}};
+  const api=load('webViewport.ts',{}, {window,document,HTMLElement:Element,HTMLInputElement:Input,HTMLTextAreaElement:TextArea});
+  const dispose=api.watchWebViewport();
+  return {window,document,vv,values,dispose,focus(){document.activeElement=new Input();document.listeners.get('focusin')();},blur(){document.activeElement=null;document.listeners.get('focusout')();},flush(){const f=scheduled;scheduled=null;f?.();},resize(height){vv.height=height;(visual?vv:window).listeners.get('resize')();this.flush();}};
+}
+test('touch keyboard keeps table height while input viewport and Safari offset track visible area',()=>{
+ const h=viewportHarness();h.focus();h.resize(460);assert.equal(h.values.get('--table-viewport'),'800px');assert.equal(h.values.get('--input-viewport'),'460px');
+ h.vv.offsetTop=32;h.vv.listeners.get('scroll')();h.flush();assert.equal(h.values.get('--visual-top'),'32px');
+ h.blur();h.flush();assert.equal(h.values.get('--table-viewport'),'800px');h.vv.offsetTop=0;h.resize(800);assert.equal(h.values.get('--visual-top'),'0px');
+ h.dispose();assert.equal(h.values.size,0);assert.equal(h.window.listeners.size+h.document.listeners.size+h.vv.listeners.size,0);
+});
+test('desktop resize is not frozen by a focused hardware-keyboard input',()=>{
+ const h=viewportHarness({touch:false});h.focus();h.resize(600);assert.equal(h.values.get('--table-viewport'),'600px');h.dispose();
+});
+test('orientation updates layout, pinch zoom does not change viewport variables',()=>{
+ const h=viewportHarness();h.focus();h.resize(460);h.vv.scale=2;h.resize(200);assert.equal(h.values.get('--input-viewport'),'460px');
+ h.vv.scale=1;h.window.innerWidth=844;h.window.innerHeight=390;h.resize(220);assert.equal(h.values.get('--table-viewport'),'390px');h.blur();h.resize(390);h.dispose();
+});
+test('without VisualViewport the window resize fallback still preserves the touch table',()=>{
+ const h=viewportHarness({visual:false});h.focus();h.window.innerHeight=450;h.resize(450);assert.equal(h.values.get('--table-viewport'),'800px');assert.equal(h.values.get('--input-viewport'),'450px');h.blur();h.window.innerHeight=800;h.resize(800);h.dispose();
 });

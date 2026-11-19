@@ -1,0 +1,53 @@
+{
+  "browser": "157.0.8103.79",
+  "report": [
+    {
+      "width": 1366,
+      "height": 768,
+      "players": "2–6",
+      "settings": "host/guest/offline/modal",
+      "stats": "pair/self/403/empty",
+      "result": "PASS"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "players": "2–6",
+      "settings": "host/guest/offline/modal",
+      "stats": "pair/self/403/empty",
+      "result": "PASS"
+    },
+    {
+      "width": 375,
+      "height": 812,
+      "players": "2–6",
+      "settings": "host/guest/offline/modal",
+      "stats": "pair/self/403/empty",
+      "result": "PASS"
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "players": "2–6",
+      "settings": "host/guest/offline/modal",
+      "stats": "pair/self/403/empty",
+      "result": "PASS"
+    },
+    {
+      "width": 430,
+      "height": 932,
+      "players": "2–6",
+      "settings": "host/guest/offline/modal",
+      "stats": "pair/self/403/empty",
+      "result": "PASS"
+    },
+    {
+      "width": 844,
+      "height": 390,
+      "players": "2–6",
+      "settings": "host/guest/offline/modal",
+      "stats": "pair/self/403/empty",
+      "result": "PASS"
+    }
+  ]
+}

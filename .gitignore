@@ -55,3 +55,6 @@ android-selection-preview.png
 *.sqlite
 *.sqlite-*
 /data/
+
+# Supabase CLI machine-local connection/cache metadata
+/supabase/.temp/
