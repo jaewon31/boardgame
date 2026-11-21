@@ -1,4 +1,4 @@
-# Friends Table Codex 작업 지침
+# Friends Table AI 작업 지침 (Codex · Claude Code 공통)
 
 친구끼리 즐기는 최대 6인 비공개 텍사스 홀덤. 무료 가상 칩, 웹/PWA 우선이며 Android/iOS 호환성을 유지한다. 현재 방 입장은 인증 + 초대 코드이며 친구 관계를 강제하지 않는다.
 
@@ -28,6 +28,15 @@
 - 사용자 명시적 승인 없는 Railway/Cloudflare 배포, Supabase DB·인증·RLS·보안 설정 변경, 원격 push 금지. main 병합·push는 기본 금지이며 별도 명시적 승인 대상이다. Railway 자동 배포를 유발할 수 있다.
 - 운영 데이터 삭제·초기화 금지. Production Supabase 및 운영 서버 설정 변경에는 사용자 명시적 승인이 필요하다. 커밋은 사용자 별도 승인 후 수행한다. 문서의 배포 명령은 실행 허가가 아니다.
 - 문서/로그에 비밀키·토큰·개인정보를 넣지 않는다.
+
+## AI 교대 개발·검수 (Codex ↔ Claude Code)
+
+- 이 파일이 두 AI의 공통 규칙이다. Claude Code는 [CLAUDE.md](CLAUDE.md)가 이 파일을 불러오며, 도구별 차이만 그 파일에 둔다.
+- 두 AI는 같은 브랜치에서 교대로 작업할 수 있다. 같은 작업본을 동시에 수정하지 않는다. 병렬 작업이 필요하면 사용자 승인 후 `git worktree`로 폴더를 분리한다.
+- 브랜치: `codex/`, `claude/` 접두사 모두 허용한다. 신규 브랜치는 AI 이름보다 작업 목적으로 이름 짓는다(예: `fix/multiplayer-stability`, `fix/invite-routing`, `feat/table-ui`, `refactor/websocket-auth`). 기존 브랜치 이름은 바꾸지 않는다. 브랜치 생성·전환은 사용자 승인 후 한다.
+- 시작 시 [AI 인계](docs/ai/HANDOFF.md)를 읽고 `git status`와 대조한다. 종료 시 인계 문서의 기준점·현재 작업을 갱신하고 양식에 따라 기록한다.
+- 상대 AI의 변경은 인계 문서 서술을 믿지 말고 diff와 테스트로 독립 검수한다. 검수 결과와 미검증 항목도 인계 문서에 남긴다.
+- 작성자를 알 수 없는 미커밋 변경은 사용자 작업으로 간주해 덮어쓰거나 커밋에 섞지 않는다. 겹치면 편집을 멈추고 보고한다.
 
 ## 완료 순서
 

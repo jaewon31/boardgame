@@ -1,11 +1,12 @@
 # 프로젝트 문서 안내
 
-갱신: 2026-11-18 KST. 공통 규칙은 [AGENTS.md](../AGENTS.md). 새 세션은 현재 상태부터 읽고 관련 문서만 추가로 읽는다.
+갱신: 2026-11-22 KST. 공통 규칙은 [AGENTS.md](../AGENTS.md)(Claude Code는 [CLAUDE.md](../CLAUDE.md) 경유). 새 세션은 [AI 인계](ai/HANDOFF.md)와 현재 상태부터 읽고 관련 문서만 추가로 읽는다.
 
 | 문서 | 역할 / 갱신 조건 |
 | --- | --- |
 | [현재 상태](PROJECT_STATUS.md) | 브랜치·P0/P1/P2·검증·배포의 단일 현황표. 상태 변경 시 갱신 |
 | [개발·인수인계 절차](DEVELOPMENT_WORKFLOW.md) | 작업 브랜치·커밋 승인·검증 결과·다음 작업 전달 |
+| [AI 인계](ai/HANDOFF.md) | Codex ↔ Claude Code 교대용 기준점·진행 중 작업·다음 할 일·승인 대기. 작업 시작/종료 시 갱신 |
 | [npm 보안 감사](security/npm-audit.md) | 감사 범위·잠금 버전·후속조치 |
 | [아키텍처](architecture.md) | 코드 책임·데이터 흐름·권한 경계. 구조/계약 변경 시 갱신 |
 | [결정 기록](decisions.md) | 이유·대안·영향·상태. 결정 변경 시 대체 이력 기록 |
