@@ -4,29 +4,33 @@
 
 ## 1. 기준점
 
-갱신: 2026-11-22 02:20 KST · 작성: Claude Code
+갱신: 2026-11-22 02:50 KST · 작성: Claude Code
 
 | 항목 | 값 |
 | --- | --- |
 | 작업본 | `C:\Users\jwseo\Desktop\boardgame` |
-| 브랜치 / HEAD | `codex/consolidate-friends-table` / `50ea5cd` (upstream 미설정) |
-| 미푸시 커밋 | `353723e`, `1b09bd1`, `29085e1`, `50ea5cd` (원격 어느 브랜치에도 없음) |
-| 원격 (2026-11-22 `ls-remote`) | `main`=`a666688`(HEAD의 조상), `deploy/web-staging`=`codex/tempo-hand-history`=`595cd67`(HEAD와 분기, HEAD에 없음). 로컬 `origin/*` 추적 ref는 fetch 전이라 오래됨 |
-| 기존 미커밋 변경 (이 작업 이전부터 존재, 작성자 미상) | `M .github/workflows/check.yml`, `M .github/workflows/server-image.yml`, `M AGENTS.md`(운영 환경 접근 정책 추가), `M deploy/web-release.env.example`, `M docs/web-staging-runbook.md`, `?? docs/web-existing-server-runbook.md` — **임의 커밋·폐기 금지** |
+| 브랜치 / HEAD | `fix/multiplayer-stability` (로컬 전용, upstream 없음). 분기점 `a1505a2` = `codex/consolidate-friends-table` HEAD. HEAD는 이 문서·CI 커밋 후 `git log -1`로 확인 |
+| 이전 브랜치 | `codex/consolidate-friends-table` @ `a1505a2` — 그대로 보존, 이후 커밋 없음 |
+| 미푸시 커밋 | `353723e`, `1b09bd1`, `29085e1`, `50ea5cd`, `e3d5992`, `903a7dd`, `a1505a2` + 이 브랜치의 커밋. 원격 어느 브랜치·태그에도 없음 |
+| GitHub 원격 백업 | **보류**(사용자 결정 2026-11-22). 계획: 태그 `backup/consolidate-20261122`(→`a1505a2`), 브랜치 `codex/consolidate-friends-table`. force push 금지. push는 Pages·Railway 설정 확인 후 사용자 PC에서 실행 |
+| 원격 (2026-11-22 `ls-remote`) | `main`=`a666688`(조상), `deploy/web-staging`=`codex/tempo-hand-history`=`595cd67`(분기, 앱 코드는 `353723e`와 동일). 로컬 `origin/*` 추적 ref는 오래됨(fetch 전) |
+| 미커밋 변경 | 없음. 이전 미커밋 6개는 아래 C1·C2로 커밋 완료 |
 | 백업 | `C:\Users\jwseo\Desktop\boardgame-backups\20261122-020217\` — `repo-all.bundle`(전체 ref), `uncommitted.patch`, `worktree/`(미커밋·미추적 파일 원본 + CLAUDE.md), `status.txt`, `HEAD.txt`, `branches.txt`. 검증: bundle verify, 클론 후 HEAD 일치, 패치 역적용 check, 파일별 바이트 비교 모두 통과. 무시 파일(.env.local, SQLite 등)은 백업에 포함하지 않음 |
 
-## 2. 현재 작업: AI 교대 개발·검수 환경 구축
+## 2. 현재 상태와 진행 중 작업
 
-- 완료: Git 상태 확인, 외부 백업·검증, 본 문서 신규 작성.
-- **2026-11-22 02:08 사용자 승인 후 적용**: `AGENTS.md` 제목 공통화 + "AI 교대 개발·검수" 섹션 추가(기존 미커밋 운영 정책 섹션과 떨어진 위치), `CLAUDE.md`에 Claude 전용 진입 안내 추가(`@AGENTS.md` 첫 줄 유지), `docs/DEVELOPMENT_WORKFLOW.md`의 Codex 전용 표현·`codex/<작업명>` 규칙을 공통·목적 기준 이름으로 수정, `docs/README.md` 색인에 본 문서 추가.
-- 브랜치 규칙(승인): `codex/`·`claude/` 모두 허용, 신규는 목적 기준(`fix/`, `feat/`, `refactor/` 등), 기존 이름 변경 없음. `GITHUB_WORKFLOW.md`의 `codex/기능명` 예시는 승인 범위 밖이라 수정하지 않음(후속 정리 후보).
-- 다음 안정화 브랜치 이름: `fix/multiplayer-stability`(**생성은 별도 승인 대기**, 아직 만들지 않음).
-- 커밋 준비: 커밋 대상은 `AGENTS.md`(이번 섹션만), `CLAUDE.md`, `docs/DEVELOPMENT_WORKFLOW.md`, `docs/README.md`, `docs/ai/HANDOFF.md`. `AGENTS.md`의 기존 미커밋 운영 정책(+47줄)은 커밋에서 제외해야 한다. 스테이징·커밋·푸시·브랜치 전환은 하지 않았다.
-- 검증 상태: Claude Code는 `CLAUDE.md`(`@AGENTS.md`) 경유로 AGENTS.md를 로드함을 확인. Codex는 CLI 0.170.0 설치·AGENTS.md 크기(기본 32KiB 한도 이내)·config 오버라이드 없음까지 정적 확인. **Codex 실제 로딩은 사용량 한도(2026-11-25 해제 예정)로 미검증.**
+- **완료**: AI 교대 개발 문서(`e3d5992`), C1 운영 환경 접근 정책(`903a7dd`, `AGENTS.md` 제목 계층·끝 줄바꿈만 정리), C2 기존 Railway·Supabase 재사용 계획(`a1505a2`, CI·env 예시·runbook·문서 링크, runbook 검증 결과는 "로컬 검증 미실행"). 이전 미커밋 6개는 모두 C1·C2에 원문대로 포함됨.
+- **이 브랜치의 정리 커밋**: 본 문서 갱신, CI push 트리거에 `claude/**`·`fix/**`·`feat/**`·`refactor/**` 추가(기존 `main`, `codex/**` 유지, 검사 로직 변경 없음). CI 추가 전에는 `fix/**` push에 CI가 돌지 않았다.
+- **미확인(읽기 전용 확인 예정, 설정 변경 금지)**:
+  - Cloudflare Pages: Git 연동/Direct Upload, Production·Preview 브랜치 설정. 간접 증거: 브랜치 별칭 `codex-tempo-hand-history.friends-table-staging.pages.dev`가 200(운영과 같은 번들), `deploy-web-staging`·`main` 별칭은 404 → 비-production 브랜치 push가 공개 미리보기를 만들 가능성 높음. 태그 push 동작 미확인.
+  - Railway: 연동 저장소·배포 브랜치·자동 배포 여부. 운영 서버는 `Cache-Control: no-store`와 Origin 차단이 있는 `89229f5` 이후 코드로 동작(`main`에는 없음) → main 자동 배포만으로 설명 안 됨. 실행 SHA 미확인.
+  - 운영 서버 Origin: 2026-11-22 `friends-table-staging.pages.dev`는 허용, 미리보기 별칭 origin은 health·WSS 모두 차단. 11/18 runbook의 "Origin 차단 미적용" 관찰과 다름 → 그 사이 재배포 추정.
+- **승인 대기/후속**: GitHub 백업 push, `GITHUB_WORKFLOW.md`의 `codex/기능명` 예시 정리, 끊긴 플레이어 처리 정책(3절 #4), 원격 push 시 CI 결과 확인, Codex의 AGENTS.md 실제 로딩 검증(사용량 한도로 2026-11-25 이후 가능).
+- **다음 작업: 멀티플레이 지연 관측**(3절 권장 순서의 계측 단계). 게임 동작은 바꾸지 않고 서버 스트리트 전환 원인·소요 시간 로그, 인증 대기(`authMs`/`queueWaitMs`) 집계, 클라이언트 `room` 수신→보드 카드 표시 시각을 남긴다. 비밀값·토큰·카드 정보는 로그 금지. 서버·모바일 테스트로 회귀 확인.
 
 ## 3. 멀티플레이 안정화 — 확인된 결함과 원인 가설
 
-"확인"은 재현 또는 코드로 직접 확인한 사실, "가설"은 미검증 추정이다. 코드 위치는 2026-11-22 HEAD `50ea5cd` 기준.
+"확인"은 재현 또는 코드로 직접 확인한 사실, "가설"은 미검증 추정이다. 코드 위치는 2026-11-22 HEAD `50ea5cd` 기준이며, 앱 코드는 `a1505a2`까지 바뀌지 않았다.
 
 | # | 문제 | 확인된 사실 | 원인 가설 (미검증) | 다음 확인 |
 | --- | --- | --- | --- | --- |
@@ -42,9 +46,9 @@
 
 ## 4. 다음 작업자에게
 
-1. `git status --short`로 위 기준점과 달라진 점을 먼저 확인한다. 위 미커밋 변경이 그대로인지 대조한다.
-2. 2절 승인 대기 항목이 승인됐는지 사용자에게 확인한다. 승인 전에는 기존 파일을 수정하지 않는다.
-3. 멀티플레이 작업 시작 전 사용자에게 작업 브랜치(예: 확인된 SHA에서 새 브랜치)를 승인받는다. 현재 브랜치에는 타 작업 미커밋 변경이 있다.
+1. `git status --short --branch`로 1절 기준점(브랜치 `fix/multiplayer-stability`, 미커밋 없음)과 달라진 점을 먼저 확인한다.
+2. 2절 "다음 작업"(지연 관측)부터 시작한다. 게임 규칙·프로토콜을 바꾸는 수정은 관측 결과와 사용자 승인 후에 한다.
+3. push·Cloudflare/Railway 설정 변경·배포·DB 변경은 하지 않는다. 원격 설정은 읽기 전용 확인만 허용된다.
 4. 상대 AI의 이전 변경은 이 문서의 서술을 믿지 말고 diff와 테스트로 독립 검증한다.
 
 ## 5. 인계 기록 양식
@@ -60,6 +64,14 @@
 - 검수 요청 사항 (상대 AI가 확인할 지점):
 - 승인 대기:
 ```
+
+### 2026-11-22 02:50 KST · Claude Code(클라우드 세션) · 구현(문서·CI)
+- 브랜치/HEAD/dirty: `fix/multiplayer-stability` / 분기점 `a1505a2` / 커밋 후 clean 예정
+- 한 일: 사용자 승인으로 브랜치 생성·전환, 본 문서 1·2·4절 갱신, CI push 트리거 확장(`.github/workflows/check.yml`, `server-image.yml`)
+- 테스트: 제품 코드 변경 없음 → 제품 테스트 미실행. YAML 구조·트리거 diff, `git diff --check` 확인
+- 미검증: 원격 CI 실제 실행(push 보류), Pages·Railway 설정, Codex의 AGENTS.md 실제 로딩
+- 검수 요청: CI 트리거 패턴이 의도대로인지, 2절 미확인 항목 서술이 과장되지 않았는지
+- 승인 대기: GitHub 백업 push, 지연 관측 작업 범위
 
 ### 2026-11-22 02:20 KST · Claude Code(클라우드 세션) · 구현(문서)
 - 브랜치/HEAD/dirty: `codex/consolidate-friends-table` / `50ea5cd` / dirty(1절 기존 변경 + 협업 문서 5개 + `.claude-write-test` 빈 파일)
