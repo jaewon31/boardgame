@@ -49,9 +49,11 @@ HEAD 1b09bd1 (codex/consolidate-friends-table), 시작 clean. [상세 조사 및
 4. P2 친구끼리 전적 UI·API·세 관계 권한 SQL 초안 구현 및 로컬 테스트 완료. 2026-11-18 운영 RPC 설치와 ACL 확인을 사용자가 보고함. 실제 JWT E2E 및 설치된 정의 대조, 별도 서버/웹 배포 검토가 남음. [상세](p2-ui-friend-comparison-report.md).
 5. 전체 핸드 보관: 보존 기간·용량·권한·페이지 조회 설계 후 별도 구현. 전체 영구 기록 확장은 P2 범위 밖.
 
-## Staging 준비 — 29085e1 기준
+## 배포 준비 — 기존 Railway·Supabase 재사용
 
-[Staging 실행 계획](web-staging-runbook.md): Cloudflare Pages + Railway 단일 Node/SQLite + Supabase 설정과 승인 후 명령 정리. 4001 안정성 수정은 29085e1에 커밋됨. 이번에는 게임 코드 변경 없이 deploy/web-staging CI 범위 및 fixture build:pages, Docker QA/번들 제외를 보완했다. 사용자 승인으로 Staging 준비 변경을 단일 로컬 커밋에 포함한다. 007의 조건부 재실행 안전성과 별도 Supabase 초기 설정 체크리스트도 실행 계획에 반영했다.
+현재 절차: [기존 서버 재사용 배포 계획](web-existing-server-runbook.md). 별도 Staging 서버·Supabase·배포 브랜치 계획은 2026-11-18 사용자 결정으로 철회됐다([철회 안내](web-staging-runbook.md), 당시 [분리 계획](staging-environment-plan.md)). 재사용 계획에 대한 로컬 검증은 미실행이며, 원격 push·배포·환경/DB 변경은 없다.
+
+이전 기록(29085e1 기준, 철회된 Staging 실행 계획 — 내용은 50ea5cd의 web-staging-runbook.md): Cloudflare Pages + Railway 단일 Node/SQLite + Supabase 설정과 승인 후 명령 정리. 4001 안정성 수정은 29085e1에 커밋됨. 이번에는 게임 코드 변경 없이 deploy/web-staging CI 범위 및 fixture build:pages, Docker QA/번들 제외를 보완했다. 사용자 승인으로 Staging 준비 변경을 단일 로컬 커밋에 포함한다. 007의 조건부 재실행 안전성과 별도 Supabase 초기 설정 체크리스트도 실행 계획에 반영했다.
 타입 검사·서버 188/188·모바일 50/50·fixture Pages 22파일·YAML 검사 PASS. Docker/클라우드 CLI 부재로 컨테이너 및 실제 배포 미실행. 대상 환경/Volume/Supabase/실제 JWT와 배포 SHA는 관리자 확인 필요. 원격 push·배포·환경/DB 변경 없음.
 
 ## 배포 (로컬 구현과 독립)

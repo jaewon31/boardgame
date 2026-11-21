@@ -16,7 +16,8 @@
 | [P2 설치 후 재검증](p2-rpc-verification-2026-11-18.md) | 11/18 실행 결과·운영 ACL 사용자 확인·실제 JWT 미검증 구분 |
 | [P2 RPC 보안](p2-rpc-security-review.md) | 운영 전 SQL·세션·권한 검증, 읽기 전용 preflight 및 적용 보류 조건 |
 | [P2](p2-ui-friend-comparison-report.md) | 설정·카드·친구끼리 전적 구현/로컬 검증, SQL 초안 승인 대기 |
-| [Staging 실행 계획](web-staging-runbook.md) | 29085e1 기준 설정·Secrets 구분, 승인 후 명령, 실제 환경 확인 사항 |
+| [기존 서버 재사용 배포 계획](web-existing-server-runbook.md) | **현재 배포 절차.** 기존 Railway·Supabase·Pages 재사용, 승인 경계·확인 항목·데이터 보존 위험. 로컬 검증 미실행 |
+| [Staging 계획 철회 안내](web-staging-runbook.md) | 별도 Staging 서버·Supabase·배포 브랜치 계획 철회(2026-11-18). 이전 초안은 50ea5cd, 당시 [분리 계획](staging-environment-plan.md)은 이력 |
 | [웹 배포](web-deployment.md) | 설정·운영 절차. 과거 후보 가격은 현재 견적이 아님 |
 | [6단계 준비](web-phase6-deployment-readiness.md) | 당시 원격 점검/승인 대기 이력. 최신 상태와 구분 |
 | [실기기 체크리스트](web-device-checklist.md) | 기기별 수동 검증. 실제 실행한 항목만 표시 |
