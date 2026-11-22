@@ -5,6 +5,8 @@ import type { ScheduledCue } from './audioScheduler.ts';
 export const HOLE_DURATION_MS = 240;
 export const BOARD_DURATION_MS = 360;
 export interface CardMotion { id: string; startedAt: number; durationMs: number }
+/** Optional timing observer (diagnostics only); never receives card values. */
+export type CardTimingObserver = (event: string, detail: { handId: string | null; revision?: number; kind: 'hole' | 'board'; index?: number; animated: boolean }) => void;
 export interface CardPresentationState { handId: string | null; boardCount: number; board: Record<number, CardMotion>; hole?: CardMotion; holePending?: boolean }
 
 // One presentation state for the whole table; seat count never creates more deal cues.
@@ -14,7 +16,10 @@ export class CardPresentation {
   private previous: HoldemView | null = null;
   private changed: (state: CardPresentationState) => void;
   private clock: () => number;
-  constructor(changed: (state: CardPresentationState) => void, clock = () => performance.now()) { this.changed = changed; this.clock = clock; }
+  private observe?: CardTimingObserver;
+  constructor(changed: (state: CardPresentationState) => void, clock = () => performance.now(), observe?: CardTimingObserver) {
+    this.changed = changed; this.clock = clock; this.observe = observe;
+  }
   restore(hand: HoldemView | null) {
     this.generation++;
     this.previous = hand;
@@ -37,6 +42,7 @@ export class CardPresentation {
       const durationMs = visual.kind === 'hole' ? HOLE_DURATION_MS : BOARD_DURATION_MS;
       const show = (animate: boolean) => {
         if (generation !== this.generation) return;
+        try { this.observe?.('client_card_reveal', { handId: hand?.id ?? null, revision: hand?.revision, kind: visual.kind, index: visual.index, animated: animate }); } catch { /* Diagnostics only. */ }
         const motion = animate ? { id: cue.id, startedAt: this.clock(), durationMs } : undefined;
         if (visual.kind === 'hole') this.state = { ...this.state, hole: motion, holePending: false };
         else {

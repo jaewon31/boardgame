@@ -14,6 +14,8 @@ export interface AudioPort {
   player(sound: GameSound): SoundPlayer;
   onEnd(sound: GameSound, done: () => void, failed?: () => void): () => void;
   trace?(event: string, sound: GameSound): void;
+  /** Opt-in timing diagnostics (gameTiming). Must not throw into playback; failures are ignored. */
+  timing?(event: string, detail: Record<string, string | number | boolean | undefined>): void;
   gain(sound: GameSound): number;
   error(): void;
 }
@@ -26,7 +28,7 @@ export interface ScheduledCue extends SoundCue {
   onCancel?: () => void;
 }
 interface Queued extends ScheduledCue { at: number }
-interface Run { cue: Queued; started: number; playing: boolean; ended?: boolean; visualStarted?: boolean; silent?: boolean; remove?: () => void }
+interface Run { cue: Queued; started: number; playing: boolean; ended?: boolean; visualStarted?: boolean; silent?: boolean; remove?: () => void; outcome?: string }
 
 // Two independent lanes; running cues are never preempted by later cues.
 // Table cues stay in authoritative order: an action precedes its resulting card reveals.
@@ -56,6 +58,12 @@ export class AudioScheduler {
   private trace(event: string, sound: GameSound) {
     try { this.port.trace?.(event, sound); } catch { /* Diagnostics cannot affect sound. */ }
   }
+  private timing(event: string, cue: Queued, detail: Record<string, string | number | boolean | undefined> = {}) {
+    if (!this.port.timing) return;
+    // Cue ids are `${handId}:${revisionOrKey}:${sound}`; log only the short hand ref and key.
+    const [hand, key] = cue.id.split(':');
+    try { this.port.timing(event, { sound: cue.sound, handRef: hand?.slice(0, 8), cueKey: key, visual: !!cue.onStart, ...detail }); } catch { /* Diagnostics cannot affect sound. */ }
+  }
   preview(cue: SoundCue) {
     // Explicit audition is latest-selection-wins, unlike the non-preemptive game queue.
     this.cancel();
@@ -66,7 +74,11 @@ export class AudioScheduler {
       if (this.seen.has(cue.id)) continue;
       this.seen.add(cue.id);
       if (this.seen.size > 512) this.seen.delete(this.seen.values().next().value!);
-      if (cue.onStart || (this.enabled && this.port.gain(cue.sound) > 0)) this.queue.push({ ...cue, at: this.clock() });
+      if (cue.onStart || (this.enabled && this.port.gain(cue.sound) > 0)) {
+        const queued = { ...cue, at: this.clock() };
+        this.queue.push(queued);
+        this.timing('client_audio_queued', queued, { queueDepth: this.queue.length });
+      }
     }
     for (const dropped of this.queue.slice(32)) dropped.onCancel?.();
     this.queue = this.queue.slice(0, 32);
@@ -78,20 +90,20 @@ export class AudioScheduler {
       // Presentations may wait behind real actions; expired visuals settle silently.
       const keep = (cue.endAt === undefined || now < cue.endAt) && now - cue.at <= (cue.onStart ? 8000 : this.maxWait(cue.sound))
         && (!!cue.onStart || (this.enabled && this.port.gain(cue.sound) > 0));
-      if (!keep) cue.onCancel?.();
+      if (!keep) { this.timing('client_audio_dropped', cue, { waitedMs: Math.round(now - cue.at) }); cue.onCancel?.(); }
       return keep;
     });
     for (const lane of ['table', 'notice'] as const) {
       const current = this.running.get(lane);
       if (current?.cue.endAt !== undefined) {
-        if (now >= current.cue.endAt) { this.finish(lane, current, true); continue; }
+        if (now >= current.cue.endAt) { current.outcome = 'window_end'; this.finish(lane, current, true); continue; }
         this.port.player(current.cue.sound).volume = this.volume(current, now);
       }
       if (current?.ended && now - current.started >= (current.cue.minDurationMs ?? 0)) this.finish(lane, current, false);
       // Do not let an unavailable native seek stall the visual presentation.
-      if (current?.cue.onStart && !current.playing && now - current.started > 200) this.beginSilent(current);
+      if (current?.cue.onStart && !current.playing && now - current.started > 200) this.beginSilent(current, 'start_timeout');
       // A broken native completion callback must not block the lane indefinitely.
-      if (current && now - current.started > ('maxPlayMs' in soundCatalog[current.cue.sound] ? (soundCatalog[current.cue.sound] as { maxPlayMs: number }).maxPlayMs : 5000)) { this.finish(lane, current, true); this.port.error(); }
+      if (current && now - current.started > ('maxPlayMs' in soundCatalog[current.cue.sound] ? (soundCatalog[current.cue.sound] as { maxPlayMs: number }).maxPlayMs : 5000)) { current.outcome = 'max_play_timeout'; this.finish(lane, current, true); this.port.error(); }
       if (this.running.has(lane)) continue;
       const index = this.queue.findIndex(cue => soundCatalog[cue.sound].lane === lane
         && (!!cue.onStart || (!this.seeking.has(cue.sound) && this.ready(cue.sound))));
@@ -107,8 +119,9 @@ export class AudioScheduler {
   private beginVisual(run: Run) {
     if (!run.visualStarted) { run.visualStarted = true; run.cue.onStart?.(); }
   }
-  private beginSilent(run: Run) {
+  private beginSilent(run: Run, reason = 'unavailable') {
     run.silent = true; run.playing = true; run.ended = true; run.started = this.clock();
+    this.timing('client_audio_started', run.cue, { mode: 'silent', reason, queueWaitMs: Math.round(run.started - run.cue.at) });
     this.beginVisual(run);
   }
   private async start(lane: Lane, run: Run) {
@@ -128,28 +141,34 @@ export class AudioScheduler {
         player.shouldCorrectPitch = true;
         player.setPlaybackRate(sound === 'deal' ? 1.5 : 1, 'high');
       }
-      if (run.cue.endAt !== undefined && this.clock() >= run.cue.endAt) { this.finish(lane, run, true); return; }
+      if (run.cue.endAt !== undefined && this.clock() >= run.cue.endAt) { run.outcome = 'window_end'; this.finish(lane, run, true); return; }
       // Android applies the native volume setter asynchronously; do not read it back.
-      if (gain <= 0 || this.clock() - run.cue.at > (run.cue.onStart ? 8000 : this.maxWait(sound))) { this.finish(lane, run, false); return; }
+      if (gain <= 0 || this.clock() - run.cue.at > (run.cue.onStart ? 8000 : this.maxWait(sound))) { run.outcome = 'expired'; this.finish(lane, run, false); return; }
       run.remove = this.port.onEnd(sound, () => {
         if (!run.playing || this.running.get(lane) !== run) return;
         run.ended = true;
         if (this.clock() - run.started >= (run.cue.minDurationMs ?? 0)) this.finish(lane, run, false);
       }, () => {
         if (this.running.get(lane) !== run) return;
-        this.trace('error', sound); this.finish(lane, run, true); this.port.error();
+        this.trace('error', sound); run.outcome = 'error'; this.finish(lane, run, true); this.port.error();
       });
       run.playing = true;
       player.play();
+      this.timing('client_audio_started', run.cue, { mode: 'sound', queueWaitMs: Math.round(run.started - run.cue.at) });
       this.beginVisual(run);
       this.trace('play_requested', sound);
     } catch {
-      if (this.running.get(lane) === run) { this.finish(lane, run, true); this.port.error(); }
+      if (this.running.get(lane) === run) { run.outcome = 'play_failed'; this.finish(lane, run, true); this.port.error(); }
     } finally { this.seeking.delete(sound); }
   }
   private finish(lane: Lane, run: Run, pause: boolean) {
     if (this.running.get(lane) !== run) return;
     this.trace(pause ? 'cancelled' : 'finished', run.cue.sound);
+    if (this.port.timing) {
+      const now = this.clock();
+      this.timing('client_audio_finished', run.cue, { outcome: run.outcome ?? (pause ? 'cancelled' : 'finished'), silent: !!run.silent,
+        playMs: Math.round(now - run.started), totalMs: Math.round(now - run.cue.at) });
+    }
     this.running.delete(lane);
     run.remove?.();
     if (pause || !run.visualStarted) run.cue.onCancel?.();

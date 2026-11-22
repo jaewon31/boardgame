@@ -1,4 +1,5 @@
 import { safeCloseReason, logRecord, validConnectionId, transportFailure } from '@boardgame/shared';
+import { gameTiming } from './gameTiming.ts';
 import type { RoomSettings, ClientMessage, PokerAction, EntryRequest, LobbyRoom, ServerMessage } from '@boardgame/shared';
 
 export interface RoomState {
@@ -269,8 +270,10 @@ export class RoomClient {
     };
     socket.onmessage = event => {
       if (generation !== this.generation) return;
+      const receivedAt = gameTiming.enabled ? gameTiming.now() : 0;
       let message: ServerMessage;
       try { message = JSON.parse(String(event.data)); } catch { return; }
+      const parsedAt = gameTiming.enabled ? gameTiming.now() : 0;
       if (message.type === 'connection') {
         if (validConnectionId(message.serverId) && validConnectionId(message.connectionId)) {
           context.serverId = message.serverId; context.connectionId = message.connectionId;
@@ -297,6 +300,7 @@ export class RoomClient {
         }
       } else if (message.type === 'joined') {
         this.diagnostic('client_joined');
+        gameTiming.roomReceived('joined', message.room.holdem, receivedAt, String(event.data).length, parsedAt - receivedAt);
         clearTimeout(this.timeout);
         joined = true;
         this.lastPong = Date.now();
@@ -314,6 +318,7 @@ export class RoomClient {
         this.update({ status: 'connected', checked:true, room: message.room, playerId: message.playerId, error: null, notice: undefined });
       } else if (message.type === 'room' && joined) {
         if ((message.room.settingsRevision ?? 0) < (this.state.room?.settingsRevision ?? 0)) return;
+        gameTiming.roomReceived('room', message.room.holdem, receivedAt, String(event.data).length, parsedAt - receivedAt);
         this.update({ room: message.room });
       } else if (message.type === 'error') {
         if (message.requestId && message.requestId !== this.settingsPending?.requestId) return;

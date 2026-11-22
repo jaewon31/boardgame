@@ -22,7 +22,8 @@ let ready = false;
 const stats=new FriendStatsStore(process.env.STATS_DB_PATH??join(dirname(config.statePath??'./data/boardgame.sqlite'),'stats.sqlite'));
 const authorize=accountAuthorizer(authUrl,authKey);
 const server = createAppServer(() => ready,friendStatsApi(stats,authorize,authUrl,authKey,config.trustedProxies),config.allowedOrigins);
-const lobby = attachLobby(server, { ...config, authorize, recordHand:(id,players)=>stats.record(id,players), store, onFatal: () => setImmediate(() => shutdown(1)) });
+const lobby = attachLobby(server, { ...config, authorize, recordHand:(id,players)=>stats.record(id,players), store, onFatal: () => setImmediate(() => shutdown(1)),
+  gameTiming: config.gameTimingLog ? entry => console.info(JSON.stringify(entry)) : undefined });
 server.listen(config.port, config.host, () => {
   ready = true;
   console.log(JSON.stringify(logRecord({event:'server_started', port:config.port, durable:!!store})));

@@ -6,6 +6,7 @@ import type { HoldemView } from '@boardgame/shared';
 import { SoundEvents } from '../services/soundEvents';
 import { CardPresentation } from '../services/cardPresentation';
 import { AudioScheduler } from '../services/audioScheduler';
+import { gameTiming, handRef } from '../services/gameTiming';
 import { defaultSoundGains, readSoundGains, DEFAULT_MASTER_LEVEL, playerGain, type GameSound } from '../services/soundCatalog';
 
 export function useGameAudio(hand: HoldemView | null, playerId: string | null, connected: boolean, nextHandAt?: number | null) {
@@ -38,7 +39,24 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
   const [error, setError] = useState<string | null>(null);
   const events = useRef(new SoundEvents());
   const [presentation, setPresentation] = useState<CardPresentation['state']>({ handId: null, boardCount: 0, board: {} });
-  const visuals = useMemo(() => new CardPresentation(setPresentation, () => performance.now()), []);
+  const latestRevision = useRef<number | undefined>(undefined);
+  // Diagnostics only: first animation frame after the presented board changes (≈ committed to screen).
+  const presentationChanged = useMemo(() => {
+    if (!gameTiming.enabled) return setPresentation;
+    let shown: { handId: string | null; boardCount: number } = { handId: null, boardCount: 0 };
+    return (state: CardPresentation['state']) => {
+      setPresentation(state);
+      if (state.handId === shown.handId && state.boardCount === shown.boardCount) return;
+      shown = { handId: state.handId, boardCount: state.boardCount };
+      const ref = handRef(state.handId), revision = latestRevision.current, boardCount = state.boardCount;
+      requestAnimationFrame(() => gameTiming.record('client_board_frame', { handRef: ref, revision, boardCount, sinceReceiptMs: gameTiming.sinceReceipt(ref, revision) }));
+    };
+  }, []);
+  const visuals = useMemo(() => new CardPresentation(presentationChanged, () => performance.now(), gameTiming.enabled
+    ? (event, d) => gameTiming.record(event, { handRef: handRef(d.handId), revision: d.revision, kind: d.kind, index: d.index, animated: d.animated,
+      sinceReceiptMs: gameTiming.sinceReceipt(handRef(d.handId), d.revision) })
+    : undefined), []);
+  const lastTimed = useRef<string | null>(null);
   const writes = useRef(Promise.resolve());
   const mix = useRef({ level, gains });
   mix.current = { level, gains };
@@ -57,6 +75,9 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
     error: () => setError('효과음을 재생하지 못했어요.'),
     // Fixed event/sound names only: no hand IDs, cards, accounts or native error text.
     trace: (phase, sound) => console.info(JSON.stringify({event:'game_audio', phase, sound})),
+    // Opt-in timing (gameTiming); absent when disabled so the scheduler skips it entirely.
+    timing: gameTiming.enabled ? (event, detail) => gameTiming.record(event, { ...detail,
+      sinceReceiptMs: gameTiming.sinceReceipt(typeof detail.handRef === 'string' ? detail.handRef : undefined, Number(detail.cueKey)) }) : undefined,
   }, () => performance.now()), [players]);
   useEffect(() => {
     let live = true;
@@ -103,6 +124,14 @@ export function useGameAudio(hand: HoldemView | null, playerId: string | null, c
   }, [scheduler, hand?.id, playerId]);
   useLayoutEffect(() => {
     const cues = events.current.update(hand, playerId, connected && active, now, nextHandAt);
+    if (gameTiming.enabled) latestRevision.current = hand?.revision;
+    // Log once per received revision, not on every 250 ms clock tick.
+    if (gameTiming.enabled && hand && lastTimed.current !== `${hand.id}:${hand.revision}`) {
+      lastTimed.current = `${hand.id}:${hand.revision}`;
+      gameTiming.record('client_presentation_update', { handRef: handRef(hand.id), revision: hand.revision, street: hand.street, boardCount: hand.board.length,
+        cues: cues.length, boardCues: cues.filter(cue => cue.presentation?.kind === 'board').length,
+        mode: !connected || !active || previewMode.current ? 'restore' : 'animate', sinceReceiptMs: gameTiming.sinceReceipt(handRef(hand.id), hand.revision) });
+    }
     if (!connected || !active || previewMode.current) {
       visuals.restore(hand);
     } else {

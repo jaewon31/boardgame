@@ -16,5 +16,7 @@ export function serverConfig(env: NodeJS.ProcessEnv) {
     trustedProxies, reconnectMs:integer('RECONNECT_MS',300000,30000,1800000),
     maxRooms:integer('MAX_ROOMS',100,1,1000), maxConnections:integer('MAX_CONNECTIONS',240,2,6000),
     maxConnectionsPerIp:integer('MAX_CONNECTIONS_PER_IP',24,2,6000),
+    // Opt-in diagnostics only: game progression timing logs (see gameTiming.ts).
+    gameTimingLog:env.GAME_TIMING_LOG==='1',
   };
 }

@@ -108,6 +108,8 @@ export class HoldemHand {
   }
 
   get complete() { return this.street === 'complete'; }
+  /** Observation only (timing logs): no cards, players or deck. */
+  timingSnapshot() { return { street: this.street, boardCount: this.board.length, revision: this.revision, runoutPhase: this.runout?.phase ?? null }; }
   get actorId() { return this.actorIndex < 0 ? null : this.players[this.actorIndex].id; }
   private next(index: number) { return (index + 1) % this.players.length; }
   private draw() { const card = this.deck.shift(); if (!card) throw new Error('Empty deck'); return card; }
