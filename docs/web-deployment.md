@@ -1,5 +1,6 @@
 # 웹/PWA 배포 준비 및 운영 절차
 
+> 2026-11-22: 반복 배포·테스트 환경은 [반복 배포 절차](deployment-workflow.md)를 따른다(별도 Railway 프로젝트·Supabase 테스트 환경, 서버·Supabase 부분의 11/18 철회 대체).
 > 2026-11-18 최신 실행 절차: [기존 Railway·Supabase 재사용 배포 계획](web-existing-server-runbook.md). 별도 Staging 서버·DB·배포 브랜치 계획은 철회됐다([철회 안내](web-staging-runbook.md)). 아래 과거 예시보다 재사용 계획의 Pages 빌드·설정·승인 순서를 우선한다.
 
 > 2026-11-17 문서 정비: 현재 개발·배포 상태는 [project-status](PROJECT_STATUS.md)를 기준으로 확인한다. 아래 5/6단계 후보 비교·가격·승인 대기는 당시 기록이며 지금의 배포 증거가 아니다. 플랫폼 선택과 실행 승인은 별개다.

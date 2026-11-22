@@ -4,6 +4,8 @@
 
 ## 확정 범위 및 승인 경계
 
+> 2026-11-22: 이 문서는 **Production** 배포 계획으로 유지한다. 아래의 "별도 Staging 서버/Supabase를 만들지 않는다", "새 서비스 생성 금지"는 운영 환경에 대한 규칙이다. 재사용 테스트 환경(별도 Railway 프로젝트·Supabase)은 [반복 배포 절차](deployment-workflow.md)를 따르며, 운영 배포 전 체크리스트는 그 문서 7절과 함께 본다.
+
 별도 Staging 서버/Supabase/배포 브랜치는 만들지 않는다. 기존 Railway 서비스와 Supabase 프로젝트·데이터를 유지하고 Cloudflare Pages 웹/PWA를 연결한다. 기존 URL에 staging이라는 단어가 있어도 새 인프라를 의미하지 않는다. 기존 Pages 재사용 여부/최종 origin은 사용자 확인 사항이다.
 
 Staging branch 전용 CI trigger만 제거한다. production Pages fixture 빌드, 타입/서버/모바일/native 검사, Docker 이미지 보안 검사 및 .dockerignore의 QA/생성물 제외는 유지한다. 게임 규칙·프로토콜·DB 형식 변경 없음. deploy의 Compose/Caddy 예시는 기존 대안이므로 유지하되 이번 Railway 배포에서 실행하지 않는다.

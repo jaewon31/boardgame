@@ -83,11 +83,26 @@ API 키, JWT, DB 비밀번호, 서비스 역할 키를 출력하거나 Git에 �
 
 ### 5. 배포 안전 정책
 
-기존 Railway 서버와 Supabase 프로젝트를 재사용한다.
-별도 Staging 서버나 DB를 임의로 생성하지 않는다.
-운영 환경 변경 전 현재 배포 SHA와 로컬 HEAD를 비교한다.
+Production은 기존 Railway 서버와 Supabase 프로젝트를 재사용한다.
+Preview/Staging 테스트 환경은 아래 6절의 재사용 환경만 사용한다. 그 외 Staging 서버나 DB를 임의로 생성하지 않는다.
+운영 환경 변경 전 현재 배포 SHA와 로컬 HEAD를 비교한다. 운영 서버의 실행 커밋과 원격 main은 다를 수 있으므로 배포 소스를 반드시 확인한다.
 서버 재배포 전 진행 중인 게임의 상태 유실 가능성을 확인한다.
 DB 마이그레이션은 현재 스키마와 비교한 뒤 적용한다.
 기존 DB에 설치된 SQL을 무조건 재실행하지 않는다.
 배포 실패 시 기존 버전으로 복구할 수 있는 절차를 먼저 확인한다.
 원격 변경 승인은 작업별로 받으며, 조회 허가를 변경 허가로 해석하지 않는다.
+
+### 6. 테스트 환경과 반복 배포 (2026-11-22 사용자 결정)
+
+이전 계획 "멀티플레이 검증 후 테스트 서버와 관련 리소스 삭제"는 철회됐다. 테스트 환경은 반복 개발과 배포 검증을 위한 재사용 환경으로 유지한다. 2026-11-18의 별도 Staging 철회 결정은 이 결정으로 대체되며, Staging 전용 Git 배포 브랜치를 만들지 않는다는 점은 유지한다. 세부 절차는 [반복 배포 절차](docs/deployment-workflow.md), 현재 구축 상태와 리소스 ID는 [AI 인계](docs/ai/HANDOFF.md)에 둔다.
+
+- Production: 기존 Cloudflare Pages(운영 배포) + Railway + Supabase + SQLite.
+- Preview/Staging: 별도 Railway 프로젝트 + 별도 Supabase 프로젝트 + 별도 SQLite 볼륨 + 기존 Cloudflare Pages 프로젝트의 Preview 별칭.
+- 테스트 서버는 GitHub main 자동 배포에 연결하지 않는다(저장소 연결·운영 프로젝트 복제 금지, CLI 업로드만).
+- 구축 후에는 테스트 프로젝트와 DB를 매번 새로 만들지 않고 같은 리소스에 다시 배포한다.
+- 테스트 환경에는 운영 SQLite 데이터를 복제하지 않고, 운영 Supabase 대신 별도 Supabase 프로젝트를 사용한다. Preview 웹은 테스트 서버와 테스트 Supabase 값으로 빌드한다.
+- 운영 Railway 서비스·환경 변수, 운영 Supabase 데이터·스키마는 명시적 승인 없이 수정하지 않는다. Cloudflare Production 배포는 명시적 승인 없이 실행하지 않는다(`wrangler pages deploy`에 Preview 브랜치를 항상 명시).
+- Git push, 운영 배포, 리소스 삭제는 각각 별도 승인을 받는다. 테스트 환경 배포·설정 변경도 원격 변경이므로 실행 직전에 승인을 받는다.
+- 표준 흐름: 로컬 수정 → TypeScript·관련 단위 테스트 → (서버 변경 시) 서버 테스트·테스트 Railway 배포 → (웹 변경 시) Cloudflare Preview 빌드·배포 → Health·Origin·WebSocket 검사 → (주요 멀티플레이 변경 시) 실제 다중 브라우저 테스트 → 검증 결과 기록 → 별도 승인 후 Production 배포. 서버 코드가 바뀌지 않았으면 Railway 재배포를, 웹 코드가 바뀌지 않았으면 Cloudflare 재배포를 생략할 수 있다.
+- 비용 절감용 서버 중지·재시작은 문서화된 방법을 따르되, 데이터 보존과 재시작 가능 여부를 테스트 환경에서 검증하기 전에는 실행하지 않는다.
+- 구축되지 않은 테스트 환경을 완료로 기록하지 않는다.
