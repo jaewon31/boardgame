@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
+import { createHash } from 'node:crypto';
 import { test, type TestContext } from 'node:test';
 import { WebSocket } from 'ws';
 import type { HoldemView, ServerMessage } from '@boardgame/shared';
@@ -21,6 +22,7 @@ class Peer {
     this.socket.on('message', data => { this.queue.push(JSON.parse(data.toString())); this.waiting?.(); });
   }
   send(value: Record<string, unknown>) { this.socket.send(JSON.stringify({ ...value, accessToken: this.token })); }
+  sendAs(token: string, value: Record<string, unknown>) { this.socket.send(JSON.stringify({ ...value, accessToken: token })); }
   next(type: ServerMessage['type'], predicate: (m: ServerMessage) => boolean = () => true): Promise<ServerMessage> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { this.waiting = undefined; reject(new Error(`Timed out waiting for ${type}`)); }, 3000);
@@ -29,9 +31,9 @@ class Peer {
     });
   }
 }
-async function setup(t: TestContext, gameTiming?: (e: GameTimingEntry) => void) {
+async function setup(t: TestContext, gameTiming?: (e: GameTimingEntry) => void, turnMs?: number) {
   const server = createAppServer();
-  const lobby = attachLobby(server, { runoutMs: 20, riverSqueezeMs: 20, nextHandMs: 60_000, gameTiming,
+  const lobby = attachLobby(server, { runoutMs: 20, riverSqueezeMs: 20, nextHandMs: 60_000, gameTiming, turnMs,
     authorize: async token => token.startsWith('PRIVATE_TOKEN_') ? { accountId: `PRIVATE_ACCOUNT_${token}`, sessionId: `PRIVATE_SESSION_${token}` } : null });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const url = `ws://127.0.0.1:${(server.address() as AddressInfo).port}/lobby`;
@@ -68,7 +70,7 @@ async function script(t: TestContext, gameTiming?: (e: GameTimingEntry) => void)
     if (v.street === 'complete') break;
     if (v.runout?.phase === 'squeezing' && v.runout.playerId) peerOf(v.runout.playerId).send({ type: 'revealRiver', handId: v.id });
   }
-  return { states, handId: v.id, joinedB };
+  return { states, handId: v.id, joinedB, code: created.room.code };
 }
 
 test('game timing is off by default and GAME_TIMING_LOG=1 is the only switch', () => {
@@ -119,4 +121,76 @@ test('enabling timing does not change the messages players receive', async t => 
 test('a throwing timing sink never breaks game progression', async t => {
   const { states } = await script(t, () => { throw new Error('sink failure'); });
   assert.equal(states.at(-1)?.street, 'complete');
+});
+
+/** Disconnect path: B drops right after the deal; turn timers finish the hand. Observed from A. */
+async function disconnectScript(t: TestContext, gameTiming?: (e: GameTimingEntry) => void) {
+  const app = await setup(t, gameTiming, 25);
+  const a = await app.connect('PRIVATE_TOKEN_A'), b = await app.connect('PRIVATE_TOKEN_B');
+  a.send({ type: 'create', nickname: 'PRIVATE_A', game: 'holdem' });
+  const created = await a.next('joined') as Joined;
+  b.send({ type: 'join', code: created.room.code, nickname: 'PRIVATE_B' }); await b.next('joined');
+  a.send({ type: 'startHand', previousHandId: null });
+  await a.next('room', m => m.type === 'room' && !!m.room.holdem);
+  b.socket.terminate();
+  const states: string[] = [];
+  for (;;) {
+    const m = await a.next('room') as RoomMessage;
+    const h = m.room.holdem;
+    states.push(`${h?.street}:${h?.revision}:${h?.board.length}:${m.room.players.map(p => p.connected).join(',')}`);
+    if (h?.street === 'complete') break;
+  }
+  return states;
+}
+
+test('roomRef is a per-process HMAC, not a reversible hash of the invite code', async t => {
+  const entries: GameTimingEntry[] = [];
+  const { code } = await script(t, e => entries.push(e));
+  const refs = new Set(entries.map(e => e.roomRef).filter(Boolean));
+  assert.equal(refs.size, 1);
+  const [ref] = refs;
+  assert.match(String(ref), /^[0-9a-f]{16}$/);
+  assert.notEqual(ref, createHash('sha256').update(code).digest('hex').slice(0, 16));
+  const json = JSON.stringify(entries);
+  assert.ok(!json.includes(code), 'room code never logged');
+});
+
+test('timer lifecycle: every scheduled timer ends fired, cancelled (with reason) or still pending', async t => {
+  const entries: GameTimingEntry[] = [];
+  await script(t, e => entries.push(e));
+  const scheduled = entries.filter(e => e.event === 'game_timer_scheduled').map(e => e.trace);
+  const fired = new Set(entries.filter(e => e.event === 'game_timer_fired').map(e => e.trace));
+  const cancelled = entries.filter(e => e.event === 'game_timer_cancelled');
+  for (const c of cancelled) {
+    assert.ok(['resync', 'replaced', 'cancelled', 'room_closed', 'shutdown'].includes(String(c.reason)), String(c.reason));
+    assert.ok(!fired.has(c.trace), 'a timer cannot be both fired and cancelled');
+    assert.ok(Number(c.afterMs) >= 0);
+  }
+  assert.ok(cancelled.some(c => c.reason === 'resync' && c.kind === 'turn'), 'acted-on turn timers are reported as cancelled');
+  const ended = new Set([...fired, ...cancelled.map(c => c.trace)]);
+  const open = scheduled.filter(trace => !ended.has(trace));
+  assert.ok(open.length <= 2, `at most one pending timer per slot, got ${open.length}`);
+});
+
+test('early exits close their trace: auth rejection and ping without membership', async t => {
+  const entries: GameTimingEntry[] = [];
+  const app = await setup(t, e => entries.push(e));
+  const a = await app.connect('PRIVATE_TOKEN_A'), stranger = await app.connect('PRIVATE_TOKEN_S');
+  stranger.send({ type: 'ping', id: 1 }); await stranger.next('error');
+  a.send({ type: 'create', nickname: 'PRIVATE_A', game: 'holdem' }); await a.next('joined');
+  a.sendAs('PRIVATE_TOKEN_OTHER', { type: 'ping', id: 2 }); await a.next('error');
+  const done = entries.filter(e => e.event === 'game_request_done').map(e => e.outcome);
+  assert.ok(done.includes('no_membership'), String(done));
+  assert.ok(done.includes('auth_rejected'), String(done));
+  for (const e of entries.filter(e => e.event === 'game_auth_started')) {
+    assert.ok(entries.some(d => d.event === 'game_request_done' && d.trace === e.trace), `trace ${e.trace} has an end`);
+  }
+  assert.ok(!JSON.stringify(entries).includes('PRIVATE_'));
+});
+
+test('enabling timing does not change the disconnect/turn-timeout path', async t => {
+  const plain = await disconnectScript(t);
+  const timed = await disconnectScript(t, () => {});
+  assert.deepEqual(timed, plain);
+  assert.equal(plain.at(-1)?.startsWith('complete'), true);
 });

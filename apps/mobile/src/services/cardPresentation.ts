@@ -6,7 +6,7 @@ export const HOLE_DURATION_MS = 240;
 export const BOARD_DURATION_MS = 360;
 export interface CardMotion { id: string; startedAt: number; durationMs: number }
 /** Optional timing observer (diagnostics only); never receives card values. */
-export type CardTimingObserver = (event: string, detail: { handId: string | null; revision?: number; kind: 'hole' | 'board'; index?: number; animated: boolean }) => void;
+export type CardTimingObserver = (event: string, detail: { handId: string | null; revision?: number; kind: 'hole' | 'board'; index?: number; boardCount?: number; animated: boolean }) => void;
 export interface CardPresentationState { handId: string | null; boardCount: number; board: Record<number, CardMotion>; hole?: CardMotion; holePending?: boolean }
 
 // One presentation state for the whole table; seat count never creates more deal cues.
@@ -23,6 +23,7 @@ export class CardPresentation {
   restore(hand: HoldemView | null) {
     this.generation++;
     this.previous = hand;
+    try { this.observe?.('client_board_restore', { handId: hand?.id ?? null, revision: hand?.revision, kind: 'board', boardCount: hand?.board.length ?? 0, animated: false }); } catch { /* Diagnostics only. */ }
     this.state = { handId: hand?.id ?? null, boardCount: hand?.board.length ?? 0, board: {} };
     this.changed(this.state);
   }
@@ -38,7 +39,9 @@ export class CardPresentation {
     const generation = this.generation;
     return cues.map(cue => {
       const visual = cue.presentation;
-      if (!visual) return cue;
+      // Diagnostics only: tag cues with the revision that produced them (absent when not observed).
+      const tagged = this.observe ? { ...cue, sourceRevision: hand?.revision } : cue;
+      if (!visual) return tagged;
       const durationMs = visual.kind === 'hole' ? HOLE_DURATION_MS : BOARD_DURATION_MS;
       const show = (animate: boolean) => {
         if (generation !== this.generation) return;
@@ -53,7 +56,7 @@ export class CardPresentation {
         }
         this.changed(this.state);
       };
-      return { ...cue, minDurationMs: durationMs, onStart: () => show(true), onCancel: () => show(false) };
+      return { ...tagged, minDurationMs: durationMs, onStart: () => show(true), onCancel: () => show(false) };
     });
   }
 }

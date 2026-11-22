@@ -28,7 +28,7 @@ export class GameTimingLog {
   private sink: (entry: ClientTimingEntry) => void = entry => console.info(JSON.stringify(entry));
   private clock: () => number = () => performance.now();
   private buffer: ClientTimingEntry[] = [];
-  private receipts = new Map<string, number>();
+  private receipts = new Map<string, { at: number; duplicates: number }>();
   private streets = new Map<string, { street: string; boardCount: number }>();
   configure(options: { enabled: boolean; sink?: (entry: ClientTimingEntry) => void; clock?: () => number }) {
     this.enabled = options.enabled;
@@ -48,19 +48,36 @@ export class GameTimingLog {
   }
   /** Milliseconds since this device received the room snapshot for handRef/revision. */
   sinceReceipt(ref: string | undefined, revision: number | undefined): number | undefined {
-    const at = ref === undefined || revision === undefined ? undefined : this.receipts.get(`${ref}:${revision}`);
-    return at === undefined ? undefined : round(this.clock() - at);
+    const receipt = ref === undefined || revision === undefined ? undefined : this.receipts.get(`${ref}:${revision}`);
+    return receipt === undefined ? undefined : round(this.clock() - receipt.at);
   }
-  /** Called when a `room`/`joined` message arrives (before React state updates). */
+  /**
+   * Called when a `room`/`joined` message arrives (before React state updates).
+   * The baseline for a handRef+revision is its FIRST `room` receipt: later copies of the same
+   * revision (another player's reconnect, join, next-hand scheduling) only count as duplicates.
+   * A `joined` snapshot starts a new baseline: after (re)connecting the client restores the
+   * table instead of animating, so earlier receipts no longer describe what is on screen.
+   * A new hand has a new handRef and therefore always a fresh baseline.
+   */
   roomReceived(kind: 'room' | 'joined', hand: HoldemView | null | undefined, receivedAt: number, bytes: number, parseMs: number) {
     if (!this.enabled) return;
     const ref = handRef(hand?.id);
+    let duplicates = 0, baseline: 'first' | 'duplicate' | 'reset' | undefined;
+    let sinceFirstReceiptMs: number | undefined;
     if (hand && ref) {
-      this.receipts.set(`${ref}:${hand.revision}`, receivedAt);
-      if (this.receipts.size > RECEIPTS) this.receipts.delete(this.receipts.keys().next().value!);
+      const key = `${ref}:${hand.revision}`, existing = this.receipts.get(key);
+      if (existing && kind === 'room') {
+        existing.duplicates++; duplicates = existing.duplicates; baseline = 'duplicate';
+        sinceFirstReceiptMs = round(receivedAt - existing.at);
+      } else {
+        baseline = existing ? 'reset' : 'first';
+        this.receipts.delete(key);
+        this.receipts.set(key, { at: receivedAt, duplicates: 0 });
+        if (this.receipts.size > RECEIPTS) this.receipts.delete(this.receipts.keys().next().value!);
+      }
     }
     this.record('client_room_received', { kind, handRef: ref, revision: hand?.revision, street: hand?.street, boardCount: hand?.board.length,
-      runoutPhase: hand?.runout?.phase ?? null, bytes, parseMs: round(parseMs) });
+      runoutPhase: hand?.runout?.phase ?? null, bytes, parseMs: round(parseMs), baseline, duplicates, sinceFirstReceiptMs });
     if (!hand || !ref) return;
     const previous = this.streets.get(ref);
     if (previous && (previous.street !== hand.street || previous.boardCount !== hand.board.length)) {
@@ -71,6 +88,25 @@ export class GameTimingLog {
     if (this.streets.size > 8) this.streets.delete(this.streets.keys().next().value!);
   }
   dump() { return [...this.buffer]; }
+}
+
+/**
+ * First animation frame after the presented board changes (≈ committed to screen), attributed to
+ * the revision whose state introduced the change (set by the card observer via `source`), not to
+ * the latest received revision. Delayed reveals (waiting behind action audio) keep their origin.
+ */
+export function boardFrameTracker(log: GameTimingLog, raf: (callback: () => void) => unknown = callback => requestAnimationFrame(callback)) {
+  let shown: { handId: string | null; boardCount: number } = { handId: null, boardCount: 0 };
+  let revision: number | undefined;
+  return {
+    source(sourceRevision: number | undefined) { revision = sourceRevision; },
+    changed(state: { handId: string | null; boardCount: number }) {
+      if (!log.enabled || (state.handId === shown.handId && state.boardCount === shown.boardCount)) return;
+      shown = { handId: state.handId, boardCount: state.boardCount };
+      const ref = handRef(state.handId), boardCount = state.boardCount, source = revision;
+      raf(() => log.record('client_board_frame', { handRef: ref, revision: source, boardCount, sinceReceiptMs: log.sinceReceipt(ref, source) }));
+    },
+  };
 }
 
 export const gameTiming = new GameTimingLog();

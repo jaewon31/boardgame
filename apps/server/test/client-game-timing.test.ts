@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { HoldemView } from '@boardgame/shared';
-import { GameTimingLog, gameTiming, type ClientTimingEntry } from '../../mobile/src/services/gameTiming.ts';
+import { GameTimingLog, boardFrameTracker, gameTiming, type ClientTimingEntry } from '../../mobile/src/services/gameTiming.ts';
 import { SoundEvents } from '../../mobile/src/services/soundEvents.ts';
 import { CardPresentation } from '../../mobile/src/services/cardPresentation.ts';
 import { AudioScheduler } from '../../mobile/src/services/audioScheduler.ts';
@@ -93,4 +93,86 @@ test('RoomClient reports room receipt for joined and room messages only when ena
   assert.ok(entries.some(e => e.event === 'client_new_street' && e.toStreet === 'flop'));
   assert.ok(Number(received[1].bytes) > 0); assert.ok(Number(received[1].parseMs) >= 0);
   assertSafe(entries);
+});
+
+test('duplicate room copies keep the first receipt; joined and a new hand start a new baseline', () => {
+  let now = 1000; const entries: ClientTimingEntry[] = [];
+  const log = new GameTimingLog(); log.configure({ enabled: true, sink: e => entries.push(e), clock: () => now });
+  log.roomReceived('room', flop, 1000, 10, 0);
+  log.roomReceived('room', flop, 1300, 10, 0);   // e.g. another player reconnects: same revision again
+  log.roomReceived('room', flop, 1350, 10, 0);
+  now = 1500;
+  assert.equal(log.sinceReceipt(HAND_ID.slice(0, 8), 1), 500, 'measured from the first receipt, not the last copy');
+  const received = entries.filter(e => e.event === 'client_room_received');
+  assert.deepEqual(received.map(e => [e.baseline, e.duplicates, e.sinceFirstReceiptMs]), [['first', 0, undefined], ['duplicate', 1, 300], ['duplicate', 2, 350]]);
+  assert.equal(entries.filter(e => e.event === 'client_new_street').length, 0, 'duplicates are not new streets');
+  // Reconnect: the joined snapshot restores the table, so it becomes the new baseline.
+  log.roomReceived('joined', flop, 2000, 10, 0); now = 2100;
+  assert.equal(log.sinceReceipt(HAND_ID.slice(0, 8), 1), 100);
+  assert.equal(entries.at(-1)!.baseline, 'reset');
+  // Next hand: a different hand id is always a fresh baseline.
+  const next = { ...base, id: '9a8b7c6d-PRIVATE-NEXT', number: 2 } as unknown as HoldemView;
+  log.roomReceived('room', next, 2200, 10, 0);
+  assert.equal(entries.at(-1)!.baseline, 'first'); assert.equal(entries.at(-1)!.handRef, '9a8b7c6d');
+  assertSafe(entries);
+});
+
+test('a flop reveal delayed behind action audio is attributed to the revision that dealt it', async () => {
+  let now = 1000; const entries: ClientTimingEntry[] = [];
+  const log = new GameTimingLog(); log.configure({ enabled: true, sink: e => entries.push(e), clock: () => now });
+  const frames: Array<() => void> = [];
+  const tracker = boardFrameTracker(log, cb => frames.push(cb));
+  const ends = new Map<string, () => void>();
+  const players = Object.fromEntries(Object.keys(soundCatalog).map(sound => [sound, { isLoaded: true, volume: 0, pause() {}, seekTo: async () => {}, play() {} }]));
+  const scheduler = new AudioScheduler({ player: s => players[s] as never, gain: () => 1, error() {}, onEnd(s, done) { ends.set(s, done); return () => ends.delete(s); },
+    timing: (event, d) => log.record(event, { ...d, sinceReceiptMs: log.sinceReceipt(d.handRef as string, typeof d.revision === 'number' ? d.revision : Number(d.cueKey)) }) }, () => now);
+  scheduler.setEnabled(true);
+  // Same wiring as useGameAudio.
+  const visuals = new CardPresentation(state => tracker.changed(state), () => now, (event, d) => {
+    if (d.kind === 'board') tracker.source(d.revision);
+    log.record(event, { handRef: d.handId?.slice(0, 8), revision: d.revision, kind: d.kind, index: d.index, animated: d.animated, sinceReceiptMs: log.sinceReceipt(d.handId?.slice(0, 8), d.revision) });
+  });
+  const events = new SoundEvents(); visuals.restore(base); events.update(base, 'a', true, 0);
+  frames.length = 0;
+  log.roomReceived('room', flop, now, 10, 0);
+  scheduler.enqueue(visuals.prepare(flop, events.update(flop, 'a', true, now))); await flush();
+  // Revision 2 (a bet on the flop) arrives while CHECK is still playing and the flop is not yet shown.
+  now = 1400;
+  const bet = { ...flop, revision: 2, audioAction: { revision: 2, kind: 'bet' } } as unknown as HoldemView;
+  log.roomReceived('room', bet, now, 10, 0);
+  scheduler.enqueue(visuals.prepare(bet, events.update(bet, 'a', true, now))); await flush();
+  assert.equal(visuals.state.boardCount, 0, 'flop still waiting behind CHECK');
+  now = 1720; ends.get('check')!(); scheduler.tick(); await flush();
+  assert.equal(visuals.state.boardCount, 1);
+  frames.splice(0).forEach(f => f());
+  const reveal = entries.find(e => e.event === 'client_card_reveal')!;
+  assert.equal(reveal.revision, 1); assert.equal(reveal.sinceReceiptMs, 720);
+  const frame = entries.find(e => e.event === 'client_board_frame' && e.boardCount === 1)!;
+  assert.equal(frame.revision, 1, 'frame attributed to the dealing revision, not the latest (2)');
+  assert.equal(frame.sinceReceiptMs, 720);
+  const flopSound = entries.find(e => e.event === 'client_audio_started' && e.sound === 'flopReveal')!;
+  assert.equal(flopSound.revision, 1); assert.equal(flopSound.sinceReceiptMs, 720);
+  assert.equal(entries.find(e => e.event === 'client_audio_queued' && e.sound === 'bet')!.revision, 2);
+  assertSafe(entries);
+});
+
+test('restore (reconnect / background) frames carry the restored revision', () => {
+  let now = 0; const entries: ClientTimingEntry[] = [];
+  const log = new GameTimingLog(); log.configure({ enabled: true, sink: e => entries.push(e), clock: () => now });
+  const frames: Array<() => void> = []; const tracker = boardFrameTracker(log, cb => frames.push(cb));
+  const visuals = new CardPresentation(state => tracker.changed(state), () => now, (event, d) => { if (d.kind === 'board') tracker.source(d.revision); log.record(event, { revision: d.revision, boardCount: d.boardCount }); });
+  log.roomReceived('joined', flop, 0, 10, 0); now = 40; visuals.restore(flop); frames.splice(0).forEach(f => f());
+  const frame = entries.find(e => e.event === 'client_board_frame')!;
+  assert.equal(frame.revision, 1); assert.equal(frame.boardCount, 3); assert.equal(frame.sinceReceiptMs, 40);
+  assert.ok(entries.some(e => e.event === 'client_board_restore' && e.boardCount === 3));
+});
+
+test('without an observer, presentation returns the original cue objects (disabled path unchanged)', () => {
+  const visuals = new CardPresentation(() => {}, () => 0), events = new SoundEvents();
+  visuals.restore(base); events.update(base, 'a', true, 0);
+  const cues = events.update(flop, 'a', true, 1);
+  const prepared = visuals.prepare(flop, cues);
+  const plain = cues.findIndex(c => !c.presentation);
+  assert.ok(plain >= 0); assert.equal(prepared[plain], cues[plain]);
+  assert.ok(prepared.every(c => !('sourceRevision' in c)));
 });

@@ -9,7 +9,7 @@ import { allowedOrigin } from './origins.ts';
 import type { StateStore } from './stateStore.ts';
 import { HoldemHand } from './holdem/hand.ts';
 import { createGameTiming, elapsed, handRef, type GameTimingSink } from './gameTiming.ts';
-import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import type { Server, IncomingMessage } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { ClientMessage, ErrorCode, GameId, LobbyRoom, ServerMessage } from '@boardgame/shared';
@@ -172,7 +172,26 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
   let timerSequence = 0;
   const roomRefs = new WeakMap<Room, string>();
   const lastBroadcast = new WeakMap<Room, { handId?: string; street?: string; boardCount: number }>();
-  const roomRef = (room: Room) => { let ref = roomRefs.get(room); if (!ref) { ref = fingerprint(room.code); roomRefs.set(room, ref); } return ref; };
+  // Room codes are short (~2^40), so a plain hash would be reversible from logs. A per-process
+  // random HMAC key keeps refs correlatable within this process only; it is never logged or stored.
+  const roomRefKey = timing.enabled ? randomBytes(32) : undefined;
+  const roomRef = (room: Room) => {
+    let ref = roomRefs.get(room);
+    if (!ref) { ref = createHmac('sha256', roomRefKey!).update(room.code).digest('hex').slice(0, 16); roomRefs.set(room, ref); }
+    return ref;
+  };
+  type TimerSlot = 'turn' | 'next';
+  type PendingTimer = { trace: string; kind: string; scheduledAt: number; delayMs: number };
+  const pendingTimers = new WeakMap<Room, Partial<Record<TimerSlot, PendingTimer>>>();
+  /** Logs only: call right before an existing clearTimeout of a timed() timer. */
+  function timerCleared(room: Room, slot: TimerSlot, reason: string) {
+    if (!timing.enabled) return;
+    const slots = pendingTimers.get(room), pending = slots?.[slot];
+    if (!slots || !pending) return;
+    delete slots[slot];
+    timing.emit('game_timer_cancelled', { trace: pending.trace, kind: pending.kind, reason, roomRef: roomRef(room), handRef: handRef(room.hand?.id),
+      delayMs: pending.delayMs, afterMs: elapsed(pending.scheduledAt, timing.now()) });
+  }
   function withTrace<T>(context: TraceContext | undefined, run: () => T): T {
     if (!timing.enabled || !context) return run();
     const previous = traceContext; traceContext = context;
@@ -182,13 +201,19 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     const phase = room.hand?.timingSnapshot().runoutPhase;
     return phase === 'dealing' ? 'runout' : phase === 'squeezing' ? 'river_squeeze' : 'turn';
   }
-  /** Returns `run` itself when timing is disabled. */
-  function timed(room: Room, kind: string, delayMs: number, run: () => void): () => void {
+  /** Returns `run` itself when timing is disabled. `kind` is evaluated only when enabled. */
+  function timed(room: Room, slot: TimerSlot, kindOf: string | (() => string), delayMs: number, run: () => void): () => void {
     if (!timing.enabled) return run;
+    const kind = typeof kindOf === 'function' ? kindOf() : kindOf;
     const trace = `timer.${++timerSequence}`, scheduledAt = timing.now();
+    timerCleared(room, slot, 'replaced');
+    const slots = pendingTimers.get(room) ?? {};
+    slots[slot] = { trace, kind, scheduledAt, delayMs: Math.round(delayMs) };
+    pendingTimers.set(room, slots);
     timing.emit('game_timer_scheduled', { trace, kind, roomRef: roomRef(room), handRef: handRef(room.hand?.id), street: room.hand?.timingSnapshot().street, delayMs: Math.round(delayMs) });
     return () => {
       const firedAt = timing.now();
+      if (slots[slot]?.trace === trace) delete slots[slot];
       timing.emit('game_timer_fired', { trace, kind, roomRef: roomRef(room), handRef: handRef(room.hand?.id), delayMs: Math.round(delayMs), lateMs: elapsed(scheduledAt + delayMs, firedAt) });
       withTrace({ trace, cause: kind, startedAt: firedAt }, run);
     };
@@ -248,7 +273,8 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     for (const member of room.players) if (member.socket) { send(member.socket, { type: 'room', room: snapshot(room, member.id) }); recipients++; }
     if (timing.enabled) observeBroadcast(room, startedAt, persistedAt, recipients);
   }
-  function cancelNextHand(room: Room) {
+  function cancelNextHand(room: Room, reason = 'cancelled') {
+    timerCleared(room, 'next', reason);
     clearTimeout(room.nextHandTimer);
     room.nextHandTimer = undefined;
     room.nextHandAt = undefined;
@@ -277,7 +303,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     const handId = room.hand.id;
     room.nextHandAt ??= Date.now() + (options.nextHandMs ?? 5_000);
     const nextHandDelay = Math.max(1, room.nextHandAt - Date.now());
-    room.nextHandTimer = setTimeout(timed(room, 'next_hand', nextHandDelay, () => {
+    room.nextHandTimer = setTimeout(timed(room, 'next', 'next_hand', nextHandDelay, () => {
       room.nextHandTimer = undefined;
       if (stopping || rooms.get(room.code) !== room || room.hand?.id !== handId || !room.hand.complete) return;
       startNextHand(room);
@@ -309,6 +335,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     }
   }
   function syncGame(room: Room) {
+    timerCleared(room, 'turn', 'resync');
     clearTimeout(room.turnTimer);
     if (!room.recoveryUntil || Date.now() >= room.recoveryUntil) room.hand?.skipDisconnectedSqueeze(room.players.filter(p => p.socket).map(p => p.id));
     if (room.hand) {
@@ -318,7 +345,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
       }
       if (!room.hand.complete && room.hand.deadline !== null) {
         const turnDelay = Math.max(1, room.hand.deadline - Date.now());
-        room.turnTimer = setTimeout(timed(room, timerKind(room), turnDelay, () => { room.hand!.timeout(); syncGame(room); }), turnDelay);
+        room.turnTimer = setTimeout(timed(room, 'turn', () => timerKind(room), turnDelay, () => { room.hand!.timeout(); syncGame(room); }), turnDelay);
         room.turnTimer.unref();
       }
     }
@@ -350,7 +377,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     recordResult(room);
     clearTimeout(member.expiry);
     room.players = room.players.filter(p => p !== member);
-    if (room.players.length === 0) { clearTimeout(room.turnTimer); cancelNextHand(room); rooms.delete(room.code); persist(); return; }
+    if (room.players.length === 0) { timerCleared(room, 'turn', 'room_closed'); clearTimeout(room.turnTimer); cancelNextHand(room, 'room_closed'); rooms.delete(room.code); persist(); return; }
     if (room.hostId === member.id) {
       room.hostId = (room.players.find(p => p.socket) ?? room.players[0]).id;
     }
@@ -439,12 +466,12 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         catch { if (traced) { authMono = elapsed(authMonoStart, timing.now()); timing.emit('game_auth_finished', { trace: traceId, command: input.type, outcome: 'unavailable', authMs: authMono }); requestDone('auth_unavailable'); } diagnostic(socket, 'ws_auth_unavailable', {command: input.type, receiveSequence: sequence, pingId: input.type === 'ping' ? input.id : undefined, authMs: Date.now() - authStarted}); send(socket,{type:'error',code:'AUTH_UNAVAILABLE',message:'로그인 확인 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',recoverable:!!membership});if(!membership)closeSocket(socket, 1013, 'Authentication unavailable');return; }
         if (traced) { authMono = elapsed(authMonoStart, timing.now()); timing.emit('game_auth_finished', { trace: traceId, command: input.type, outcome: accountId ? 'verified' : 'no_account', authMs: authMono }); }
         diagnostic(socket, 'ws_auth_completed', {command: input.type, receiveSequence: sequence, pingId: input.type === 'ping' ? input.id : undefined, authMs: Date.now() - authStarted});
-        if(stopping || socket.readyState!==WebSocket.OPEN || (membership && membership.member.socket!==socket)) return;
+        if(stopping || socket.readyState!==WebSocket.OPEN || (membership && membership.member.socket!==socket)) { requestDone('stale_socket'); return; }
         if(!accountId || (membership && (membership.member.accountId!==accountId || membership.member.loginId!==loginId))) {
           diagnostic(socket, 'ws_auth_rejected', {command: input.type});
           send(socket,{type:'error',code:'AUTH_REQUIRED',message:'다른 기기에서 로그인했거나 로그인이 만료됐어요. 다시 로그인해 주세요.',recoverable:false});
           if(membership){const {room,member}=membership;membership=undefined;member.socket=undefined;remove(room,member);}
-          closeSocket(socket, 4003, 'Account session expired');return;
+          requestDone('auth_rejected'); closeSocket(socket, 4003, 'Account session expired');return;
         }
         const info = connections.get(socket)!;
         const accountRef = fingerprint(accountId), sessionRef = fingerprint(loginId!);
@@ -454,7 +481,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         }
       }
       if (input.type === 'ping') {
-        if (!membership) { fail('SESSION_EXPIRED', '방에 다시 입장해 주세요.'); return; }
+        if (!membership) { requestDone('no_membership'); fail('SESSION_EXPIRED', '방에 다시 입장해 주세요.'); return; }
         diagnostic(socket, 'ws_app_pong_sent', {pingId: input.id, authMs: Date.now() - authStarted});
         send(socket, { type: 'pong', id: input.id });
         requestDone('pong');
@@ -663,7 +690,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
     clearInterval(heartbeat);
     clearInterval(loopMetrics); loopDelay.disable();
     for (const room of rooms.values()) {
-      cancelNextHand(room); clearTimeout(room.turnTimer);
+      cancelNextHand(room, 'shutdown'); timerCleared(room, 'turn', 'shutdown'); clearTimeout(room.turnTimer);
       for (const member of room.players) clearTimeout(member.expiry);
     }
     for (const socket of wss.clients) terminateSocket(socket, 'server_shutdown');
@@ -690,7 +717,7 @@ export function attachLobby(server: Server, options: LobbyOptions = {}) {
         }
         if (room.hand && !room.hand.complete) {
           const restoredDelay = Math.max(1, (room.hand.deadline ?? now + 30_000) - now);
-          room.turnTimer = setTimeout(timed(room, `restored_${timerKind(room)}`, restoredDelay, () => { room.hand!.timeout(); syncGame(room); }), restoredDelay);
+          room.turnTimer = setTimeout(timed(room, 'turn', () => `restored_${timerKind(room)}`, restoredDelay, () => { room.hand!.timeout(); syncGame(room); }), restoredDelay);
           room.turnTimer.unref();
         }
       }

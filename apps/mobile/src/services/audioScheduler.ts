@@ -22,6 +22,8 @@ export interface AudioPort {
 type Lane = 'table' | 'notice';
 export interface ScheduledCue extends SoundCue {
   minDurationMs?: number;
+  /** Diagnostics only: revision of the state that produced this cue (set when timing is observed). */
+  sourceRevision?: number;
   /** Monotonic end of the server-owned between-hand window. */
   endAt?: number;
   onStart?: () => void;
@@ -62,7 +64,7 @@ export class AudioScheduler {
     if (!this.port.timing) return;
     // Cue ids are `${handId}:${revisionOrKey}:${sound}`; log only the short hand ref and key.
     const [hand, key] = cue.id.split(':');
-    try { this.port.timing(event, { sound: cue.sound, handRef: hand?.slice(0, 8), cueKey: key, visual: !!cue.onStart, ...detail }); } catch { /* Diagnostics cannot affect sound. */ }
+    try { this.port.timing(event, { sound: cue.sound, handRef: hand?.slice(0, 8), cueKey: key, revision: cue.sourceRevision, visual: !!cue.onStart, ...detail }); } catch { /* Diagnostics cannot affect sound. */ }
   }
   preview(cue: SoundCue) {
     // Explicit audition is latest-selection-wins, unlike the non-preemptive game queue.
