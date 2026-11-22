@@ -30,7 +30,7 @@
 - **완료(배포 미확인): 초대 링크 404**(3절 #1). `apps/mobile/public/_redirects`를 `/join/* /index.html 200` → `/join/* / 200`으로 변경, `scripts/build-pages.cjs` `checkPages`가 `/` 대상만 허용하고 `/index.html` 200 rewrite를 거부, `apps/mobile/test/pages.test.cjs` 회귀 테스트 추가, `docs/web-phase6-deployment-readiness.md` 설명 갱신. `404.html`(없는 자산의 진짜 404)은 유지. 앱 코드(초대 파싱·로그인/닉네임 후 입장·권한 검사)는 변경 없음. **Cloudflare에서 동작은 검증하지 않았다**(wrangler 설치 불가, 배포 금지). 확인에는 승인된 Preview 또는 운영 배포가 필요하며 Cloudflare 설정 변경은 필요 없다.
 - **완료(`21c7297`, 실기기·브라우저 미검증): 카드 공개와 효과음 큐 분리**(3절 #2·#3, 사용자 승인 범위 1번). 카드는 상태 수신 즉시 공개(플랍 3장 한 단위), 효과음은 lane별 비차단·최신 우선·500ms 초과 생략, 결과음은 순서 유지. 설계는 [card-audio-sync](../card-audio-sync.md) 2026-11-22 개정. 서버·프로토콜·음원 변경 없음. 4인 서버 시뮬레이션에서 카드 공개 지연 p50 1.15s/max 5.28s → p50·max ≤0.3ms, 상태와 어긋난 액션음 162/252 → 0/324. **실제 브라우저·실기기 검증은 못 함**(웹 클라이언트가 운영 Supabase 익명 로그인을 요구).
 - **브라우저 E2E 환경 조사(2026-11-22)**: 승인된 테스트 환경 없음. 별도 Staging 계획은 철회됨([runbook](../web-staging-runbook.md)), `friends-table-staging.pages.dev`는 운영 Railway·운영 Supabase를 사용하고 테스트 계정·게임 데이터 생성 E2E는 승인 대기([기존 서버 runbook](../web-existing-server-runbook.md) 53·121행). 새 커밋은 어디에도 배포되지 않음. 기존 로컬 브라우저 fixture(`scripts/test-p2-browser.cjs`)는 인증 모듈을 번들 단계에서 교체하는 UI 검사이며, 4인 게임 E2E로 확장하려면 서버 테스트 authorize까지 필요해 사용자 지시(인증 우회 코드 임의 추가 금지)에 따라 만들지 않았다.
-- **다음 작업 후보**: (사용자 결정) 브라우저 검증 환경 선택 — ① 로컬 fixture E2E 승인, ② Preview 배포 + 운영 Supabase 테스트 계정 4개 생성 승인, ③ 별도 Supabase 재개 → 사용자 청취 평가(잘림·겹침) → Windows Node 24에서 테스트 재실행 → #4 끊긴 플레이어 정책 → #5 인증 캐시 → 초대 수정 Preview 확인.
+- **다음 작업 후보**: (사용자 결정) 브라우저 검증 환경 선택 — ① 로컬 fixture E2E 승인, ② Preview 배포 + 운영 Supabase 테스트 계정 4개 생성 승인, ③ 별도 Supabase 재개 → 사용자 청취 평가(잘림·겹침) → #4 끊긴 플레이어 정책 → #5 인증 캐시 → 초대 수정 Preview 확인.
 
 ## 3. 멀티플레이 안정화 — 확인된 결함과 원인 가설
 
@@ -74,7 +74,7 @@
 ### 2026-11-22 19:10 KST · Claude Code(클라우드 세션) · 구현(커밋·검증 환경 조사)
 - 브랜치/HEAD/dirty: `fix/multiplayer-stability` / `21c7297` + 본 문서 커밋 / clean
 - 한 일: 카드·효과음 분리 12개 파일만 검토 후 커밋 `21c7297`(push 없음). Node 24 확보 시도, 브라우저 E2E 환경 조사, 본 문서 갱신
-- 테스트: Node 24 **미실행** — 사용자 PC Linux 셸은 npm registry가 허용 목록에 없어(403) 설치 불가, 클라우드 작업 공간은 네트워크 꺼짐, 두 곳 모두 Node 22.23. Node 22 결과(직전 기록): 서버 209/209, 모바일 50/50, tsc 3개 통과. Windows에서 `npm run typecheck`·`npm test`·`npm run test --workspace=@boardgame/mobile` 재실행 필요
+- 테스트: Node 22.23(사본) 서버 209/209, 모바일 50/50, tsc 3개 통과. **Node 24(사용자 Windows, v24.19.0, 사용자 실행 2026-11-22 19:29 보고)**: `npm run typecheck` mobile·server·shared 오류 출력 없음, `npm test` 서버 209/209(fail 0), `npm run test --workspace=@boardgame/mobile` 50/50(fail 0). 실행 시점 HEAD는 보고 로그에 표시되지 않음(직전 HEAD `1a976b8` 기준으로 추정)
 - 미실행·미검증: 실제 브라우저 4인 E2E(승인된 환경 없음, 위 2절), 실제 청취(자동화로 들을 수 없음, 사람이 들어야 함), 화면 반영 시간
 - 검수 요청: 커밋 diff가 승인 범위(카드·효과음 분리)만 포함하는지
 - 승인 대기: 브라우저 검증 환경 ①~③ 선택, 청취 평가, #4·#5
