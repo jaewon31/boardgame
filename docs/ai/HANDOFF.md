@@ -4,7 +4,7 @@
 
 ## 1. 기준점
 
-갱신: 2026-11-22 (카드·효과음 분리 후) KST · 작성: Claude Code
+갱신: 2026-11-22 (카드·효과음 분리 커밋 후) KST · 작성: Claude Code
 
 | 항목 | 값 |
 | --- | --- |
@@ -14,7 +14,7 @@
 | 미푸시 커밋 | `353723e`, `1b09bd1`, `29085e1`, `50ea5cd`, `e3d5992`, `903a7dd`, `a1505a2` + 이 브랜치의 커밋. 원격 어느 브랜치·태그에도 없음 |
 | GitHub 원격 백업 | **보류**(사용자 결정 2026-11-22). 계획: 태그 `backup/consolidate-20261122`(→`a1505a2`), 브랜치 `codex/consolidate-friends-table`. force push 금지. push는 Pages·Railway 설정 확인 후 사용자 PC에서 실행 |
 | 원격 (2026-11-22 `ls-remote`) | `main`=`a666688`(조상), `deploy/web-staging`=`codex/tempo-hand-history`=`595cd67`(분기, 앱 코드는 `353723e`와 동일). 로컬 `origin/*` 추적 ref는 오래됨(fetch 전) |
-| 미커밋 변경 | HEAD `bb581ec` 위에 카드·효과음 분리 작업(5절 최신 기록의 파일 목록). **커밋 안 함**(커밋은 사용자 승인 후) |
+| 미커밋 변경 | 없음. 카드·효과음 분리는 사용자 승인으로 `21c7297` 커밋, 이어서 본 문서 기록 커밋. push 안 함 |
 | 백업 | `C:\Users\jwseo\Desktop\boardgame-backups\20261122-020217\` — `repo-all.bundle`(전체 ref), `uncommitted.patch`, `worktree/`(미커밋·미추적 파일 원본 + CLAUDE.md), `status.txt`, `HEAD.txt`, `branches.txt`. 검증: bundle verify, 클론 후 HEAD 일치, 패치 역적용 check, 파일별 바이트 비교 모두 통과. 무시 파일(.env.local, SQLite 등)은 백업에 포함하지 않음 |
 
 ## 2. 현재 상태와 진행 중 작업
@@ -28,8 +28,9 @@
 - **승인 대기/후속**: GitHub 백업 push, `GITHUB_WORKFLOW.md`의 `codex/기능명` 예시 정리, 끊긴 플레이어 처리 정책(3절 #4), 원격 push 시 CI 결과 확인, Codex의 AGENTS.md 실제 로딩 검증(사용량 한도로 2026-11-25 이후 가능).
 - **완료: 멀티플레이 지연 관측**(`27a9148`, 보완 `df6fea3`). 게임 동작 변경 없음, 기본 꺼짐. 서버 `GAME_TIMING_LOG=1`, 클라이언트 `EXPO_PUBLIC_GAME_TIMING_LOG=1` 또는 localStorage `friends-table.diagnostics.game-timing`=`1`. 로그는 `handRef`(핸드 id 앞 8자)+revision으로 서버·클라이언트를 대조하고 단조 시계를 쓴다. `roomRef`는 프로세스별 키의 HMAC-SHA256. `df6fea3`에서 중복 room 수신(첫 수신 유지·중복 횟수 집계, 재연결·새 핸드에 초기화), 보드 프레임·보드 효과음 revision, 타이머 schedule/cancel/fire, 조기 종료 trace 정리를 고쳤다. **실제 운영·다인원 환경에서 로그를 수집한 적은 없다.**
 - **완료(배포 미확인): 초대 링크 404**(3절 #1). `apps/mobile/public/_redirects`를 `/join/* /index.html 200` → `/join/* / 200`으로 변경, `scripts/build-pages.cjs` `checkPages`가 `/` 대상만 허용하고 `/index.html` 200 rewrite를 거부, `apps/mobile/test/pages.test.cjs` 회귀 테스트 추가, `docs/web-phase6-deployment-readiness.md` 설명 갱신. `404.html`(없는 자산의 진짜 404)은 유지. 앱 코드(초대 파싱·로그인/닉네임 후 입장·권한 검사)는 변경 없음. **Cloudflare에서 동작은 검증하지 않았다**(wrangler 설치 불가, 배포 금지). 확인에는 승인된 Preview 또는 운영 배포가 필요하며 Cloudflare 설정 변경은 필요 없다.
-- **완료(미커밋·실기기 미검증): 카드 공개와 효과음 큐 분리**(3절 #2·#3, 사용자 승인 범위 1번). 카드는 상태 수신 즉시 공개(플랍 3장 한 단위), 효과음은 lane별 비차단·최신 우선·500ms 초과 생략, 결과음은 순서 유지. 설계는 [card-audio-sync](../card-audio-sync.md) 2026-11-22 개정. 서버·프로토콜·음원 변경 없음. 4인 서버 시뮬레이션에서 카드 공개 지연 p50 1.15s/max 5.28s → p50·max ≤0.3ms, 상태와 어긋난 액션음 162/252 → 0/324. **실제 브라우저·실기기 검증은 못 함**(웹 클라이언트가 운영 Supabase 익명 로그인을 요구).
-- **다음 작업 후보**: 카드·효과음 분리 실기기/브라우저 확인(로컬 Supabase 또는 테스트 인증 환경 승인 필요) → 커밋 승인 → #4 끊긴 플레이어 정책 결정 → #5 인증 캐시 설계 → 초대 수정 Preview 배포 확인.
+- **완료(`21c7297`, 실기기·브라우저 미검증): 카드 공개와 효과음 큐 분리**(3절 #2·#3, 사용자 승인 범위 1번). 카드는 상태 수신 즉시 공개(플랍 3장 한 단위), 효과음은 lane별 비차단·최신 우선·500ms 초과 생략, 결과음은 순서 유지. 설계는 [card-audio-sync](../card-audio-sync.md) 2026-11-22 개정. 서버·프로토콜·음원 변경 없음. 4인 서버 시뮬레이션에서 카드 공개 지연 p50 1.15s/max 5.28s → p50·max ≤0.3ms, 상태와 어긋난 액션음 162/252 → 0/324. **실제 브라우저·실기기 검증은 못 함**(웹 클라이언트가 운영 Supabase 익명 로그인을 요구).
+- **브라우저 E2E 환경 조사(2026-11-22)**: 승인된 테스트 환경 없음. 별도 Staging 계획은 철회됨([runbook](../web-staging-runbook.md)), `friends-table-staging.pages.dev`는 운영 Railway·운영 Supabase를 사용하고 테스트 계정·게임 데이터 생성 E2E는 승인 대기([기존 서버 runbook](../web-existing-server-runbook.md) 53·121행). 새 커밋은 어디에도 배포되지 않음. 기존 로컬 브라우저 fixture(`scripts/test-p2-browser.cjs`)는 인증 모듈을 번들 단계에서 교체하는 UI 검사이며, 4인 게임 E2E로 확장하려면 서버 테스트 authorize까지 필요해 사용자 지시(인증 우회 코드 임의 추가 금지)에 따라 만들지 않았다.
+- **다음 작업 후보**: (사용자 결정) 브라우저 검증 환경 선택 — ① 로컬 fixture E2E 승인, ② Preview 배포 + 운영 Supabase 테스트 계정 4개 생성 승인, ③ 별도 Supabase 재개 → 사용자 청취 평가(잘림·겹침) → Windows Node 24에서 테스트 재실행 → #4 끊긴 플레이어 정책 → #5 인증 캐시 → 초대 수정 Preview 확인.
 
 ## 3. 멀티플레이 안정화 — 확인된 결함과 원인 가설
 
@@ -70,6 +71,14 @@
 - 승인 대기:
 ```
 
+### 2026-11-22 19:10 KST · Claude Code(클라우드 세션) · 구현(커밋·검증 환경 조사)
+- 브랜치/HEAD/dirty: `fix/multiplayer-stability` / `21c7297` + 본 문서 커밋 / clean
+- 한 일: 카드·효과음 분리 12개 파일만 검토 후 커밋 `21c7297`(push 없음). Node 24 확보 시도, 브라우저 E2E 환경 조사, 본 문서 갱신
+- 테스트: Node 24 **미실행** — 사용자 PC Linux 셸은 npm registry가 허용 목록에 없어(403) 설치 불가, 클라우드 작업 공간은 네트워크 꺼짐, 두 곳 모두 Node 22.23. Node 22 결과(직전 기록): 서버 209/209, 모바일 50/50, tsc 3개 통과. Windows에서 `npm run typecheck`·`npm test`·`npm run test --workspace=@boardgame/mobile` 재실행 필요
+- 미실행·미검증: 실제 브라우저 4인 E2E(승인된 환경 없음, 위 2절), 실제 청취(자동화로 들을 수 없음, 사람이 들어야 함), 화면 반영 시간
+- 검수 요청: 커밋 diff가 승인 범위(카드·효과음 분리)만 포함하는지
+- 승인 대기: 브라우저 검증 환경 ①~③ 선택, 청취 평가, #4·#5
+
 ### 2026-11-22 18:30 KST · Claude Code(클라우드 세션) · 구현(카드·효과음 분리)
 - 브랜치/HEAD/dirty: `fix/multiplayer-stability` / `bb581ec` / dirty(아래 파일, 미커밋)
 - 한 일 (변경 파일): `apps/mobile/src/services/cardPresentation.ts`(상태 수신 즉시 공개, 플랍 한 모션), `audioScheduler.ts`(효과음 전용, action/board/result/notice lane, 최신 우선, 500ms 생략, 결과음 400ms 양보), `soundCatalog.ts`(lane·maxWaitMs), `soundEvents.ts`(스트리트당 공개음 1회), `gameTiming.ts`(주석만). 테스트: `apps/server/test/{cardPresentation,audioScheduler,soundEvents,client-game-timing}.test.ts`, `apps/mobile/test/audio-hook.test.cjs`. 문서: `docs/card-audio-sync.md` 개정, 본 문서. 서버 코드·프로토콜·음원·UI 컴포넌트 변경 없음
@@ -86,11 +95,3 @@
 - 미검증: Cloudflare Pages 실제 동작(로컬 HTTP는 Cloudflare 동작의 증명이 아님), 브라우저에서 로그인·닉네임 후 입장 흐름 E2E(코드 검토만: 초대 코드는 메모리에 보관되어 익명 로그인·닉네임 설정 후 입장, 같은 방은 복귀, 다른 방은 퇴장 확인, 잘못된 코드는 앱 내 Alert), 존재하지 않는 방 코드의 서버 오류 표시
 - 검수 요청: `checkPages` 정규식이 의도한 형식만 통과시키는지, 쿼리·해시가 붙은 초대 URL 거부(B-10) 유지가 맞는지
 - 승인 대기: Preview 배포로 초대 링크 확인, GitHub 백업 push
-
-### 2026-11-22 02:50 KST · Claude Code(클라우드 세션) · 구현(문서·CI)
-- 브랜치/HEAD/dirty: `fix/multiplayer-stability` / 분기점 `a1505a2` / 커밋 후 clean 예정
-- 한 일: 사용자 승인으로 브랜치 생성·전환, 본 문서 1·2·4절 갱신, CI push 트리거 확장(`.github/workflows/check.yml`, `server-image.yml`)
-- 테스트: 제품 코드 변경 없음 → 제품 테스트 미실행. YAML 구조·트리거 diff, `git diff --check` 확인
-- 미검증: 원격 CI 실제 실행(push 보류), Pages·Railway 설정, Codex의 AGENTS.md 실제 로딩
-- 검수 요청: CI 트리거 패턴이 의도대로인지, 2절 미확인 항목 서술이 과장되지 않았는지
-- 승인 대기: GitHub 백업 push, 지연 관측 작업 범위
