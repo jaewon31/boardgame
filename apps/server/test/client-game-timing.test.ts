@@ -49,7 +49,7 @@ test('room receipt, new street, card reveal and audio share handRef/revision and
   now = 1730; ends.get('check')!(); scheduler.tick(); await flush();
   const reveal = entries.find(e => e.event === 'client_card_reveal')!;
   assert.equal(reveal.kind, 'board'); assert.equal(reveal.index, 0); assert.equal(reveal.animated, true);
-  assert.equal(reveal.revision, 1); assert.equal(reveal.sinceReceiptMs, 730, 'receipt → first flop card on this device');
+  assert.equal(reveal.revision, 1); assert.equal(reveal.sinceReceiptMs, 10, 'receipt → flop shown in the same update, not after CHECK');
   const check = entries.find(e => e.event === 'client_audio_started' && e.sound === 'check')!;
   assert.equal(check.mode, 'sound'); assert.equal(check.cueKey, '1'); assert.equal(check.sinceReceiptMs, 10);
   const checkDone = entries.find(e => e.event === 'client_audio_finished' && e.sound === 'check')!;
@@ -72,8 +72,9 @@ test('timing observers that throw never change card presentation or playback', a
   const visuals = new CardPresentation(() => {}, () => now, throwing), events = new SoundEvents();
   visuals.restore(base); events.update(base, 'a', true, 0);
   scheduler.enqueue(visuals.prepare(flop, events.update(flop, 'a', true, now))); await flush();
+  assert.equal(visuals.state.boardCount, 3);
   now = 720; ends.get('check')!(); scheduler.tick(); await flush();
-  assert.equal(visuals.state.boardCount, 1);
+  assert.equal(visuals.state.boardCount, 3);
 });
 
 test('RoomClient reports room receipt for joined and room messages only when enabled', t => {
@@ -117,7 +118,7 @@ test('duplicate room copies keep the first receipt; joined and a new hand start 
   assertSafe(entries);
 });
 
-test('a flop reveal delayed behind action audio is attributed to the revision that dealt it', async () => {
+test('a flop is shown on receipt while CHECK still plays; a newer action replaces the CHECK', async () => {
   let now = 1000; const entries: ClientTimingEntry[] = [];
   const log = new GameTimingLog(); log.configure({ enabled: true, sink: e => entries.push(e), clock: () => now });
   const frames: Array<() => void> = [];
@@ -136,23 +137,24 @@ test('a flop reveal delayed behind action audio is attributed to the revision th
   frames.length = 0;
   log.roomReceived('room', flop, now, 10, 0);
   scheduler.enqueue(visuals.prepare(flop, events.update(flop, 'a', true, now))); await flush();
-  // Revision 2 (a bet on the flop) arrives while CHECK is still playing and the flop is not yet shown.
+  assert.equal(visuals.state.boardCount, 3, 'flop shown on receipt, CHECK still playing');
+  frames.splice(0).forEach(f => f());
+  // Revision 2 (a bet on the flop) arrives while CHECK is still playing.
   now = 1400;
   const bet = { ...flop, revision: 2, audioAction: { revision: 2, kind: 'bet' } } as unknown as HoldemView;
   log.roomReceived('room', bet, now, 10, 0);
   scheduler.enqueue(visuals.prepare(bet, events.update(bet, 'a', true, now))); await flush();
-  assert.equal(visuals.state.boardCount, 0, 'flop still waiting behind CHECK');
-  now = 1720; ends.get('check')!(); scheduler.tick(); await flush();
-  assert.equal(visuals.state.boardCount, 1);
-  frames.splice(0).forEach(f => f());
   const reveal = entries.find(e => e.event === 'client_card_reveal')!;
-  assert.equal(reveal.revision, 1); assert.equal(reveal.sinceReceiptMs, 720);
-  const frame = entries.find(e => e.event === 'client_board_frame' && e.boardCount === 1)!;
-  assert.equal(frame.revision, 1, 'frame attributed to the dealing revision, not the latest (2)');
-  assert.equal(frame.sinceReceiptMs, 720);
+  assert.equal(reveal.revision, 1); assert.equal(reveal.sinceReceiptMs, 0);
+  const frame = entries.find(e => e.event === 'client_board_frame' && e.boardCount === 3)!;
+  assert.equal(frame.revision, 1, 'frame attributed to the dealing revision');
+  assert.equal(frame.sinceReceiptMs, 0);
   const flopSound = entries.find(e => e.event === 'client_audio_started' && e.sound === 'flopReveal')!;
-  assert.equal(flopSound.revision, 1); assert.equal(flopSound.sinceReceiptMs, 720);
-  assert.equal(entries.find(e => e.event === 'client_audio_queued' && e.sound === 'bet')!.revision, 2);
+  assert.equal(flopSound.revision, 1); assert.equal(flopSound.sinceReceiptMs, 0);
+  const checkDone = entries.find(e => e.event === 'client_audio_finished' && e.sound === 'check')!;
+  assert.equal(checkDone.outcome, 'superseded'); assert.equal(checkDone.playMs, 400);
+  const betStart = entries.find(e => e.event === 'client_audio_started' && e.sound === 'bet')!;
+  assert.equal(betStart.revision, 2); assert.equal(betStart.sinceReceiptMs, 0, 'the current action is heard at once');
   assertSafe(entries);
 });
 

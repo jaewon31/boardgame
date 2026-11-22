@@ -27,10 +27,11 @@ export class SoundEvents {
       const action = hand.audioAction;
       if (action && action.revision > before.revision && action.revision <= hand.revision) emit(action.allIn ? 'allIn' : action.kind, action.revision);
       // Independent transitions: a street-ending call must not hide the card sound.
+      // One reveal sound per street (the flop is one unit). If several streets arrive at once,
+      // only the latest street is announced; the earlier ones are already stale.
       if (hand.board.length > before.board.length) {
-        for (let index = before.board.length; index < hand.board.length; index++) {
-          emit(index < 3 ? 'flopReveal' : index === 3 ? 'turnReveal' : 'riverReveal', 'board:' + index, { kind: 'board', index });
-        }
+        const index = hand.board.length <= 3 ? 0 : hand.board.length - 1;
+        emit(index === 0 ? 'flopReveal' : index === 3 ? 'turnReveal' : 'riverReveal', 'board:' + index, { kind: 'board', index });
       }
       if (hand.street === 'complete' && before.street !== 'complete') {
         this.completedHand = hand.id;

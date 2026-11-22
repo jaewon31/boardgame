@@ -4,7 +4,7 @@
 
 ## 1. 기준점
 
-갱신: 2026-11-22 (초대 링크 수정 후) KST · 작성: Claude Code
+갱신: 2026-11-22 (카드·효과음 분리 후) KST · 작성: Claude Code
 
 | 항목 | 값 |
 | --- | --- |
@@ -14,7 +14,7 @@
 | 미푸시 커밋 | `353723e`, `1b09bd1`, `29085e1`, `50ea5cd`, `e3d5992`, `903a7dd`, `a1505a2` + 이 브랜치의 커밋. 원격 어느 브랜치·태그에도 없음 |
 | GitHub 원격 백업 | **보류**(사용자 결정 2026-11-22). 계획: 태그 `backup/consolidate-20261122`(→`a1505a2`), 브랜치 `codex/consolidate-friends-table`. force push 금지. push는 Pages·Railway 설정 확인 후 사용자 PC에서 실행 |
 | 원격 (2026-11-22 `ls-remote`) | `main`=`a666688`(조상), `deploy/web-staging`=`codex/tempo-hand-history`=`595cd67`(분기, 앱 코드는 `353723e`와 동일). 로컬 `origin/*` 추적 ref는 오래됨(fetch 전) |
-| 미커밋 변경 | 없음. 이전 미커밋 6개는 아래 C1·C2로 커밋 완료 |
+| 미커밋 변경 | HEAD `bb581ec` 위에 카드·효과음 분리 작업(5절 최신 기록의 파일 목록). **커밋 안 함**(커밋은 사용자 승인 후) |
 | 백업 | `C:\Users\jwseo\Desktop\boardgame-backups\20261122-020217\` — `repo-all.bundle`(전체 ref), `uncommitted.patch`, `worktree/`(미커밋·미추적 파일 원본 + CLAUDE.md), `status.txt`, `HEAD.txt`, `branches.txt`. 검증: bundle verify, 클론 후 HEAD 일치, 패치 역적용 check, 파일별 바이트 비교 모두 통과. 무시 파일(.env.local, SQLite 등)은 백업에 포함하지 않음 |
 
 ## 2. 현재 상태와 진행 중 작업
@@ -28,7 +28,8 @@
 - **승인 대기/후속**: GitHub 백업 push, `GITHUB_WORKFLOW.md`의 `codex/기능명` 예시 정리, 끊긴 플레이어 처리 정책(3절 #4), 원격 push 시 CI 결과 확인, Codex의 AGENTS.md 실제 로딩 검증(사용량 한도로 2026-11-25 이후 가능).
 - **완료: 멀티플레이 지연 관측**(`27a9148`, 보완 `df6fea3`). 게임 동작 변경 없음, 기본 꺼짐. 서버 `GAME_TIMING_LOG=1`, 클라이언트 `EXPO_PUBLIC_GAME_TIMING_LOG=1` 또는 localStorage `friends-table.diagnostics.game-timing`=`1`. 로그는 `handRef`(핸드 id 앞 8자)+revision으로 서버·클라이언트를 대조하고 단조 시계를 쓴다. `roomRef`는 프로세스별 키의 HMAC-SHA256. `df6fea3`에서 중복 room 수신(첫 수신 유지·중복 횟수 집계, 재연결·새 핸드에 초기화), 보드 프레임·보드 효과음 revision, 타이머 schedule/cancel/fire, 조기 종료 trace 정리를 고쳤다. **실제 운영·다인원 환경에서 로그를 수집한 적은 없다.**
 - **완료(배포 미확인): 초대 링크 404**(3절 #1). `apps/mobile/public/_redirects`를 `/join/* /index.html 200` → `/join/* / 200`으로 변경, `scripts/build-pages.cjs` `checkPages`가 `/` 대상만 허용하고 `/index.html` 200 rewrite를 거부, `apps/mobile/test/pages.test.cjs` 회귀 테스트 추가, `docs/web-phase6-deployment-readiness.md` 설명 갱신. `404.html`(없는 자산의 진짜 404)은 유지. 앱 코드(초대 파싱·로그인/닉네임 후 입장·권한 검사)는 변경 없음. **Cloudflare에서 동작은 검증하지 않았다**(wrangler 설치 불가, 배포 금지). 확인에는 승인된 Preview 또는 운영 배포가 필요하며 Cloudflare 설정 변경은 필요 없다.
-- **다음 작업 후보**: 초대 수정의 Preview 배포 확인(승인 필요) → 관측 로그로 4인 실측(#2·#3·#5) → #5 인증 캐시 설계.
+- **완료(미커밋·실기기 미검증): 카드 공개와 효과음 큐 분리**(3절 #2·#3, 사용자 승인 범위 1번). 카드는 상태 수신 즉시 공개(플랍 3장 한 단위), 효과음은 lane별 비차단·최신 우선·500ms 초과 생략, 결과음은 순서 유지. 설계는 [card-audio-sync](../card-audio-sync.md) 2026-11-22 개정. 서버·프로토콜·음원 변경 없음. 4인 서버 시뮬레이션에서 카드 공개 지연 p50 1.15s/max 5.28s → p50·max ≤0.3ms, 상태와 어긋난 액션음 162/252 → 0/324. **실제 브라우저·실기기 검증은 못 함**(웹 클라이언트가 운영 Supabase 익명 로그인을 요구).
+- **다음 작업 후보**: 카드·효과음 분리 실기기/브라우저 확인(로컬 Supabase 또는 테스트 인증 환경 승인 필요) → 커밋 승인 → #4 끊긴 플레이어 정책 결정 → #5 인증 캐시 설계 → 초대 수정 Preview 배포 확인.
 
 ## 3. 멀티플레이 안정화 — 확인된 결함과 원인 가설
 
@@ -37,14 +38,16 @@
 | # | 문제 | 확인된 사실 | 원인 가설 (미검증) | 다음 확인 |
 | --- | --- | --- | --- | --- |
 | 1 | 초대 링크 `/join/*` 404 | 스테이징 `GET /join/ABCD1234` → **404 재현**, `/` → 200, `/index.html` → 308 `/`, `_headers`는 적용됨 (2026-11-22). 같은 증상(404.html 존재 + `/index.html` 대상 200 rewrite → 404, 대상 `/`로 해결)이 외부 저장소에서 `wrangler pages dev`로 재현·수정된 사례 있음. **수정 커밋**: rewrite 대상 `/`로 변경 + 빌드 검사·테스트 | 원인 (a) pretty URL 정규화로 `/index.html` rewrite가 따라지지 않음 — 근거 강함, Cloudflare 실측 미검증. (b) 배포 SHA가 다름·(c) 출력 경로 다름은 `_headers` 적용 관찰로 가능성 낮음 | 승인 후 Preview 배포에서 `/join/<코드>` 200·새로고침·없는 `.js` 404 확인 |
-| 2 | 플랍·턴·리버 공개 지연 | 일반 스트리트는 서버가 마지막 액션과 **같은 상태 갱신**에 보드를 넣음(`hand.ts` `advance`). 올인 런아웃은 의도된 스트리트당 2초, 리버 스퀴즈 최대 15초. 모든 WS 메시지가 처리 전 Supabase 인증을 직렬로 기다림(#5) | 체감 지연 = 마지막 액션의 Supabase 인증 RTT + 클라이언트 오디오 큐 대기(#3). 증상 자체는 사용자 보고이며 이번에 계측·재현하지 않음 | 서버 `ws_auth_completed.authMs`·`queueWaitMs` 진단 로그와 클라이언트 표시 시각 비교 |
-| 3 | 효과음–카드 표시 동기화 | `cardPresentation.ts`/`useGameAudio.ts`/`PokerTable.tsx`: 카드 표시가 오디오 큐 재생 시작 콜백에 묶이고, 큐는 음원 완료와 최소 모션 시간을 모두 기다림([근거](../card-audio-sync.md), 당시 기준 b01e1fe) | 앞선 액션음이 쌓이면 카드 표시가 뒤로 밀림. 웹은 오디오 언락/디코딩 지연이 추가될 수 있음. 실기기 녹음·트레이스 없음 | 웹/네이티브 각각 큐 길이·재생 시작 시각 로깅 |
+| 2 | 플랍·턴·리버 공개 지연 | **원인 확인·수정(미커밋)**. 4인 서버 시뮬레이션(로컬, 인증 스텁): 서버 액션 수신→브로드캐스트 p50 7.5ms. 클라이언트 수신→카드 공개가 p50 1.15s·max 5.28s(빠른 체크), 사운드 끄면 0ms → 원인은 카드가 효과음 큐 뒤에서 기다리는 구조(#3). 수정 후 p50·max ≤0.3ms(사운드 ON/OFF 동일). 인증 지연은 액션마다 1:1로 더해짐(주입 120–280ms 시 p50 195ms) → #5 | 운영 Supabase RTT 크기, 웹 오디오 언락·seek·background 탭 타이머 지연은 미측정 | 실제 브라우저/실기기에서 `client_card_reveal`·`client_board_frame` 확인 |
+| 3 | 효과음–카드 표시 동기화 | **원인 확인·수정(미커밋)**. 수정 전: 단일 table lane이 음원 완료까지 기다려 액션음이 상태보다 최대 4.9s 늦게 시작, 체크 28·팟 4·승리 1개 누락, 상태와 어긋난 액션음 162/252. 수정 후(lane 분리·최신 우선·500ms 생략): 0/324, 누락 0, 팟 획득 24/24·승리 6/6 순서대로 재생 ([설계](../card-audio-sync.md)) | 빠른 연속 액션에서 앞선 액션음이 잘림(의도). 마지막 액션음과 카드음이 겹침. 실제 청취·실기기 미검증 | 실기기 청취로 잘림·겹침이 거슬리는지 확인 |
 | 4 | 연결 끊긴 플레이어 차례 | `lobby.ts` `syncGame`: 끊긴 플레이어에게도 일반 턴 타이머(방 설정 `turnSeconds`, `hand.ts` 기본 30초) 그대로 적용, 만료 시 체크/폴드(`hand.ts` `timeout`). 단축 처리 없음. 예외: 복구 기간 후 끊긴 플레이어의 리버 스퀴즈만 건너뜀. 좌석은 재접속 기한(`expiresAt`)까지 유지 | 재접속 기한 동안 매 스트리트·매 핸드 전체 턴 시간을 기다리게 됨. 다음 핸드 자동 제외(sit-out) 여부는 미확인 | 원하는 정책(즉시 체크/폴드, 짧은 유예, sit-out) 사용자 결정 → 서버 테스트로 고정 |
 | 5 | WS 메시지별 Supabase 인증 지연 | `lobby.ts` `handle`: ping 포함 **모든 메시지**가 `accountSession.ts`의 `current_account_session` RPC를 캐시 없이 호출(타임아웃 4초). 소켓별 큐가 직렬이라 대기가 누적됨 | 액션·ping 지연의 주요 원인. Supabase 5xx/429 시 `AUTH_UNAVAILABLE` | 단일 세션(loginId) 강제와 권한 검증을 유지하는 설계 필요(예: 검증된 토큰의 짧은 TTL 캐시, 입장 시 검증 + 주기적 재검증). 결정 기록 대상 |
 | 6 | 재접속 안정성 | 4001 교체 경쟁 상태는 `29085e1`에서 수정, 서버 188/188 통과([조사](../multiplayer-stability-investigation.md)). 클라이언트 heartbeat 5초/timeout 15초(`RoomClient.ts`). 서버 재시작 시 `nextHandAt`은 checkpoint에 저장 안 됨(PROJECT_STATUS) | 인증 직렬 대기(#5)로 pong이 늦어져 클라이언트가 불필요하게 재연결. 모바일 background/네트워크 전환. 실기기·운영 네트워크 미검증 | #5 수정 후 재측정, 실기기 background/복귀 시나리오 |
 | 7 | 게임 테이블 UI/UX 개선 | 구체 결함 목록 없음. 기존 검토 자료: [UI 리뷰](../mobile-poker-ui-review.md), [P1](../p1-input-layout-report.md), [P2](../p2-ui-friend-comparison-report.md) | — | 사용자에게 우선 개선 항목을 받아 범위 확정 |
 
-권장 순서: #5(다른 항목의 공통 원인 후보) → #2·#3 계측 → #4 정책 결정 → #1 배포 확인 → #6 재측정 → #7.
+권장 순서: #2·#3 실기기 확인·커밋 → #4 정책 결정 → #5 인증 캐시 → #1 배포 확인 → #6 재측정 → #7.
+
+4인 서버 시뮬레이션 재현 방법(저장소 밖 임시 사본에서 실행, 스크립트는 저장소에 없음): 실제 `attachLobby`·`HoldemHand`·`SqliteStateStore` + 인증 스텁(지연 주입), 독립 WebSocket 클라이언트 4개가 실제 `SoundEvents`·`CardPresentation`·`AudioScheduler`·`GameTimingLog`와 실제 wav 길이의 가짜 플레이어를 사용. 6핸드, 3핸드 플랍에서 액터 연결 끊김(12초 후 복귀), 4핸드 턴 타이머 만료, 5핸드 올인 런아웃+리버 스퀴즈. 시계는 기기별 단조 시계만 사용. 렌더링(`client_board_frame`)은 측정 불가.
 
 ## 4. 다음 작업자에게
 
@@ -67,6 +70,15 @@
 - 승인 대기:
 ```
 
+### 2026-11-22 18:30 KST · Claude Code(클라우드 세션) · 구현(카드·효과음 분리)
+- 브랜치/HEAD/dirty: `fix/multiplayer-stability` / `bb581ec` / dirty(아래 파일, 미커밋)
+- 한 일 (변경 파일): `apps/mobile/src/services/cardPresentation.ts`(상태 수신 즉시 공개, 플랍 한 모션), `audioScheduler.ts`(효과음 전용, action/board/result/notice lane, 최신 우선, 500ms 생략, 결과음 400ms 양보), `soundCatalog.ts`(lane·maxWaitMs), `soundEvents.ts`(스트리트당 공개음 1회), `gameTiming.ts`(주석만). 테스트: `apps/server/test/{cardPresentation,audioScheduler,soundEvents,client-game-timing}.test.ts`, `apps/mobile/test/audio-hook.test.cjs`. 문서: `docs/card-audio-sync.md` 개정, 본 문서. 서버 코드·프로토콜·음원·UI 컴포넌트 변경 없음
+- 기존 테스트 기대값 변경(삭제 없음): 이전 설계("카드가 액션음 뒤에 순차 공개", "빠른 CHECK/CALL 모두 순서대로 재생", "재생 중 소리는 끊지 않음")를 검증하던 13개 테스트(5개 파일)의 기대값을 승인된 새 동작 기준으로 바꿈. 새 회귀 테스트 5개 추가(빠른 연속 체크 중 턴 즉시 공개, 누적 없음, 대기 중 오래된 액션 생략, 결과음 순서, 스트리트 건너뛴 상태). 사운드 ON/OFF 동일 타이밍은 기존 음소거 테스트를 바꿔 검증
+- 테스트: 저장소 밖 사본(Node 22.23, Windows workspace 링크를 Linux에서 못 읽어 복사)에서 서버 `node --test` 209/209(첫 실행에서 서버 전용 `game-timing.test.ts` 1건 실패 → 단독 3회·전체 재실행 통과, 해당 파일·서버 코드 미변경), 모바일 50/50, tsc shared·server·mobile 통과. 4인 시뮬레이션 수정 전후 각 4조건(체크 간격 0.3s/1s, 인증 지연 0/120–280ms 주입, 사운드 ON/OFF)
+- 미실행·미검증: 실제 브라우저 E2E·실기기(웹 클라이언트가 Supabase 익명 로그인 필요, 운영 계정 생성 금지), Node 24 환경 테스트, 화면 반영 시간, 웹 오디오 언락·seek 지연, 실제 청취 품질(잘림·겹침)
+- 검수 요청: 결과음 400ms 양보·500ms 생략 값이 적절한지, 올인음이 빠른 콜에 잘리는 것을 허용할지, `holePending`이 항상 false가 된 것(필드 유지)
+- 승인 대기: 커밋, 브라우저/실기기 검증 환경(로컬 Supabase 또는 테스트 인증), #4·#5 후속
+
 ### 2026-11-22 · Claude Code(클라우드 세션) · 구현(초대 링크 404)
 - 브랜치/HEAD/dirty: `fix/multiplayer-stability` / `df6fea3` 다음 커밋 / 커밋 후 clean
 - 한 일: `_redirects` 대상 `/`, `build-pages.cjs` 검사 강화, `pages.test.cjs` 회귀 테스트, `web-phase6-deployment-readiness.md`·본 문서 갱신. 앞서 `27a9148`(지연 관측), `df6fea3`(관측 정확도·HMAC) 커밋
@@ -82,11 +94,3 @@
 - 미검증: 원격 CI 실제 실행(push 보류), Pages·Railway 설정, Codex의 AGENTS.md 실제 로딩
 - 검수 요청: CI 트리거 패턴이 의도대로인지, 2절 미확인 항목 서술이 과장되지 않았는지
 - 승인 대기: GitHub 백업 push, 지연 관측 작업 범위
-
-### 2026-11-22 02:20 KST · Claude Code(클라우드 세션) · 구현(문서)
-- 브랜치/HEAD/dirty: `codex/consolidate-friends-table` / `50ea5cd` / dirty(1절 기존 변경 + 협업 문서 5개 + `.claude-write-test` 빈 파일)
-- 한 일: 승인된 협업 문서 4개 최소 수정, 본 문서 2절 갱신. 쓰기 가능 여부 확인 중 빈 파일 `.claude-write-test`를 실수로 만듦(삭제 권한 없음 → 사용자 확인 후 삭제)
-- 테스트: 코드 변경 없음 → 제품 테스트 미실행. 문서 링크 대상 존재 확인
-- 미검증: Codex 실제 AGENTS.md 로딩
-- 검수 요청: AGENTS.md 신규 섹션이 기존 규칙과 충돌하지 않는지, DEVELOPMENT_WORKFLOW 링크 경로
-- 승인 대기: 협업 문서 커밋(AGENTS.md는 부분 스테이징), `fix/multiplayer-stability` 생성

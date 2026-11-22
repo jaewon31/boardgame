@@ -93,7 +93,7 @@ export class GameTimingLog {
 /**
  * First animation frame after the presented board changes (≈ committed to screen), attributed to
  * the revision whose state introduced the change (set by the card observer via `source`), not to
- * the latest received revision. Delayed reveals (waiting behind action audio) keep their origin.
+ * the latest received revision. Cards are shown on receipt, so this is ≈ receipt → first frame.
  */
 export function boardFrameTracker(log: GameTimingLog, raf: (callback: () => void) => unknown = callback => requestAnimationFrame(callback)) {
   let shown: { handId: string | null; boardCount: number } = { handId: null, boardCount: 0 };

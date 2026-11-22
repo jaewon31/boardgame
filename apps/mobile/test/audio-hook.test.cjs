@@ -136,7 +136,7 @@ test('saved master and per-event levels are retained with bounded player compens
   h.audio.setMuted(true);await h.flush();assert.equal(h.writes.at(-1).muted,true);h.dispose();
 });
 
-test('rapid alternating CHECK/CALL queue keeps each real action without extra card voices',async()=>{
+test('rapid alternating CHECK/CALL plays each action on its own state and never queues a backlog',async()=>{
   const h=harness();await h.flush();
   const base={id:'rapid',number:1,revision:0,street:'preflop',board:[],players:[],payouts:[],actorId:'b',legal:null};
   h.setHand(base);await h.flush();h.players[0].finish();h.tick();await h.flush();
@@ -145,20 +145,23 @@ test('rapid alternating CHECK/CALL queue keeps each real action without extra ca
     const next={...base,revision:i+1,audioAction:{revision:i+1,kind}};
     h.setHand(next);h.setHand({...next});await h.flush();
   }
-  assert.equal(h.players[1].plays,1);assert.equal(h.players[2].plays,0);
-  for(const index of [1,2,1,2]){h.players[index].finish();h.tick();await h.flush();}
+  // Each newer action stopped the previous one; duplicates of a snapshot never replay.
   initial[1]+=2;initial[2]+=2;assert.deepEqual(h.players.map(p=>p.plays),initial);
+  for(const index of [1,2,1,2]){h.players[index].finish();h.tick();await h.flush();}
+  assert.deepEqual(h.players.map(p=>p.plays),initial,'nothing plays late after the actions are over');
+  assert.equal(h.players[6].plays+h.players[7].plays+h.players[8].plays,0,'no extra card voices');
   h.dispose();
 });
 
-test('duplicate CHECK snapshots do not overlap and rapid distinct checks reuse the ended player',async()=>{
+test('duplicate CHECK snapshots do not overlap and a rapid distinct CHECK restarts the same player',async()=>{
   const h=harness();await h.flush();
   const base={id:'checks',number:1,revision:0,street:'preflop',board:[],players:[],payouts:[],actorId:'b',legal:null};
   h.setHand(base);await h.flush();h.players[0].finish();h.tick();await h.flush();
   const first={...base,revision:1,audioAction:{revision:1,kind:'check'}};
   h.setHand(first);await h.flush();const pauses=h.players[1].pauses;
-  h.setHand({...first});h.setHand({...base,revision:2,audioAction:{revision:2,kind:'check'}});await h.flush();
-  assert.equal(h.players[1].plays,1);assert.equal(h.players[1].pauses,pauses);
+  h.setHand({...first});await h.flush();assert.equal(h.players[1].plays,1);assert.equal(h.players[1].pauses,pauses,'a duplicate snapshot does not restart CHECK');
+  h.setHand({...base,revision:2,audioAction:{revision:2,kind:'check'}});await h.flush();
+  assert.equal(h.players[1].plays,2,'a new CHECK restarts the same voice at once instead of waiting');
   h.players[1].finish();h.tick();await h.flush();assert.equal(h.players[1].plays,2);
   assert.equal(h.players[1].source,'../../assets/audio/check-user.wav');assert.equal(h.players[2].plays,0);
   h.dispose();

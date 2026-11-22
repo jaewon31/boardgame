@@ -25,12 +25,14 @@ test('same event is played once, including re-enable and repeated snapshots',asy
   a.scheduler.setEnabled(false);a.scheduler.setEnabled(true);a.scheduler.enqueue([cue('call')]);await flush();
   assert.deepEqual(a.played,['call']);
 });
-test('new high priority cue never cuts a playing cue; FIFO table order and separate notice lane apply',async()=>{
+test('action, card, result and notice lanes never block each other; result yields briefly to the final action',async()=>{
   const a=setup();a.scheduler.enqueue([cue('deal')]);await flush();
   a.scheduler.enqueue([cue('check'),cue('potCollect'),cue('myTurn')]);await flush();
-  assert.deepEqual(a.played,['deal','myTurn']);assert.equal(a.paused.filter(s=>s==='deal').length,1);
-  a.listeners.get('deal')!();a.scheduler.tick();await flush();assert.equal(a.played.at(-1),'check');
-  a.listeners.get('check')!();a.scheduler.tick();await flush();assert.equal(a.played.at(-1),'potCollect');
+  assert.deepEqual(a.played,['deal','check','myTurn'],'CHECK does not wait for the card sound');
+  assert.equal(a.paused.filter(s=>s==='deal').length,1,'the running card sound is not cut');
+  a.advance(399);await flush();assert.equal(a.played.includes('potCollect'),false,'pot waits for the CHECK briefly');
+  a.advance(1);await flush();assert.equal(a.played.at(-1),'potCollect');
+  assert.equal(a.paused.filter(s=>s==='check').length,2,'the CHECK is interrupted, not overlapped');
 });
 test('mute/background/reconnect cancellation prevents pending seek from starting and serializes same voice',async()=>{
   const a=setup();let release!:()=>void;
@@ -45,15 +47,15 @@ test('mute/background/reconnect cancellation prevents pending seek from starting
 test('stale completion cannot end a newer playback',async()=>{
   const a=setup();a.scheduler.enqueue([cue('call','one')]);await flush();const stale=a.listeners.get('call')!;
   a.scheduler.setEnabled(false);a.scheduler.setEnabled(true);a.scheduler.enqueue([cue('call','two')]);await flush();
-  stale();a.scheduler.enqueue([cue('check')]);await flush();assert.deepEqual(a.played,['call','call']);
-  a.listeners.get('call')!();a.scheduler.tick();await flush();assert.equal(a.played.at(-1),'check');
+  stale();a.scheduler.enqueue([cue('potCollect')]);await flush();assert.deepEqual(a.played,['call','call'],'the newer CALL is still playing');
+  a.listeners.get('call')!();a.scheduler.tick();await flush();assert.equal(a.played.at(-1),'potCollect');
 });
 test('unloaded audio waits briefly, expired bursts drop and muted events are not replayed',async()=>{
   const a=setup();a.players.call.isLoaded=false;a.scheduler.enqueue([cue('call')]);await flush();assert.deepEqual(a.played,[]);
   a.players.call.isLoaded=true;a.advance(100);await flush();assert.deepEqual(a.played,['call']);
-  a.scheduler.enqueue([cue('check')]);a.advance(1600);a.listeners.get('call')!();a.scheduler.tick();await flush();assert.deepEqual(a.played,['call','check']);
+  a.scheduler.enqueue([cue('check')]);await flush();assert.deepEqual(a.played,['call','check'],'a newer action replaces the older one at once');
   a.scheduler.setEnabled(false);a.scheduler.enqueue([cue('raise')]);a.scheduler.setEnabled(true);a.scheduler.enqueue([cue('raise')]);await flush();assert.deepEqual(a.played,['call','check']);
-  a.players.call.isLoaded=false;a.scheduler.enqueue([cue('call','expired')]);a.advance(5001);a.players.call.isLoaded=true;a.scheduler.tick();await flush();assert.deepEqual(a.played,['call','check']);
+  a.players.call.isLoaded=false;a.scheduler.enqueue([cue('call','expired')]);a.advance(501);a.players.call.isLoaded=true;a.scheduler.tick();await flush();assert.deepEqual(a.played,['call','check'],'an action that could not start in time is skipped');
 });
 test('seek rejection releases lane and reports a safe error; no raw error is forwarded',async()=>{
   const a=setup();a.pending.set('call',()=>Promise.reject(new Error('PRIVATE_PATH')));
@@ -131,4 +133,26 @@ test('hole sound uses pitch-corrected 1.5 speed while board sound keeps original
  assert.deepEqual(rates,[1.5]);assert.equal(a.players.deal.shouldCorrectPitch,true);
  a.scheduler.cancel();a.players.flopReveal.setPlaybackRate=rate=>{rates.push(rate);};
  a.scheduler.enqueue([cue('flopReveal')]);await flush();assert.deepEqual(rates,[1.5,1]);
+});
+
+test('rapid actions never accumulate: each newer action stops the older one and nothing replays later',async()=>{
+  const a=setup();
+  for(const [i,sound] of (['check','check','call','check'] as const).entries()){a.scheduler.enqueue([cue(sound,'r'+i)]);await flush();a.advance(150);}
+  assert.deepEqual(a.played,['check','check','call','check']);
+  assert.equal(a.paused.filter(s=>s==='check').length+a.paused.filter(s=>s==='call').length>=3,true);
+  for(let i=0;i<5;i++){a.advance(1000);await flush();}
+  assert.deepEqual(a.played,['check','check','call','check'],'no backlog plays after the state moved on');
+});
+test('an action cue waiting for an unavailable voice is replaced by a newer action and dropped as stale',async()=>{
+  const a=setup();a.players.raise.isLoaded=false;
+  a.scheduler.enqueue([cue('raise')]);await flush();assert.deepEqual(a.played,[]);
+  a.scheduler.enqueue([cue('call')]);await flush();a.players.raise.isLoaded=true;a.advance(16);await flush();
+  assert.deepEqual(a.played,['call'],'the superseded RAISE never plays late');
+});
+test('result order: pot, then victory, then shuffle; actions cannot cut result sounds',async()=>{
+  const a=setup();a.scheduler.enqueue([cue('potCollect'),cue('victory')]);await flush();
+  a.scheduler.enqueue([cue('check','late')]);await flush();
+  assert.deepEqual(a.played,['potCollect','check']);assert.equal(a.paused.filter(s=>s==='potCollect').length,1);
+  a.listeners.get('potCollect')!();a.scheduler.tick();await flush();assert.equal(a.played.at(-1),'check','victory yields briefly to a running action');
+  a.advance(400);await flush();assert.equal(a.played.at(-1),'victory');
 });

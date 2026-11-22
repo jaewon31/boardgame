@@ -1,18 +1,20 @@
 export const soundCatalog = {
-  shuffle: { label: '카드 셔플', gain: 0.8, priority: 30, lane: 'table', maxWaitMs: 5000, maxPlayMs: 7500 },
-  allIn: { maxWaitMs: 5000, label: '올인', gain: 0.9, priority: 65, lane: 'table' },
-  deal: { label: '카드 배분', gain: 0.8, priority: 60, lane: 'table' },
-  check: { maxWaitMs: 5000, label: '체크', gain: 0.65, priority: 40, lane: 'table' },
-  call: { maxWaitMs: 5000, label: '콜', gain: 0.8, priority: 45, lane: 'table' },
-  bet: { maxWaitMs: 5000, label: '베팅', gain: 0.85, priority: 45, lane: 'table' },
-  raise: { maxWaitMs: 5000, label: '레이즈', gain: 0.9, priority: 50, lane: 'table' },
-  fold: { maxWaitMs: 5000, label: '폴드', gain: 0.4, priority: 40, lane: 'table' },
-  flopReveal: { label: '플롭 공개', gain: 0.8, priority: 60, lane: 'table' },
-  turnReveal: { label: '턴 공개', gain: 0.8, priority: 60, lane: 'table' },
-  riverReveal: { label: '리버 공개', gain: 0.8, priority: 60, lane: 'table' },
-  // Result cues must survive a prior effect plus pot animation; cancelled on hand change.
-  potCollect: { maxWaitMs: 5000, label: '팟 획득', gain: 0.8, priority: 80, lane: 'table' },
-  victory: { maxWaitMs: 5000, label: '승리', gain: 0.2, priority: 70, lane: 'table' },
+  // Lanes: 'action' and 'board' are latest-wins (a newer event replaces an older one, and a cue that
+  // cannot start within maxWaitMs is skipped as stale); 'result' keeps event order; 'notice' is separate.
+  shuffle: { label: '카드 셔플', gain: 0.8, priority: 30, lane: 'result', maxWaitMs: 5000, maxPlayMs: 7500 },
+  allIn: { maxWaitMs: 500, label: '올인', gain: 0.9, priority: 65, lane: 'action' },
+  deal: { maxWaitMs: 500, label: '카드 배분', gain: 0.8, priority: 60, lane: 'board' },
+  check: { maxWaitMs: 500, label: '체크', gain: 0.65, priority: 40, lane: 'action' },
+  call: { maxWaitMs: 500, label: '콜', gain: 0.8, priority: 45, lane: 'action' },
+  bet: { maxWaitMs: 500, label: '베팅', gain: 0.85, priority: 45, lane: 'action' },
+  raise: { maxWaitMs: 500, label: '레이즈', gain: 0.9, priority: 50, lane: 'action' },
+  fold: { maxWaitMs: 500, label: '폴드', gain: 0.4, priority: 40, lane: 'action' },
+  flopReveal: { maxWaitMs: 500, label: '플롭 공개', gain: 0.8, priority: 60, lane: 'board' },
+  turnReveal: { maxWaitMs: 500, label: '턴 공개', gain: 0.8, priority: 60, lane: 'board' },
+  riverReveal: { maxWaitMs: 500, label: '리버 공개', gain: 0.8, priority: 60, lane: 'board' },
+  // Result cues play in order (pot, then victory, then shuffle) and survive each other; cancelled on hand change.
+  potCollect: { maxWaitMs: 5000, label: '팟 획득', gain: 0.8, priority: 80, lane: 'result' },
+  victory: { maxWaitMs: 5000, label: '승리', gain: 0.2, priority: 70, lane: 'result' },
   myTurn: { label: '내 차례 알림', gain: 0.3, priority: 80, lane: 'notice' },
   warning: { label: '시간 경고', gain: 0.4, priority: 90, lane: 'notice' },
 } as const;
