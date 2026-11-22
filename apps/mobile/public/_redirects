@@ -1,2 +1,4 @@
 # Only invite URLs are SPA routes. Do not rewrite missing assets into index.html.
-/join/* /index.html 200
+# Rewrite to "/", not "/index.html": Pages turns /index.html into a pretty-URL redirect, and with a
+# top-level 404.html that rewrite is not followed, so /join/* answered 404 (reproduced on staging).
+/join/* / 200

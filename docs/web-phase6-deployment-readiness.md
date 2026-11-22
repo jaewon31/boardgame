@@ -69,7 +69,7 @@ Volume은 배포/재시작의 영속 저장에 사용할 수 있으나 무중단
 이번 단계 추가/수정:
 
 - `apps/mobile/public/_headers`: no-cache, nosniff, no-referrer, noindex/nofollow, manifest MIME.
-- `apps/mobile/public/_redirects`: `/join/* /index.html 200`만 rewrite.
+- `apps/mobile/public/_redirects`: `/join/* / 200`만 rewrite (대상이 `/index.html`이면 404.html이 있을 때 Pages가 rewrite를 따르지 않아 404가 난다).
 - `apps/mobile/public/404.html`: 없는 JS/아이콘을 앱 HTML로 바꾸는 Pages 암묵적 SPA fallback 방지.
 - `scripts/build-pages.cjs`, 루트 `package.json`의 `build:pages`: 배포 환경 형식 검사 → Expo production web export → PWA/Pages 파일/크기 검사. 외부 API·업로드 명령 없음.
 - `apps/mobile/test/pages.test.cjs`: dotenv 배제·환경/라우팅/개인 파일 차단 검증.

@@ -23,6 +23,9 @@ test('Pages build validates release config, ignores local dotenv and keeps nativ
 });
 test('Pages assets preserve invite routes, strict 404s, caching and private-file exclusion', t => {
   assert.ok(checkPages(publicDir) >= 7);
+  const rules = fs.readFileSync(path.join(publicDir, '_redirects'), 'utf8').split(/\r?\n/).filter(line => line.trim() && !line.startsWith('#'));
+  assert.deepEqual(rules.map(line => line.trim().split(/\s+/)), [['/join/*', '/', '200']], 'only invite routes, rewritten to the root document');
+  assert.ok(fs.existsSync(path.join(publicDir, '404.html')), 'missing assets still get a real 404');
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'pages-assets-'));
   t.after(() => {
     assert.ok(path.resolve(temp).startsWith(path.resolve(os.tmpdir()) + path.sep + 'pages-assets-'));
@@ -34,4 +37,11 @@ test('Pages assets preserve invite routes, strict 404s, caching and private-file
   fs.unlinkSync(path.join(temp, '.env.local'));
   fs.writeFileSync(path.join(temp, '_redirects'), '/* /index.html 200');
   assert.throws(() => checkPages(temp), /invite routes only/);
+  fs.writeFileSync(path.join(temp, '_redirects'), '/* / 200');
+  assert.throws(() => checkPages(temp), /invite routes only/);
+  // Regression (staging 404): with 404.html present, Pages does not follow a 200 rewrite to /index.html.
+  fs.writeFileSync(path.join(temp, '_redirects'), '/join/* /index.html 200');
+  assert.throws(() => checkPages(temp), /invite routes only|not "\/index.html"/);
+  fs.writeFileSync(path.join(temp, '_redirects'), '/join/* / 200\n/join/* /index.html 200');
+  assert.throws(() => checkPages(temp), /not "\/index.html"/);
 });

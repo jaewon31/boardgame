@@ -16,7 +16,10 @@ async function pagesEnvironment(env) {
 function checkPages(directory) {
   checkPwa(directory);
   const redirects = fs.readFileSync(path.join(directory, '_redirects'), 'utf8');
-  if (!/^\/join\/\*\s+\/index.html\s+200$/m.test(redirects) || /^\/\*\s/m.test(redirects)) throw Error('Pages must rewrite invite routes only');
+  if (!/^\/join\/\*\s+\/\s+200$/m.test(redirects) || /^\/\*\s/m.test(redirects)) throw Error('Pages must rewrite invite routes only');
+  // Pages serves index.html only through "/": a 200 rewrite to /index.html becomes a pretty-URL redirect
+  // that is not followed when 404.html exists, so invite links would answer 404.
+  if (/^\S+\s+\/index\.html\s+200\b/m.test(redirects)) throw Error('Rewrite invite routes to "/", not "/index.html"');
   if (!fs.existsSync(path.join(directory, '404.html'))) throw Error('Pages requires an explicit missing-asset 404');
   const headers = fs.readFileSync(path.join(directory, '_headers'), 'utf8');
   for (const value of ['Cache-Control: no-cache', 'X-Content-Type-Options: nosniff', 'X-Robots-Tag: noindex, nofollow']) {
