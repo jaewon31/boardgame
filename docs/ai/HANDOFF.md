@@ -4,7 +4,7 @@
 
 ## 1. 기준점
 
-갱신: 2026-11-22 (카드·효과음 분리 커밋 후) KST · 작성: Claude Code
+갱신: 2026-11-22 (로컬 4인 브라우저 E2E 커밋) KST · 작성: Claude Code
 
 | 항목 | 값 |
 | --- | --- |
@@ -14,7 +14,7 @@
 | 미푸시 커밋 | `353723e`, `1b09bd1`, `29085e1`, `50ea5cd`, `e3d5992`, `903a7dd`, `a1505a2` + 이 브랜치의 커밋. 원격 어느 브랜치·태그에도 없음 |
 | GitHub 원격 백업 | **보류**(사용자 결정 2026-11-22). 계획: 태그 `backup/consolidate-20261122`(→`a1505a2`), 브랜치 `codex/consolidate-friends-table`. force push 금지. push는 Pages·Railway 설정 확인 후 사용자 PC에서 실행 |
 | 원격 (2026-11-22 `ls-remote`) | `main`=`a666688`(조상), `deploy/web-staging`=`codex/tempo-hand-history`=`595cd67`(분기, 앱 코드는 `353723e`와 동일). 로컬 `origin/*` 추적 ref는 오래됨(fetch 전) |
-| 미커밋 변경 | 없음. 카드·효과음 분리는 사용자 승인으로 `21c7297` 커밋, 이어서 본 문서 기록 커밋. push 안 함 |
+| 미커밋 변경 | 없음. 로컬 브라우저 E2E 5개 파일은 사용자 승인으로 `test(e2e): add local 4-browser game E2E harness` 커밋(`git log -1`), 카드·효과음 분리는 `21c7297`. push 안 함 |
 | 백업 | `C:\Users\jwseo\Desktop\boardgame-backups\20261122-020217\` — `repo-all.bundle`(전체 ref), `uncommitted.patch`, `worktree/`(미커밋·미추적 파일 원본 + CLAUDE.md), `status.txt`, `HEAD.txt`, `branches.txt`. 검증: bundle verify, 클론 후 HEAD 일치, 패치 역적용 check, 파일별 바이트 비교 모두 통과. 무시 파일(.env.local, SQLite 등)은 백업에 포함하지 않음 |
 
 ## 2. 현재 상태와 진행 중 작업
@@ -30,7 +30,8 @@
 - **완료(배포 미확인): 초대 링크 404**(3절 #1). `apps/mobile/public/_redirects`를 `/join/* /index.html 200` → `/join/* / 200`으로 변경, `scripts/build-pages.cjs` `checkPages`가 `/` 대상만 허용하고 `/index.html` 200 rewrite를 거부, `apps/mobile/test/pages.test.cjs` 회귀 테스트 추가, `docs/web-phase6-deployment-readiness.md` 설명 갱신. `404.html`(없는 자산의 진짜 404)은 유지. 앱 코드(초대 파싱·로그인/닉네임 후 입장·권한 검사)는 변경 없음. **Cloudflare에서 동작은 검증하지 않았다**(wrangler 설치 불가, 배포 금지). 확인에는 승인된 Preview 또는 운영 배포가 필요하며 Cloudflare 설정 변경은 필요 없다.
 - **완료(`21c7297`, 실기기·브라우저 미검증): 카드 공개와 효과음 큐 분리**(3절 #2·#3, 사용자 승인 범위 1번). 카드는 상태 수신 즉시 공개(플랍 3장 한 단위), 효과음은 lane별 비차단·최신 우선·500ms 초과 생략, 결과음은 순서 유지. 설계는 [card-audio-sync](../card-audio-sync.md) 2026-11-22 개정. 서버·프로토콜·음원 변경 없음. 4인 서버 시뮬레이션에서 카드 공개 지연 p50 1.15s/max 5.28s → p50·max ≤0.3ms, 상태와 어긋난 액션음 162/252 → 0/324. **실제 브라우저·실기기 검증은 못 함**(웹 클라이언트가 운영 Supabase 익명 로그인을 요구).
 - **브라우저 E2E 환경 조사(2026-11-22)**: 승인된 테스트 환경 없음. 별도 Staging 계획은 철회됨([runbook](../web-staging-runbook.md)), `friends-table-staging.pages.dev`는 운영 Railway·운영 Supabase를 사용하고 테스트 계정·게임 데이터 생성 E2E는 승인 대기([기존 서버 runbook](../web-existing-server-runbook.md) 53·121행). 새 커밋은 어디에도 배포되지 않음. 기존 로컬 브라우저 fixture(`scripts/test-p2-browser.cjs`)는 인증 모듈을 번들 단계에서 교체하는 UI 검사이며, 4인 게임 E2E로 확장하려면 서버 테스트 authorize까지 필요해 사용자 지시(인증 우회 코드 임의 추가 금지)에 따라 만들지 않았다.
-- **다음 작업 후보**: (사용자 결정) 브라우저 검증 환경 선택 — ① 로컬 fixture E2E 승인, ② Preview 배포 + 운영 Supabase 테스트 계정 4개 생성 승인, ③ 별도 Supabase 재개 → 사용자 청취 평가(잘림·겹침) → #4 끊긴 플레이어 정책 → #5 인증 캐시 → 초대 수정 Preview 확인.
+- **완료(커밋): 로컬 4인 브라우저 E2E**(사용자 승인 1번 방식). 실제 Chrome 4개(Chrome for Testing 153.0.8010.12, headless, 클라우드 작업 공간, Node 22.23)가 로컬 서버에 독립 사용자로 접속해 7핸드 진행. 상태 수신→카드 공개 p50 10–12ms·max 89ms, →첫 프레임 p50 27–39ms·max 113ms, 사운드 ON/OFF 동일 수준. 상태보다 늦게 시작한 액션음 0/351, 결과음 순서 32/32, 페이지 오류 0. 방법·재실행은 [testing](../testing.md) "로컬 4인 브라우저 게임 E2E". **청취는 못 함**(headless, 사람이 들어야 함). Windows·Node 24에서 이 실행기는 아직 안 돌림
+- **다음 작업 후보**: Windows에서 `node scripts/test-game-e2e.cjs`(Node 24) → 사용자 청취 평가(빠른 액션 잘림·공개음 겹침, **현재 정책 유지 결정**, 청취 후 수정 여부 결정) → #4 끊긴 플레이어 정책 → #5 인증 캐시 → 초대 수정 Preview 확인.
 
 ## 3. 멀티플레이 안정화 — 확인된 결함과 원인 가설
 
@@ -71,6 +72,20 @@
 - 승인 대기:
 ```
 
+### 2026-11-22 20:30 KST · Claude Code(클라우드 세션) · 구현(로컬 4인 브라우저 E2E)
+- 브랜치/HEAD/dirty: `fix/multiplayer-stability` / `520fab7` → 이 기록과 함께 E2E 5개 파일 커밋 / 커밋 후 clean
+- 한 일: 테스트 전용 실행기·fixture·격리 테스트 추가. 인증은 실행기의 esbuild 번들 안에서만 `authClient`/`serverUrl` 모듈을 대체하고, 로컬 서버(`attachLobby`, 127.0.0.1, 메모리)는 실행마다 무작위 생성한 토큰 4개만 허용. 앱 소스·서버 소스·`accountAuthorizer`·Pages 빌드·게임 규칙·프로토콜 변경 없음
+- 테스트 전용 조정(앱 결함 아님, 근거): ① esbuild의 `.wav` dataurl MIME `audio/wave`를 Chrome이 재생 못 함(`code 4`) → 실행기에서 `audio/wav`로 인라인(실제 빌드는 wav 파일 URL). ② esbuild는 Metro처럼 `global`을 넘기지 않아 react-native-web `Animated` 정지 시 `global is not defined` → `global: globalThis` 정의(실제 Metro 번들은 모듈 래퍼로 전달). ③ `expo-modules-core` 타입 전용 재수출 파일을 빈 모듈로 처리
+- 테스트: 실행기 최종본 2회 통과(run4·run5, 각 7핸드·리셋 1회·재시작 포함). 첫 시도들에서 ①②로 실패 후 수정. 모바일 52/52(기존 50 + 격리 2, Node 22 사본), 서버 코드 변경 없음
+- 측정(같은 페이지 단조 시계, run4/run5): 사운드 ON 상태→공개 p50 10/11.3ms·max 89/54.5ms, →DOM 반영 p50 23/24ms·max 110/77ms, →첫 프레임 p50 30/35ms·max 114/80ms. OFF →공개 p50 11.8/10.7ms·max 72/57ms, →첫 프레임 p50 39/27ms·max 108/89ms. 공개음은 카드보다 p50 13ms 늦게 시작(max 56ms). 액션음 상태→재생 p50 16–19ms·max 110ms. 서버 액션→브로드캐스트 p50 2.8ms. 카드 애니메이션 완료는 공개 시작 +360ms(명목)
+- 잘림·겹침(측정만, 청취 아님): 실행기의 액션 간격 p50 125ms(사람보다 훨씬 빠름)에서 CHECK 269개가 다음 액션에 잘림(재생 p50 130ms / 원래 720ms), 올인 24개 중 20개가 이어진 콜에 잘림(p50 110ms / 967ms). 공개음 77개 중 64개가 아직 재생 중인 액션음과 겹침(겹친 시간 p50 138–160ms). 시뮬레이션에서 1초 간격이면 잘림 0
+- 콘솔: 오류는 `/favicon.ico` 404(실행기 페이지에 아이콘 없음)만, 경고는 react-native-web `useNativeDriver` 미지원 안내(웹 공통)만
+- 커밋 전 최종 확인: ① 운영 번들 — Pages 빌드는 `expo export --platform web`, 진입점 `apps/mobile/index.ts`. 같은 진입점의 모듈 그래프(esbuild metafile, 웹 해석·별칭 동일, fixture 없음) 495개 파일 중 `test/`·`scripts/` 파일 0개, E2E 식별자(`__friendsTableE2E`·토큰 테이블) 0건, 실제 `authClient.ts` 포함. Metro 그래프를 직접 뽑은 것은 아님(같은 import 기준 근사). `e2e-isolation.test.cjs`가 앱 소스·`App.tsx`·`index.ts`·`app.config.ts`·`build-pages.cjs`·서버 소스의 참조를 상시 검사. ② 외부 연결 — 실행기에 요청 호스트 기록 추가: 최종 실행(run6, 7핸드 통과)에서 4개 브라우저의 HTTP·WebSocket 목적지는 `127.0.0.1:<포트>` 하나뿐. 실행한 번들에 `supabase`·`createClient`·`railway`·`pages.dev`·`wss://`·`accountAuthorizer` 0건(`https://`는 라이브러리 오류 문서 링크만). 로컬 외 요청이나 원격 URL이 생기면 실행기가 실패 처리
+- run6(최종 실행기): 사운드 ON 상태→공개 p50 10ms·max 64ms, OFF p50 15ms·max 69ms, 늦게 시작한 액션음 0/173, 모바일 52/52
+- 미실행·미검증: 실제 청취, Windows·Node 24에서 실행기, 실기기(모바일 Safari/Android Chrome), 백그라운드 탭, 실제 네트워크 지연, Metro로 만든 실제 Pages 번들의 재검사(이 환경에서 Expo export 불가)
+- 검수 요청: 실행기가 운영 코드 경로를 바꾸지 않는지, 격리 테스트 범위가 충분한지
+- 승인 대기: 사용자 청취 평가 후 잘림·겹침 정책 변경 여부(현재 정책 유지), push·배포
+
 ### 2026-11-22 19:10 KST · Claude Code(클라우드 세션) · 구현(커밋·검증 환경 조사)
 - 브랜치/HEAD/dirty: `fix/multiplayer-stability` / `21c7297` + 본 문서 커밋 / clean
 - 한 일: 카드·효과음 분리 12개 파일만 검토 후 커밋 `21c7297`(push 없음). Node 24 확보 시도, 브라우저 E2E 환경 조사, 본 문서 갱신
@@ -87,11 +102,3 @@
 - 미실행·미검증: 실제 브라우저 E2E·실기기(웹 클라이언트가 Supabase 익명 로그인 필요, 운영 계정 생성 금지), Node 24 환경 테스트, 화면 반영 시간, 웹 오디오 언락·seek 지연, 실제 청취 품질(잘림·겹침)
 - 검수 요청: 결과음 400ms 양보·500ms 생략 값이 적절한지, 올인음이 빠른 콜에 잘리는 것을 허용할지, `holePending`이 항상 false가 된 것(필드 유지)
 - 승인 대기: 커밋, 브라우저/실기기 검증 환경(로컬 Supabase 또는 테스트 인증), #4·#5 후속
-
-### 2026-11-22 · Claude Code(클라우드 세션) · 구현(초대 링크 404)
-- 브랜치/HEAD/dirty: `fix/multiplayer-stability` / `df6fea3` 다음 커밋 / 커밋 후 clean
-- 한 일: `_redirects` 대상 `/`, `build-pages.cjs` 검사 강화, `pages.test.cjs` 회귀 테스트, `web-phase6-deployment-readiness.md`·본 문서 갱신. 앞서 `27a9148`(지연 관측), `df6fea3`(관측 정확도·HMAC) 커밋
-- 테스트: tsc 3개 패키지 통과, 서버 `node --test` 204/204, 모바일 50/50, `node scripts/build-pages.cjs`(더미 공개 설정, 배포 없음) 성공·22개 파일 검사 통과. 로컬 HTTP 서버(규칙 단순 적용)로 `/`·`/join/AB3D5FGH`(새로고침 포함)·소문자·형식만 맞는 코드 → index.html 200, 없는 `/nope.js` → 404.html 404, 번들에 `/join/` 파서 포함
-- 미검증: Cloudflare Pages 실제 동작(로컬 HTTP는 Cloudflare 동작의 증명이 아님), 브라우저에서 로그인·닉네임 후 입장 흐름 E2E(코드 검토만: 초대 코드는 메모리에 보관되어 익명 로그인·닉네임 설정 후 입장, 같은 방은 복귀, 다른 방은 퇴장 확인, 잘못된 코드는 앱 내 Alert), 존재하지 않는 방 코드의 서버 오류 표시
-- 검수 요청: `checkPages` 정규식이 의도한 형식만 통과시키는지, 쿼리·해시가 붙은 초대 URL 거부(B-10) 유지가 맞는지
-- 승인 대기: Preview 배포로 초대 링크 확인, GitHub 백업 push

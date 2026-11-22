@@ -48,6 +48,14 @@ node scripts/test-input-browser.cjs
 
 [실행기](../scripts/test-input-browser.cjs)는 실제 화면을 번들링하고 로컬 WS/친구 스텁을 사용한다. 영문/숫자/Enter/Backspace, CDP IME, revision 갱신, 가로/세로 viewport를 확인한다. 운영 로그인 E2E나 실제 키보드는 검증하지 않는다. fixture/실행기는 P1 작업의 미커밋 파일이다.
 
+## 로컬 4인 브라우저 게임 E2E (카드 공개·효과음)
+
+```powershell
+node scripts/test-game-e2e.cjs
+```
+
+[실행기](../scripts/test-game-e2e.cjs)는 실제 웹 게임 경로(`useRoom`·`RoomClient`·`useGameAudio`·`GameScreen`, [fixture](../apps/mobile/test/browser/game-e2e-fixture.jsx))를 esbuild로 번들링하고, 127.0.0.1의 로컬 게임 서버(`attachLobby`, 메모리 로비)와 실제 Chrome 4개를 실행한다. 인증은 이 번들 안에서만 `authClient`를 대체하고, 서버는 실행마다 새로 만든 테스트 토큰 4개만 받는다. 운영 Supabase·Railway·Cloudflare에 연결하지 않으며 배포 환경 변수(`NODE_ENV=production`, `RAILWAY_ENVIRONMENT`, `CF_PAGES`)가 있으면 실행을 거부한다. 앱 빌드·서버가 이 파일들을 참조하지 않는지는 `apps/mobile/test/e2e-isolation.test.cjs`가 검사한다. 7핸드(빠른 체크/콜·레이즈·올인 런아웃+리버 스퀴즈·사운드 ON/OFF·칩 초기화 후 재시작)를 진행하고 `.qa-web/game-e2e/report.json`에 카드 값 없는 타이밍만 기록한다. 기본 경로는 `.qa-web/node_modules`의 esbuild·Playwright와 설치된 Chrome이며 `ESBUILD_PATH`·`PLAYWRIGHT_PATH`·`CHROME_PATH`로 바꿀 수 있다. headless에서는 소리를 듣지 않으므로 청취 품질은 별도 확인이 필요하다.
+
 ## 수동·통합 점검
 
 [실기기 목록](web-device-checklist.md)과 [P1 목록](p1-input-layout-report.md)을 재사용한다.
