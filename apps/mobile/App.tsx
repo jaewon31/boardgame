@@ -5,7 +5,7 @@ import { useAccount } from './src/hooks/useAccount';
 import { AccountScreen } from './src/screens/AccountScreen';
 import { useGameAudio } from './src/hooks/useGameAudio';
 import { useEffect, useState } from 'react';
-import { BackHandler, Linking, Platform } from 'react-native';
+import { BackHandler, Linking, Platform, View } from 'react-native';
 import { Alert, WebDialogs } from './src/services/platformUI';
 import { inviteCode } from './src/services/invite';
 import { consumeInvite } from './src/services/consumeInvite';
@@ -15,6 +15,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useRoom } from './src/hooks/useRoom';
 import HomeScreen from './src/screens/HomeScreen';
 import { LobbyScreen } from './src/screens/LobbyScreen';
+import { SeatPanel, showGameSeatPanel } from './src/components/SeatPanel';
+import { RebuyButton, RebuyPanel } from './src/components/RebuyPanel';
 
 function Screens() {
   const account = useAccount();
@@ -63,11 +65,20 @@ function Screens() {
     else {setInvite({code});setRoomOpen(true);room.enter({type:'join',code,nickname:account.profile.display_name});}
   },[incoming,room.status,room.room?.code,room.checked,account.loading,account.profile,setup,account.sessionBlocked]);
   useEffect(()=>{if(afterLeave&&!room.room&&room.status==='idle'&&room.checked){setIncoming(afterLeave);setAfterLeave(null);}},[afterLeave,room.room,room.status,room.checked]);
+  const seatActions = { onRequest: (seat: number) => room.requestSeat(seat), onCancel: () => room.cancelSeatRequest(), onResolve: (id: string, approve: boolean) => room.resolveSeatRequest(id, approve), onStandUp: () => room.standUp() };
+  const rebuyActions = { onRequest: (amount: number) => room.requestRebuy(amount), onCancel: () => room.cancelRebuyRequest(), onResolve: (id: string, approve: boolean) => room.resolveRebuyRequest(id, approve) };
+  // In a game: seats for spectators, the stand-up control for seated players, approvals for the host.
+  const gameSeatPanel = room.room && showGameSeatPanel(room.room, room.playerId)
+    ? <View style={{ gap: 6 }}>
+      <SeatPanel compact room={room.room} playerId={room.playerId} connected={room.status === 'connected'} {...seatActions}
+        accessory={<RebuyButton room={room.room} playerId={room.playerId} connected={room.status === 'connected'} onRequest={rebuyActions.onRequest} />} />
+      <RebuyPanel compact room={room.room} playerId={room.playerId} connected={room.status === 'connected'} onCancel={rebuyActions.onCancel} onResolve={rebuyActions.onResolve} />
+    </View> : null;
   if(showAccountEntry({hasRoom:!!room.room && roomOpen,configured:account.configured,loading:account.loading,user:!!account.user,profile:!!account.profile,setup,blocked:account.sessionBlocked,opened:accountOpen})) return <><StatusBar style="light"/><AccountScreen account={account} setup={setup} onClose={()=>{account.clearMessage();setAccountOpen(false);}} /></>;
   if(friendsOpen && account.profile && (!room.room || !roomOpen)) return <><StatusBar style="light"/><FriendsScreen profile={account.profile} onClose={()=>setFriendsOpen(false)}/></>;
   return <>
     <StatusBar style="light" />
-    {roomOpen && room.room?.holdem ? <GameScreen audio={audio} room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={leaveRoom} onReset={room.resetChips} onAct={room.act} onReveal={room.revealCards} onRevealRiver={room.revealRiver} /> : roomOpen && room.room ? <LobbyScreen key={`${account.user?.id}:${room.room.code}`} onRetry={room.refresh} onHome={()=>setRoomOpen(false)} room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={leaveRoom} onStart={room.startHand} onSettings={room.updateSettings} />
+    {roomOpen && room.room?.holdem ? <GameScreen audio={audio} room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={leaveRoom} onReset={room.resetChips} onAct={room.act} onReveal={room.revealCards} onRevealRiver={room.revealRiver} seatPanel={gameSeatPanel} /> : roomOpen && room.room ? <LobbyScreen key={`${account.user?.id}:${room.room.code}`} onRetry={room.refresh} onHome={()=>setRoomOpen(false)} room={room.room} playerId={room.playerId} connected={room.status === 'connected'} error={room.error} onLeave={leaveRoom} onStart={room.startHand} onSettings={room.updateSettings} onRequestSeat={seatActions.onRequest} onCancelSeat={seatActions.onCancel} onResolveSeat={seatActions.onResolve} onStandUp={seatActions.onStandUp} onRequestRebuy={rebuyActions.onRequest} onCancelRebuy={rebuyActions.onCancel} onResolveRebuy={rebuyActions.onResolve} />
       : <HomeScreen phase={room.phase} notice={room.notice} onDismissNotice={room.clearNotice} activeRoom={room.room} playerId={room.playerId} connected={room.status === 'connected'} onReturn={returnToRoom} onLeave={leaveRoom} onRetry={room.refresh} onFriends={()=>setFriendsOpen(true)} accountName={account.profile?.display_name} onAccount={()=>setAccountOpen(true)} invite={invite} onCancel={room.cancel} onEnter={request=>{if(!account.user||!account.profile||setup||account.sessionBlocked){setAccountOpen(true);return;}setRoomOpen(true);room.enter(request);}} busy={room.status === 'connecting' || room.status === 'reconnecting'} error={room.error} />}
   </>;
 }

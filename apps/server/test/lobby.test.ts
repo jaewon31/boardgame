@@ -135,7 +135,8 @@ test('server deadline ends an unattended hand and permits a new game', async t =
 
 async function setup(t: TestContext, options: Parameters<typeof attachLobby>[1] = {}) {
   const server = createAppServer();
-  const lobby = attachLobby(server, { runoutMs: 5, riverSqueezeMs: 10, ...options });
+  // autoSeat: these regression tests cover game flow; seat approval has its own tests (seats.test.ts).
+  const lobby = attachLobby(server, { runoutMs: 5, riverSqueezeMs: 10, autoSeat: true, ...options });
   const peers: Peer[] = [];
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -172,7 +173,7 @@ test('two friends join the same private room; leave transfers host and never lea
   assert.equal(state.room.hostId, created.playerId);
   assert.equal(JSON.stringify(state).includes(created.token), false);
   assert.equal(JSON.stringify(joined).includes(created.token), false);
-  assert.deepEqual(Object.keys(joined.room.players[0]).sort(), ['connected', 'id', 'nickname']);
+  assert.deepEqual(Object.keys(joined.room.players[0]).sort(), ['connected', 'id', 'nickname', 'pendingChips', 'seat', 'seatHeldUntil', 'stack', 'standingUp']);
   a.send({ type: 'leave' });
   const remaining = await b.next('room', m => m.type === 'room' && m.room.players.length === 1);
   if (remaining.type === 'room') assert.equal(remaining.room.hostId, joined.playerId);
@@ -660,14 +661,18 @@ test('stale settings draft and versionless older client cannot overwrite latest 
  const same=await restored.next('joined') as Joined;assert.deepEqual(same.room.settings,settings);assert.equal(same.room.settingsRevision,1);
 });
 
-test('in-game disconnect preserves the seat until grace expiry then applies existing departure rules',async t=>{
+test('in-game disconnect preserves the seat until grace expiry; a confirmed disconnect on turn is checked or folded after 2 s',async t=>{
  const app=await setup(t,{seatRetentionMs:100,turnMs:10000});const a=await app.connect(),b=await app.connect();const first=await a.create();
  b.send({type:'join',nickname:'B',code:first.room.code});await b.next('joined');
  a.send({type:'startHand',previousHandId:null,expectedSettingsRevision:0});
  const started=await b.next('room',m=>m.type==='room'&&!!m.room.holdem) as RoomMessage;
  a.socket.terminate();
  const offline=await b.next('room',m=>m.type==='room'&&m.room.players.some(p=>p.id===first.playerId&&!p.connected)) as RoomMessage;
+ // FT-BUG-004 policy (2026-11-24, 2 s grace): A is the actor (SB facing the BB). Nothing happens for 2 s, then A is folded.
  assert.equal(offline.room.players.length,2);assert.equal(offline.room.holdem?.id,started.room.holdem?.id);assert.equal(offline.room.holdem?.revision,started.room.holdem?.revision);
+ await new Promise(resolve=>setTimeout(resolve,1700));
+ const folded=await b.next('room',m=>m.type==='room'&&m.room.holdem?.street==='complete') as RoomMessage;
+ assert.equal(folded.room.holdem?.players.find(p=>p.id===first.playerId)?.folded,true);
  const departed=await b.next('room',m=>m.type==='room'&&m.room.players.length===1) as RoomMessage;
  assert.equal(departed.room.holdem?.street,'complete');assert.notEqual(departed.room.hostId,first.playerId);
 });

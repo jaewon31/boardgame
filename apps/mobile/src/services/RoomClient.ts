@@ -1,6 +1,13 @@
 import { safeCloseReason, logRecord, validConnectionId, transportFailure } from '@boardgame/shared';
 import { gameTiming } from './gameTiming.ts';
 import type { RoomSettings, ClientMessage, PokerAction, EntryRequest, LobbyRoom, ServerMessage } from '@boardgame/shared';
+/** UUID v4 for idempotent requests (crypto.randomUUID when available, e.g. web; Math.random fallback otherwise). */
+function requestUuid(): string {
+  const native = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto?.randomUUID?.();
+  if (native) return native;
+  const hex = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+  return `${hex(8)}-${hex(4)}-4${hex(3)}-${(8 + Math.floor(Math.random() * 4)).toString(16)}${hex(3)}-${hex(12)}`;
+}
 
 export interface RoomState {
   checked?: boolean;
@@ -206,6 +213,17 @@ export class RoomClient {
   revealRiver(handId: string) { this.gameCommand({ type: 'revealRiver', handId }); }
   revealCards(handId: string) { this.gameCommand({ type: 'revealCards', handId }); }
   resetChips() { const hand = this.state.room?.holdem; if (hand) this.gameCommand({ type: 'resetChips', handId: hand.id }); }
+  // Seat selection: the server assigns seats; these only send the request/decision.
+  requestSeat(seat: number) { this.gameCommand({ type: 'requestSeat', seat }); }
+  cancelSeatRequest() { this.gameCommand({ type: 'cancelSeatRequest' }); }
+  resolveSeatRequest(requestId: string, approve: boolean) { this.gameCommand({ type: 'resolveSeatRequest', requestId, approve }); }
+  /** Stand up (spectate). The server releases the seat after the current hand and keeps the chips. */
+  standUp() { this.gameCommand({ type: 'standUp' }); }
+  // Rebuy: the amount is only a request; the server grants chips after the host's approval.
+  /** One id per tap: if the same message is delivered twice the server grants or queues it once. */
+  requestRebuy(amount: number) { this.gameCommand({ type: 'requestRebuy', amount, clientRequestId: requestUuid() }); }
+  cancelRebuyRequest() { this.gameCommand({ type: 'cancelRebuyRequest' }); }
+  resolveRebuyRequest(requestId: string, approve: boolean) { this.gameCommand({ type: 'resolveRebuyRequest', requestId, approve }); }
   act(action: PokerAction, amount?: number) {
     const hand = this.state.room?.holdem;
     if (hand) this.gameCommand({ type: 'act', handId: hand.id, revision: hand.revision, action, amount });

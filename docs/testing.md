@@ -56,6 +56,49 @@ node scripts/test-game-e2e.cjs
 
 [실행기](../scripts/test-game-e2e.cjs)는 실제 웹 게임 경로(`useRoom`·`RoomClient`·`useGameAudio`·`GameScreen`, [fixture](../apps/mobile/test/browser/game-e2e-fixture.jsx))를 esbuild로 번들링하고, 127.0.0.1의 로컬 게임 서버(`attachLobby`, 메모리 로비)와 실제 Chrome 4개를 실행한다. 인증은 이 번들 안에서만 `authClient`를 대체하고, 서버는 실행마다 새로 만든 테스트 토큰 4개만 받는다. 운영 Supabase·Railway·Cloudflare에 연결하지 않으며 배포 환경 변수(`NODE_ENV=production`, `RAILWAY_ENVIRONMENT`, `CF_PAGES`)가 있으면 실행을 거부한다. 앱 빌드·서버가 이 파일들을 참조하지 않는지는 `apps/mobile/test/e2e-isolation.test.cjs`가 검사한다. 7핸드(빠른 체크/콜·레이즈·올인 런아웃+리버 스퀴즈·사운드 ON/OFF·칩 초기화 후 재시작)를 진행하고 `.qa-web/game-e2e/report.json`에 카드 값 없는 타이밍만 기록한다. 기본 경로는 `.qa-web/node_modules`의 esbuild·Playwright와 설치된 Chrome이며 `ESBUILD_PATH`·`PLAYWRIGHT_PATH`·`CHROME_PATH`로 바꿀 수 있다. headless에서는 소리를 듣지 않으므로 청취 품질은 별도 확인이 필요하다.
 
+4명은 시작 전에 실제 좌석 UI로 착석한다(방장 1번 직접 선택, 나머지는 요청 후 방장 승인).
+
+## 좌석·재접속·리바이 서버 테스트
+
+`apps/server/test/seats.test.ts`(좌석 선택·승인), `seat-hold.test.ts`(3분 보존·칩 잔액), `reconnect-turn.test.ts`(다른 기기 인계·늦은 메시지 차단·끊긴 차례 즉시 처리·`RECONNECT_MS` 하한), `rebuy.test.ts`(리바이 C안·다음 핸드 참여), `grace-limit.test.ts`(연결 끊김 2초 유예·재접속 경쟁·재시작, 방 설정 리바이 최대 수량, 방장 본인 리바이, 요청 ID 중복 방지), `seat-events.test.ts`(좌석 진단 로그 6종·민감 정보 배제·상한·칩 총합 감사). 공용 하네스 `test/support/seat-harness.ts`는 `test/*.test.ts` 패턴에 포함되지 않는다. 서버 전체 명령(`node --test test/*.test.ts`)에 함께 실행된다.
+
+### 배포 전 점검 결과 (2026-11-25 14:30 KST, `feature/seat-management` 미커밋)
+
+| 실행 | 환경 | 결과 |
+| --- | --- | --- |
+| 서버 `node --test test/*.test.ts` | VM Node 22 / 클라우드 Node 24 | 277/277 / 277/277 (진단 로그·칩 감사 +6) |
+| 모바일 `node --test test/*.test.cjs` | 클라우드 Node 24 | 72/72 |
+| `tsc --noEmit` | VM(저장소 node_modules) | shared·server·mobile 오류 0. 클라우드 mobile은 의존성 묶음에 타입 선언 2종이 없어 TS7016만 발생(환경 문제) |
+| 좌석 E2E / 4인 E2E | 클라우드 Chrome 153, 최종 코드 | 29/29 / 통과(16/16) |
+| Windows `.qa-web/seat-check/run-windows-checks-ft007.cmd`(1차, 진단 로그 추가 전 코드) | Windows Node v24.19.0, npm 12.2.1, Chrome 157 | 타입 검사 0, 서버 271/271(종료 0), 모바일 72/72(0), 좌석 E2E 29/29(0), **4인 E2E 종료 1**: 5/7핸드 후 "plan incomplete". 실행 중 PC 절전(연결 끊김 00:10, 종료 07:50)으로 8분 벽시계 기한 초과로 판단, 진행된 핸드의 결과 순서 12/12·콘솔/페이지 오류 0. 결과 원문 `windows-results-ft007-run1.txt` |
+| Windows 최종 코드 재실행 | — | 미실시(PC 잠금 상태). **미검증** |
+| SQLite 호환성 | 테스트 DB 사본, 이전 서버 `290cb8a`·`595cd676` | [좌석 관리](seat-management.md) 12.4절: 이전→새 정상, 새→이전 동작하나 새 상태 손실, 새→이전→새 정상 |
+
+실사용 테스트 항목: [좌석 실사용 테스트 체크리스트](seat-playtest-checklist.md).
+
+### 좌석·재접속·리바이 검증 결과 (2026-11-25 00:30 KST, `feature/seat-management` 미커밋)
+
+| 실행 | 환경 | 결과 |
+| --- | --- | --- |
+| 서버 `node --test test/*.test.ts` | 사용자 PC VM 사본, Node 22.23.5 | 271/271 |
+| 서버 같은 명령 | 클라우드 Linux, Node 24.22.3 | 271/271 × 3회 연속 |
+| 모바일 `node --test test/*.test.cjs` | VM Node 22 / 클라우드 Node 24 | 72/72 / 72/72 |
+| `tsc --noEmit` shared·server·mobile | VM Node 22 + 저장소 node_modules | 오류 0 |
+| `node scripts/test-seat-e2e.cjs` | 클라우드, Chrome headless ×4(+다른 기기 1), 로컬 127.0.0.1 | 29/29, 스크린샷 19장 |
+| `node scripts/test-game-e2e.cjs` (기존 4인 회귀) | 같은 환경 | 통과, 결과 순서 16/16 |
+
+신규·변경 서버 테스트 범위: 2초 이내 재접속(같은 기기·다른 기기) 시 자동 행동 취소, 기본 2초 후 폴드(1950~3000 ms), 체크 가능 시 체크, 유예 중 차례 도달 시 남은 유예만 대기, 오래 끊긴 플레이어는 즉시, 닫힘·재접속 경쟁(새 소켓 먼저/동시/중복 종료), 실행된 폴드 미복구, 재시작 중 유예(복구 구간 동안 미처리·이후 처리·복구 구간 내 복귀 정상 조작), 리바이 한도 초과 거부, 설정 검증·저장·재시작 복원, 한도만 변경 시 칩 유지·그 외 변경 시 기존 초기화, 구 클라이언트 설정 저장 시 한도 유지, 한도 하향 시 대기 요청 재검증, 한도 변경 후 떠난 계정 잔액 복구, 방장 즉시 리바이·핸드 중 보류·한도 적용·타인 목록 미표시, 같은 요청 ID 재전송·재접속 후 재전송 1회 지급.
+
+미검증: Windows Node 24, 실기기·모바일 브라우저·네이티브(키보드와 입력창 겹침 포함), Preview/테스트 서버 배포, 실제 3분 대기, 30초 복구 구간 실제 길이(테스트는 `recoveryMs` 단축), 방 설정 5단계 편집기의 브라우저 조작(단위 테스트만), 빈 좌석을 건너뛰는 딜러 순환 전용 테스트. 추적: `FT-TEST-012`.
+
+## 로컬 좌석 선택·방장 승인 브라우저 E2E
+
+```powershell
+node scripts/test-seat-e2e.cjs
+```
+
+[실행기](../scripts/test-seat-e2e.cjs)는 위와 같은 fixture·격리(127.0.0.1, 테스트 토큰, 운영 접속 차단)로 Chrome 4개를 띄워 운영 경로(`autoSeat` 없음)의 방장 직접 착석, 요청·거절, 같은 좌석 동시 요청, 새로고침 복원, 게임 중 승인 후 다음 핸드 참여, 그리고 끊김 중 좌석 보존·유예 내 재접속 복구·"자리에서 일어나기" 버튼·핸드 후 해제·관전자 재착석 승인(FT-FEAT-003·004), 칩 추가 요청 입력·방장 승인/거절·게임 중 승인 보류·칩 총합, 같은 계정 다른 기기 복구·이전 세션 종료, 차례 중 연결 끊김 2초 유예 후 처리, 방장 본인 칩 추가(FT-FEAT-005·006, FT-BUG-004)를 확인하고 `.qa-web/seat-e2e/`에 결과(`report.json`)와 휴대폰 크기 스크린샷을 남긴다. 설계·정책은 [좌석 관리](seat-management.md).
+
 ## 수동·통합 점검
 
 [실기기 목록](web-device-checklist.md)과 [P1 목록](p1-input-layout-report.md)을 재사용한다.

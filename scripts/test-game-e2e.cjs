@@ -165,6 +165,16 @@ function summarize(report) {
       await page.evaluate(([c, n]) => window.e2e.enter({ type: 'join', code: c, nickname: n }), [code, 'E2E_' + USERS[i]]);
       await page.waitForFunction(() => window.e2e.room.status === 'connected' && !!window.e2e.room.room);
     }
+    // Seats through the real UI: the host picks seat 1 directly; each guest requests seat i+1 and the host approves.
+    const mySeat = page => page.evaluate(() => window.e2e.room.room?.players.find(p => p.id === window.e2e.room.playerId)?.seat ?? null);
+    await pages[0].getByRole('button', { name: /^1번 자리 빈자리/ }).click();
+    await pages[0].waitForFunction(() => window.e2e.room.room?.players.find(p => p.id === window.e2e.room.playerId)?.seat === 0);
+    for (const [i, page] of pages.entries()) if (i) {
+      await page.getByRole('button', { name: new RegExp(`^${i + 1}번 자리 빈자리`) }).click();
+      await pages[0].getByRole('button', { name: '승인', exact: true }).click();
+      await page.waitForFunction(s => window.e2e.room.room?.players.find(p => p.id === window.e2e.room.playerId)?.seat === s, i);
+      if (await mySeat(page) !== i) throw new Error('seat approval failed for ' + USERS[i]);
+    }
     await pages[0].getByRole('button', { name: '홀덤 시작' }).click();
     const deadline = Date.now() + 8 * 60_000, acted = new Set(), squeezed = new Set();
     const completeSince = {};

@@ -1,18 +1,20 @@
 import { useRef, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { validRoomSettings, type RoomSettings } from '@boardgame/shared';
+import { rebuyLimit, validRoomSettings, type RoomSettings } from '@boardgame/shared';
 import { ActionButton } from './ActionButton';
 const fields = [
   { key: 'startingChips', title: '시작 칩', note: '100~100,000 · 빅 블라인드의 10배 이상', presets: [1000, 5000, 10000] },
   { key: 'smallBlind', title: '스몰 블라인드', note: '1 이상 · 빅 블라인드보다 작게', presets: [10, 25, 50] },
   { key: 'bigBlind', title: '빅 블라인드', note: '스몰 블라인드보다 크게 · 최대 10,000', presets: [20, 50, 100] },
   { key: 'turnSeconds', title: '차례당 제한 시간', note: '10~120초 · 리버 째기 시간은 별도', presets: [15, 30, 60] },
+  { key: 'maxRebuy', title: '리바이 1회 최대', note: '칩 추가 요청 1회 한도 · 방장 포함 · 1 이상', presets: [1000, 5000, 10000] },
 ] as const;
-export function settingsLabel(s: RoomSettings) { return s.startingChips.toLocaleString() + '칩 · ' + s.smallBlind + '/' + s.bigBlind + ' · ' + s.turnSeconds + '초'; }
+export function settingsLabel(s: RoomSettings) { return s.startingChips.toLocaleString() + '칩 · ' + s.smallBlind + '/' + s.bigBlind + ' · ' + s.turnSeconds + '초 · 리바이 최대 ' + rebuyLimit(s).toLocaleString(); }
 export function RoomSettingsEditor({ initial, onSave, onClose }: { initial: RoomSettings; onSave: (settings: RoomSettings) => void | Promise<void>; onClose: () => void }) {
   const insets = useSafeAreaInsets();
-  const [values, setValues] = useState(() => Object.fromEntries(Object.entries(initial).map(([k,v]) => [k, String(v)])));
+  // maxRebuy may be absent (older rooms): show the effective limit (starting chips) as the value.
+  const [values, setValues] = useState(() => Object.fromEntries(Object.entries({ ...initial, maxRebuy: rebuyLimit(initial) }).map(([k,v]) => [k, String(v)])));
   const savingRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(0);
@@ -30,12 +32,12 @@ export function RoomSettingsEditor({ initial, onSave, onClose }: { initial: Room
   return <Modal visible transparent animationType="fade" onRequestClose={()=>{if(!savingRef.current)onClose();}}>
     <KeyboardAvoidingView enabled={Platform.OS !== 'web'} testID="web-modal-overlay" behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.overlay, { paddingTop:insets.top + 8, paddingBottom:insets.bottom + 8 }]}>
       <View testID="web-modal-panel" style={styles.panel}>
-        <View style={styles.row}><Text style={styles.heading}>방 설정 · {step + 1}/4</Text><Pressable accessibilityRole="button" disabled={saving} onPress={onClose} style={styles.close}><Text style={styles.text}>취소 ✕</Text></Pressable></View>
+        <View style={styles.row}><Text style={styles.heading}>방 설정 · {step + 1}/{fields.length}</Text><Pressable accessibilityRole="button" disabled={saving} onPress={onClose} style={styles.close}><Text style={styles.text}>취소 ✕</Text></Pressable></View>
         <Text style={styles.heading}>{field.title}</Text><Text style={styles.note}>{field.note}</Text>
-        <TextInput key={field.key} accessibilityLabel={field.title} editable={!saving} value={values[field.key]} onChangeText={v => { setValues(old => ({...old, [field.key]:Platform.OS === 'web' ? v : v.replace(/[^0-9]/g,'')})); setError(''); }} keyboardType="number-pad" maxLength={6} returnKeyType={step === 3 ? 'done' : 'next'} onSubmitEditing={() => { if (!savingRef.current) { if (step === 3) void save(); else { Keyboard.dismiss(); setStep(s=>s+1); } } }} style={styles.input} />
+        <TextInput key={field.key} accessibilityLabel={field.title} editable={!saving} value={values[field.key]} onChangeText={v => { setValues(old => ({...old, [field.key]:Platform.OS === 'web' ? v : v.replace(/[^0-9]/g,'')})); setError(''); }} keyboardType="number-pad" maxLength={field.key === 'maxRebuy' ? 10 : 6} returnKeyType={step === fields.length - 1 ? 'done' : 'next'} onSubmitEditing={() => { if (!savingRef.current) { if (step === fields.length - 1) void save(); else { Keyboard.dismiss(); setStep(s=>s+1); } } }} style={styles.input} />
         <View style={styles.row}>{field.presets.map(v => <Pressable accessibilityRole="button" key={v} disabled={saving} style={styles.preset} onPress={() => { setValues(old => ({...old,[field.key]:String(v)})); setError(''); }}><Text style={styles.text}>{v.toLocaleString()}</Text></Pressable>)}</View>
         {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-        <View style={styles.row}><View style={styles.grow}><ActionButton compact secondary title="이전" disabled={saving || step === 0} onPress={() => { Keyboard.dismiss(); setStep(s=>s-1); }} /></View><View style={styles.grow}><ActionButton compact busy={saving} title={step === 3 ? '설정 적용' : '다음'} onPress={() => { if(step === 3) save(); else { Keyboard.dismiss(); setStep(s=>s+1); } }} /></View></View>
+        <View style={styles.row}><View style={styles.grow}><ActionButton compact secondary title="이전" disabled={saving || step === 0} onPress={() => { Keyboard.dismiss(); setStep(s=>s-1); }} /></View><View style={styles.grow}><ActionButton compact busy={saving} title={step === fields.length - 1 ? '설정 적용' : '다음'} onPress={() => { if(step === fields.length - 1) save(); else { Keyboard.dismiss(); setStep(s=>s+1); } }} /></View></View>
       </View>
     </KeyboardAvoidingView>
   </Modal>;

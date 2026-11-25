@@ -7,6 +7,8 @@ import { copyText } from '../services/platformUI';
 import type { LobbyRoom } from '@boardgame/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton } from '../components/ActionButton';
+import { SeatPanel, seatsOf } from '../components/SeatPanel';
+import { RebuyButton, RebuyPanel } from '../components/RebuyPanel';
 import { useState } from 'react';
 
 interface Props {
@@ -19,10 +21,18 @@ interface Props {
   onLeave: () => void;
   onStart: () => void;
   onSettings: (settings: RoomSettings, revision?: number) => Promise<void>;
+  onRequestSeat: (seat: number) => void;
+  onCancelSeat: () => void;
+  onResolveSeat: (requestId: string, approve: boolean) => void;
+  onStandUp?: () => void;
+  onRequestRebuy?: (amount: number) => void;
+  onCancelRebuy?: () => void;
+  onResolveRebuy?: (requestId: string, approve: boolean) => void;
 }
-export function LobbyScreen({ room, playerId, connected, error, onHome, onRetry, onLeave, onStart, onSettings }: Props) {
+export function LobbyScreen({ room, playerId, connected, error, onHome, onRetry, onLeave, onStart, onSettings, onRequestSeat, onCancelSeat, onResolveSeat, onStandUp, onRequestRebuy, onCancelRebuy, onResolveRebuy }: Props) {
   const [editing, setEditing] = useState<{settings: RoomSettings; revision: number | undefined} | null>(null);
   const settings = room.settings ?? DEFAULT_SETTINGS;
+  const seated = seatsOf(room).flatMap(s => s.player ? [s.player] : []);
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const [shareError, setShareError] = useState<string | null>(null);
@@ -46,19 +56,15 @@ export function LobbyScreen({ room, playerId, connected, error, onHome, onRetry,
       </View>
       {!connected && <ActionButton compact secondary title="연결 재시도" onPress={onRetry} />}
       {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-      <View style={styles.header}><Text style={styles.section}>참가자</Text><Text style={styles.count}>{room.players.length} / {room.maxPlayers}</Text></View>
-      <View style={styles.grid}>{room.players.map((player, index) => (
-        <View key={player.id} style={styles.player}>
-          <View style={styles.avatar}><Text style={styles.avatarText}>{index + 1}</Text></View>
-          <View style={styles.playerInfo}><Text numberOfLines={1} style={styles.name}>{player.nickname}{player.id === playerId ? ' (나)' : ''}</Text><Text style={styles.playerStatus}>{player.connected ? '입장 완료' : '재접속 대기 중'}</Text></View>
-          {room.hostId === player.id && <Text style={styles.host}>방장</Text>}
-        </View>
-      ))}</View>
+      <View style={styles.header}><Text style={styles.section}>좌석</Text><Text style={styles.count}>착석 {seated.length} / {room.maxPlayers} · 참가 {room.players.length}</Text></View>
+      <SeatPanel room={room} playerId={playerId} connected={connected} onRequest={onRequestSeat} onCancel={onCancelSeat} onResolve={onResolveSeat} onStandUp={onStandUp}
+        accessory={onRequestRebuy ? <RebuyButton room={room} playerId={playerId} connected={connected} onRequest={onRequestRebuy} /> : undefined} />
+      {onCancelRebuy && onResolveRebuy && <RebuyPanel room={room} playerId={playerId} connected={connected} onCancel={onCancelRebuy} onResolve={onResolveRebuy} />}
       <View style={styles.note}><Text style={styles.noteText}>{room.game === 'holdem' ? settingsLabel(settings) + ' · 첫 판 이후 자동 진행' : '섯다 게임은 준비 중이에요.'}</Text></View>
       {room.hostId === playerId && <Pressable accessibilityRole="button" disabled={!connected} onPress={()=>setEditing({settings: {...settings}, revision: room.settingsRevision})} accessibilityLabel="방 설정 변경" style={[styles.settingsButton,!connected && {opacity:.45}]}><Text style={styles.settingsIcon}>⚙</Text><Text style={styles.settingsText}>방 설정 변경</Text></Pressable>}
       {editing && room.hostId === playerId && <RoomSettingsEditor initial={editing.settings} onClose={()=>setEditing(null)} onSave={value=>onSettings(value, editing.revision)} />}
       <ActionButton compact secondary title="홈으로 · 방 참여 유지" onPress={onHome} />
-      <View style={{ flexDirection: 'row', gap: 8 }}>{room.game === 'holdem' && room.hostId === playerId && <View style={{ flex: 1 }}><ActionButton compact title="홀덤 시작" onPress={onStart} disabled={!connected || room.players.filter(p => p.connected).length < 2} /></View>}
+      <View style={{ flexDirection: 'row', gap: 8 }}>{room.game === 'holdem' && room.hostId === playerId && <View style={{ flex: 1 }}><ActionButton compact title="홀덤 시작" onPress={onStart} disabled={!connected || seated.filter(p => p.connected).length < 2} /></View>}
       <View style={{ flex: 1 }}><ActionButton compact title="방 나가기" onPress={onLeave} disabled={!connected} secondary /></View></View>
     </View>
   );

@@ -5,7 +5,7 @@ import { bettingPresets, chipLabel } from '../services/betting';
 import { DEFAULT_SETTINGS } from '@boardgame/shared';
 import { RoomRecords } from '../components/RoomRecords';
 import { RiverSqueeze } from '../components/RiverSqueeze';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Alert } from '../services/platformUI';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,9 +19,11 @@ interface Props {
   onRevealRiver: (handId: string) => void;
   onLeave: () => void; onReset: () => void; onReveal: (handId: string) => void;
   onAct: (action: PokerAction, amount?: number) => void;
+  /** Seat selection / host approval strip (spectators and the host with pending requests). */
+  seatPanel?: ReactNode;
 }
 const streets = { preflop: '프리플롭', flop: '플롭', turn: '턴', river: '리버', complete: '결과' };
-export function GameScreen({ audio, room, playerId, connected, error, onLeave, onReset, onAct, onReveal, onRevealRiver }: Props) {
+export function GameScreen({ audio, room, playerId, connected, error, onLeave, onReset, onAct, onReveal, onRevealRiver, seatPanel }: Props) {
   const hand = room.holdem!;
   const insets = useSafeAreaInsets();
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -72,6 +74,7 @@ export function GameScreen({ audio, room, playerId, connected, error, onLeave, o
         <Text numberOfLines={1} style={styles.text}>{ended ? '칩이 남은 플레이어가 승리했어요.' : me?.stack === 0 ? '칩을 모두 잃었어요. 다음 판부터 관전합니다.' : hand.canReveal ? '내 패 공개는 선택 · 공개 버튼으로 친구에게 보여주세요.' : '칩이 남은 플레이어끼리 자동으로 계속해요.'}</Text>
         <View style={styles.row}>{ended && room.hostId === playerId && <View style={styles.grow}><ActionButton compact title="새 경기 준비" disabled={!connected} onPress={() => Alert.alert('새 경기를 준비할까요?', `모두 ${(room.settings ?? DEFAULT_SETTINGS).startingChips.toLocaleString()}칩으로 대기실에 돌아갑니다. 오늘 기록은 유지됩니다.`, [{ text: '취소', style: 'cancel' }, { text: '준비', onPress: onReset }])} /></View>}</View>
       </> : null}
+      {seatPanel}
     </View>
     {runout?.phase === 'squeezing' && runout.playerId === playerId && runout.card && <RiverSqueeze key={hand.id} card={runout.card} deadline={runout.deadline} connected={connected} onReveal={() => onRevealRiver(hand.id)} />}
     <Modal visible={panel !== null} transparent animationType="fade" onRequestClose={() => setPanel(null)}>

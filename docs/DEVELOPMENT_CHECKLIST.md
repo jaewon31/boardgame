@@ -102,7 +102,7 @@
 
 ### 2.4 미해결 버그·결정 대기
 
-- `FT-BUG-004` 끊긴 플레이어 차례 처리 정책 — 사용자 결정 대기
+- `FT-BUG-004` 끊긴 플레이어 차례 처리 — 2026-11-24 사용자 결정(연결 종료 확정 시 즉시 체크/폴드)으로 구현(IMPLEMENTED), 실플레이 대기
 - `FT-BUG-005` WebSocket 메시지마다 Supabase 인증 RPC 호출(측정 `authMs` p50 53.7 · p95 163.4 · max 330.2 ms)
 - `FT-BUG-007` 앱 화면 클릭 중 OS 클립보드 쓰기 경고 1회 관찰(원인 미확인)
 - `FT-BUG-001~003, 006` 구현 완료, 실기기 검증 대기
@@ -140,11 +140,12 @@
 | [ ] | FT-TEST-009 | 효과음 실제 청취 평가 | P1 | READY | 사용자 | FT-BUG-002 |
 | [ ] | FT-TEST-010 | 모바일 브라우저·PWA 검증 | P1 | READY | 사용자 | — |
 | [ ] | FT-BUG-003 | 초대 링크 `/join/*` 404 | P1 | IMPLEMENTED | — | — |
-| [ ] | FT-BUG-004 | 연결 끊긴 플레이어 차례 처리 | P1 | BLOCKED | 미지정 | 사용자 정책 결정 |
+| [ ] | FT-BUG-004 | 연결 끊긴 플레이어 차례 처리 | P1 | IMPLEMENTED | Claude Code | 정책 결정 완료(2026-11-24) |
 | [ ] | FT-BUG-005 | WS 메시지별 Supabase 인증 지연 | P1 | BACKLOG | 미지정 | 설계 결정 |
 | [ ] | FT-BUG-006 | 재접속 교체 경쟁(4001) | P0 | IMPLEMENTED | — | — |
 | [ ] | FT-BUG-007 | 앱 화면 클릭 중 OS 클립보드 쓰기 경고 | P2 | BACKLOG | 미지정 | 재현 |
 | [ ] | FT-TEST-011 | 친구 전적 비교 실제 JWT E2E | P2 | BACKLOG | 미지정 | FT-OPS-002 |
+| [ ] | FT-TEST-012 | 좌석·재접속·리바이(FT-FEAT-001~006, FT-BUG-004) 실기기·Preview 검증 | P1 | BACKLOG | 사용자 | 커밋·테스트 배포 별도 승인 |
 | [ ] | FT-OPS-001 | 테스트 환경 중지·재시작 데이터 보존 검증 | P2 | BACKLOG | 미지정 | — |
 | [ ] | FT-OPS-002 | 007 마이그레이션 정식 등록·draft 경로 정리 | P2 | BLOCKED | 미지정 | 사용자 승인 |
 | [ ] | FT-OPS-003 | GitHub 원격 백업 push | P2 | BLOCKED | 사용자 | 사용자 결정(보류) |
@@ -189,6 +190,13 @@
 | [ ] | FT-SOCIAL-011 | 핸드 리플레이(향후 검토) | P3 | BACKLOG | 미지정 | 확인 필요 |
 | [ ] | FT-SOCIAL-012 | 승리 핸드 공유(향후 검토) | P3 | BACKLOG | 미지정 | 확인 필요 |
 | [ ] | FT-SOCIAL-013 | 친구 간 비금전적 칩 던지기 연출(향후 검토) | P3 | BACKLOG | 미지정 | 확인 필요 |
+| [ ] | FT-BUG-008 | game-timing 비교 테스트 간헐 실패(두 판이 다른 무작위 덱) | P2 | IMPLEMENTED | Claude Code | — |
+| [ ] | FT-FEAT-001 | 6개 고정 좌석 표시·빈자리 직접 선택(방장 포함) | P1 | IMPLEMENTED | Claude Code | — |
+| [ ] | FT-FEAT-002 | 신규 착석·재착석 방장 승인/거절(방장 본인은 즉시 착석) | P1 | IMPLEMENTED | Claude Code | FT-FEAT-001 |
+| [ ] | FT-FEAT-003 | 연결 끊김 시 3분간 좌석·칩 보존 | P1 | IMPLEMENTED | Claude Code | FT-FEAT-002 (끊긴 차례 처리는 FT-BUG-004 그대로) |
+| [ ] | FT-FEAT-004 | 좌석 해제 후 칩 잔액 보존·자발적 일어서기 | P1 | IMPLEMENTED | Claude Code | FT-FEAT-002 |
+| [ ] | FT-FEAT-005 | 리바이 C안(희망 수량 요청 → 방장 승인, 기존 칩 + 승인 칩) | P1 | IMPLEMENTED | Claude Code | FT-FEAT-004 |
+| [ ] | FT-FEAT-006 | 게임 중 착석 시 다음 핸드부터 참여(자리 해제·재착석 포함) | P1 | IMPLEMENTED | Claude Code | FT-FEAT-004 |
 
 ---
 
@@ -278,11 +286,12 @@
 - 커밋: `86656e4`
 
 ### FT-BUG-004 · 연결 끊긴 플레이어 차례 처리
-- P1 · BLOCKED(사용자 정책 결정 필요) · 관련 `lobby.ts`(`syncGame`), `hand.ts`(`timeout`)
+- P1 · ~~BLOCKED~~ → IMPLEMENTED (2026-11-24 22:54 KST 사용자 결정) · 담당 Claude Code · 관련 `lobby.ts`(`autoActOffline`·`confirmedOffline`·`markOffline`), `hand.ts` 변경 없음
 - 현상: 끊긴 플레이어에게도 전체 턴 시간(기본 30초) 적용, 재접속 기한 동안 매 스트리트 대기(인계 3절 #4). 4인 E2E에서 8초 동안 차례 유지 확인
-- 확인 필요: 즉시 체크/폴드, 짧은 유예, 다음 핸드 sit-out 중 어떤 정책인가
+- 변경 이력 2026-11-24 23:25 KST: "즉시" → **2초 유예 후** 체크/폴드로 변경(아래 결정 문장은 당시 기록). 유예 중 같은 계정(다른 기기 포함) 재접속 시 예약 취소, 실행된 행동은 되돌리지 않음, 재시작 시 유예 타이머 미승계(30초 복구 구간이 대신함). 서버 `offlineGraceMs` 기본 2000. 검증: `grace-limit.test.ts` 8건, 브라우저 E2E에서 탭 이탈 후 2058 ms에 자동 처리
+- 결정: 서버가 연결 종료를 확정한 플레이어(소켓 close·heartbeat 종료)의 차례는 즉시 체크 가능하면 체크, 아니면 폴드. 단순 응답 지연(소켓 유지)은 처리하지 않음. 재시작 직후 복구 30초 동안은 처리하지 않고 이후 미복귀자부터 적용. [결정 기록](decisions.md)
 - 완료 조건: 결정 기록 → 서버 테스트로 고정 → 실플레이 확인
-- 검증 결과: 미착수
+- 검증 결과: 서버 테스트 `reconnect-turn.test.ts`(즉시 폴드·체크·차례 아닐 때 미처리·연결 유지 시 미처리·재접속 후 정상 조작·사이드팟 정산·재시작 복구 구간) 통과, 브라우저 E2E에서 차례 중 탭 이탈 시 83 ms 만에 자동 처리. 실플레이 미검증. 상세는 FT-FEAT-005 블록 검증 결과
 
 ### FT-BUG-005 · WebSocket 메시지별 Supabase 인증 지연
 - P1 · BACKLOG(설계 결정 필요) · 관련 `apps/server/src/accountSession.ts`, `lobby.ts`(`handle`)
@@ -453,8 +462,108 @@
 
 ---
 
+## 7A. 좌석 관리 (사용자 지정 작업, 2026-11-24)
+
+**구현 상태 구분 (2026-11-24 23:55 KST 기준, 브랜치 `feature/seat-management`, 전부 미커밋)**
+
+| 구분 | 내용 |
+| --- | --- |
+| 구현 완료 · 자동 검증 통과 (실기기 미검증) | 6좌석 선택·방장 승인(001·002), 3분 좌석 보존·다른 기기 복구·이전 세션 무효화·`RECONNECT_MS` 하한(003), 좌석 해제 후 칩 잔액 보존·자발적 일어서기(004), 리바이 C안·방 설정 `maxRebuy`·방장 본인 즉시 리바이·요청 ID 중복 방지(005), 다음 핸드 참여(006), 연결 끊김 2초 유예 후 체크/폴드(BUG-004) |
+| 정책 확정 · 미구현 | 없음 |
+| 확정(2026-11-25) | `maxRebuy` 미설정 시 한도 = 시작 칩, 리바이 횟수 제한 없음, 방장 본인 즉시 지급, 핸드 중 리바이는 핸드 후 지급 |
+| 배포 준비(2026-11-25) | 좌석 진단 로그 6종·칩 총합 감사(`FT-OPS-008`) 구현, SQLite 이전↔새 호환성 실험, 실사용 체크리스트 [seat-playtest-checklist.md](seat-playtest-checklist.md) |
+| 미검증·남은 작업 | Windows Node 24: 1차 실행에서 타입·서버·모바일·좌석 E2E 통과, 4인 E2E는 PC 절전으로 중단(최종 코드 재실행 미실시), 실기기·모바일 브라우저·네이티브(`FT-TEST-012`), 커밋·Preview/테스트 서버 배포(별도 승인), 실제 3분 대기, 빈 좌석을 건너뛰는 딜러 순환 전용 테스트, 방 설정 5단계 편집기의 브라우저 조작 |
+
+설계·상태 모델·프로토콜·다음 단계 주의사항은 [좌석 관리 설계](seat-management.md). Phase 게이트(2.5절) 관련: `FT-TEST-001`은 아직 `IN_PROGRESS`이나, 사용자가 2026-11-24 이 작업(1~2단계)의 착수를 직접 지시했다.
+
+### FT-FEAT-001 · 6개 고정 좌석 표시·빈자리 직접 선택 / FT-FEAT-002 · 방장 승인·거절
+- 우선순위: P1 · 상태: IMPLEMENTED · 담당: Claude Code · 브랜치 `feature/seat-management`(기준 `fix/multiplayer-stability` `e230511`) · 시작 2026-11-24 11:00 KST
+- 관련 파일: `packages/shared/src/index.ts`, `apps/server/src/lobby.ts`, `apps/mobile/src/{services/RoomClient.ts,hooks/useRoom.ts,components/SeatPanel.tsx,screens/LobbyScreen.tsx,screens/GameScreen.tsx}`, `apps/mobile/App.tsx`, 테스트 `apps/server/test/seats.test.ts`(신규)·`apps/mobile/test/seat-panel.test.cjs`(신규)·기존 서버 테스트 4개 셋업
+- 구현 범위: 방 참여와 착석 분리(`seat: 0..5 | null`), 생성자 0번 좌석, 착석 요청·취소·방장 승인/거절, 좌석 예약(요청 중 좌석), 1회용 결정, 거절 안내 새로고침 복구, 착석자만 딜(좌석 순), 체크포인트 저장·구형 체크포인트 변환. 재착석은 `kind:'resit'` 데이터만(자리 해제 기능 없음). 리바이는 필드만 예약하고 `rebuyAmount>0`은 거부
+- 범위 밖(변경 안 함): 인증·방 참여·초대 코드·인원 제한, 핸드 규칙·칩 정산(`hand.ts`), 끊김 보존 시간, `PokerTable` 좌석 배치(`FT-UI-003`), Supabase·DB 스키마, 배포
+- 완료 조건: ① 6좌석 표시·선택 ② 승인 시 서버 배정 ③ 거절 시 요청 해제 ④ 대기 중 중복 요청 방지 ⑤ 점유·예약 좌석 승인/요청 방지 ⑥ 방장 오프라인 시 대기 유지 ⑦ 게임 중 승인 → 다음 핸드 참여 ⑧ 새로고침 후 대기 상태 복구 ⑨ 동일 계정 중복 착석 방지 ⑩ 기존 게임 진행·정산·방 복귀 회귀 없음 ⑪ 실기기 다중 사용자 확인
+- 검증 방법: 서버 `node --test test/*.test.ts`, 모바일 `node --test test/*.test.cjs`, 워크스페이스별 `tsc --noEmit`, 실기기/Preview 다중 브라우저(미실행)
+- 검증 결과(2026-11-24 KST, 사용자 PC의 Cowork Linux VM, **Node 22.23.5**, 저장소 사본 `~/ft/repo` — VM이 Windows `node_modules/@boardgame` 정션을 읽지 못해 사본에서 링크만 다시 만듦. 프로젝트 기준 Node 24 미실행):
+  - 기준선(변경 전 HEAD 같은 방식): 서버 209/209, 모바일 52/52, tsc 3개 통과
+  - 변경 후 서버: 220개(기존 209 + 신규 11). 전체 스위트 12회 중 10회 220/220, **2회는 기존 테스트 `enabling timing does not change the messages players receive`(game-timing) 1건 실패**. 단독 실행 12/12, 단일 파일 6병렬 부하 24/24는 통과해 재현 안 됨. 변경 전 사본의 전체 스위트 8회 중 1회는 다른 리버 스퀴즈 타이밍 테스트(`turn loser, not eventual loser…`)가 실패 → 20ms 타이머 기반 테스트의 부하 민감성으로 추정하나 **좌석 변경과의 무관성은 증명하지 못함**
+  - 신규 `seats.test.ts` 11/11(반복 5회 이상 통과): ①~⑨ + 체크포인트 왕복·구형 변환·리바이 거부·퇴장 시 요청 정리
+  - 모바일 56/56(기존 52 + `seat-panel` 4), tsc shared·server·mobile 오류 0
+  - 기존 테스트 변경: 4개 파일 셋업에 `autoSeat: true`만 추가(assertion 불변), `lobby.test.ts` 공개 필드 목록에 `seat` 추가 1줄
+  - 미검증: Windows Node 24 재실행, 실제 화면(웹/네이티브) 조작·레이아웃(소형 화면에서 대기실 높이 증가), Preview·테스트 서버 배포, 다중 기기, 구버전 네이티브 앱과의 호환(착석 불가 예상)
+- 관련 커밋/보고서: 미커밋. [좌석 관리 설계](seat-management.md)
+- 변경 이력 2026-11-24 14:20 KST (사용자 정책 보완 지시): ① 방장 자동 착석 제거 — 방장도 미착석 입장 후 직접 선택, 본인 선택은 승인 없이 즉시 착석 ② 좌석 로직을 `apps/server/src/seating.ts`로 분리(칩 쓰기 없음), 좌석 요청에서 `rebuyAmount` 제거(포함 시 `INVALID_REQUEST`) — 리바이는 별도 요청·승인으로 설계(설계 문서 3절), 지급 미구현 ③ 게임 화면에서 착석한 방장에게는 승인/거절 줄만 표시 ④ 기존 4인 E2E 실행기·fixture를 좌석 UI로 착석하도록 갱신 ⑤ 좌석 브라우저 E2E `scripts/test-seat-e2e.cjs` 추가
+- 검증 결과 2 (2026-11-24 14:20 KST):
+  - **Linux Node 24.22.3**(클라우드 작업 공간, 사용자 저장소와 소스 189파일 해시 동일 확인): 서버 221/221 × 8회(기존 209 + 좌석 12), 모바일 57/57. 최초 모바일 3건 실패는 전달한 의존성 묶음에 `tslib` 누락 → 추가 후 통과(코드 무관)
+  - TypeScript: shared·server·mobile 오류 0(사용자 PC VM, Node 22 + 저장소 node_modules)
+  - **Windows Node 24: 미실행** — 이 세션은 Windows 터미널에 입력할 수 없음(클릭 전용 등급). `.qa-web/seat-check/run-windows-checks.cmd`(git 무시 폴더) 준비, 사용자 실행 후 `windows-results.txt` 확인 필요
+  - 브라우저(Chrome 153 headless ×4, 로컬 서버, 운영 접속 0): `test-seat-e2e.cjs` 12/12 — 방장 미착석 시작·즉시 착석, 요청·거절(새로고침 없이 안내), 같은 좌석 동시 요청 1건만 대기·다른 화면 즉시 잠김, 손님·방장 새로고침 후 대기 복원, 게임 중 승인 → 현재 핸드 불변·다음 핸드 딜, 콘솔·페이지 오류 0. 스크린샷 11장 `.qa-web/seat-e2e/`(클라우드 실행본)
+  - 기존 4인 E2E `test-game-e2e.cjs`(실제 UI 착석 후) 7핸드·칩 초기화 통과 2회, 카드 공개 max 83ms, 늦은 액션음 0
+  - 미검증: Windows Node 24, 실기기·모바일 브라우저·네이티브, Preview/테스트 서버 배포, 구버전 네이티브 앱과의 호환(새 방에서 착석 불가 예상)
+
+### FT-BUG-008 · game-timing 비교 테스트 간헐 실패
+- P2 · IMPLEMENTED · 담당 Claude Code · 관련 `apps/server/test/game-timing.test.ts`, `apps/server/src/lobby.ts`(`LobbyOptions.deck` 테스트 전용)
+- 원인·재현·수정: [좌석 관리 설계](seat-management.md) 6절. 두 판이 다른 무작위 덱이라 턴 동점(1.56%) 시 스퀴즈 생략 → 독립 두 판 불일치 3.07%. 같은 덱 공유로 수정, assertion·타임아웃 불변
+- 검증: 동점/스퀴즈 덱 강제 시 기존 assertion 3/3 실패(원인 재현), 수정 후 단독 60/60·Node 24 전체 8회 통과
+- 별건 미해결: `runout.test.ts` "turn loser…" 1회 실패 관측(변경 전 사본), 재현 안 됨, 원인 미확정
+
+### FT-FEAT-003 · 연결 끊김 3분 좌석 보존 / FT-FEAT-004 · 좌석 해제 후 칩 잔액 보존·자발적 일어서기
+- 우선순위: P1 · 상태: IMPLEMENTED · 담당: Claude Code · 브랜치 `feature/seat-management`(미커밋) · 시작 2026-11-24 16:45 KST · 사용자 직접 지시(3~4단계)
+- 관련 파일: `packages/shared/src/index.ts`, `apps/server/src/{lobby.ts,seating.ts}`, `apps/mobile/src/{components/SeatPanel.tsx,services/RoomClient.ts,hooks/useRoom.ts,screens/LobbyScreen.tsx}`, `apps/mobile/App.tsx`, 테스트 `apps/server/test/seat-hold.test.ts`(신규)·`seats.test.ts`·`lobby.test.ts`·`apps/mobile/test/seat-panel.test.cjs`·`apps/mobile/test/browser/game-e2e-fixture.jsx`·`scripts/test-seat-e2e.cjs`
+- 구현 범위: 설계 [좌석 관리](seat-management.md) 9절. 서버 기준 3분 좌석 보존(`seatHoldMs`, 멤버십 유예 이하), 유예 내 같은 계정 재접속 시 승인 없이 좌석·칩 복구, 유예 만료·자발적 일어서기는 진행 중 핸드 종료 후 좌석 해제, 방 참여와 착석 분리(해제 후 관전자, 재착석은 방장 승인·다음 핸드부터), 계정별 방 잔액 장부(1회 복구, 설정 변경·칩 초기화 시 무효), 체크포인트 저장·복원
+- 범위 밖(변경 안 함): `hand.ts` 규칙·정산, 끊긴 플레이어 차례(`FT-BUG-004`), 단일 로그인 세션 정책, 리바이(`FT-FEAT-005`), 운영 `RECONNECT_MS`, 배포·DB
+- 기존 테스트 변경(의도된 정책 변경, 2건): `lobby.test.ts` 공개 필드 목록에 `seatHeldUntil`·`stack`·`standingUp` 추가 / `seats.test.ts` "새 로그인은 다른 playerId" → 장부 복구로 **같은 playerId·잔액 1000**을 확인하도록 변경(요청·좌석 정리 assertion은 그대로)
+- 검증 결과(2026-11-24 17:20 KST):
+  - 사용자 PC VM 사본(Node 22.23.5, 저장소 node_modules 링크): 변경 전 기준선 서버 221/221·모바일 57/57 → 변경 후 서버 **233/233**(신규 `seat-hold` 12), 모바일 **61/61**(신규 4), `tsc --noEmit` shared·server·mobile 오류 0
+  - 클라우드 작업 공간 Linux **Node 24.22.3**(같은 소스 묶음 + 이전 세션 의존성 묶음): 서버 233/233, 모바일 61/61
+  - 신규 서버 테스트가 고정한 항목: 3분 이내 재접속(기본 180초·서버 시계, 승인 없음, 보존 좌석 요청 불가) / 3분 초과 후 해제(관전자·잔액 유지·`resit` 승인 필요·승인은 칩 미지급) / 핸드 중 만료(핸드 끝까지 좌석 유지, 종료 후 해제, 칩 총합 보존) / 만료 후 재접속해도 해제 진행 / 자발적 일어서기(핸드 후 해제, 다음 핸드 미딜, 중복 요청 거부, 클라이언트 `stack` 무시, 방장 즉시 재착석) / 잔액 장부(나가기 후 같은 계정 1회 복구, 다른 계정 미적용, 칩 초기화 시 무효) / 다른 계정 차단(`currentRoom` noRoom, 다른 계정 토큰 `resume` 거부) / 재시작(보존 좌석 비갱신 복구, 기한 경과 시 해제, 장부 유지, 핸드 중 일어서기 예약 유지) / `seating.ts` 순수 함수 칩 불변
+  - 브라우저(Chrome headless ×4, 로컬 127.0.0.1, 운영 접속 0): `test-seat-e2e.cjs` **19/19**(기존 12 + 끊김 중 좌석 보존·유예 내 재접속 복구·실제 "자리에서 일어나기" 버튼·핸드 후 해제·다음 핸드 미딜·재착석 승인·승인 시 칩 불변 7), 스크린샷 13장(클라우드 실행본, `12-stand-up-pending`·`13-spectator-balance` 신규). 기존 4인 E2E `test-game-e2e.cjs` 7핸드·칩 초기화 **통과**(회귀)
+  - 미검증: Windows Node 24 실행, 실기기·모바일 브라우저·네이티브, Preview/테스트 서버 배포, 실제 3분 대기(테스트는 짧은 `seatHoldMs`와 기본값 기한 계산으로 확인), 운영 `RECONNECT_MS` 값(180초 미만이면 유예가 짧아짐)
+- 확인 필요: 같은 계정의 **다른 로그인 세션** 재접속 시 좌석 복구 여부(현재는 단일 세션 규칙으로 좌석 해제·칩만 복구), 끊긴 플레이어 차례 정책(`FT-BUG-004`)
+- 관련 커밋/보고서: 미커밋. [좌석 관리 설계](seat-management.md) 9절
+
+- 변경 이력 2026-11-24 22:54 KST (사용자 지시 "재접속 정책 보완"): 같은 계정의 **다른 기기·다른 로그인 세션**도 3분 내 같은 방으로 돌아오면(`currentRoom`, 같은 방 초대 코드 `join`, 토큰 `resume`) 멤버십을 새 세션으로 넘겨 좌석·칩·요청을 그대로 복구, 이전 세션은 4003으로 종료하고 그 소켓의 늦은 메시지는 무시. 다른 방 입장 시 이전 멤버십 정리는 기존대로. `RECONNECT_MS`가 180000 미만이면 180000으로 올림(`config.ts`, 범위 검사는 유지). 멤버십 유예가 핸드 도중 끝나면 폴드하지 않고 핸드 종료 후 정리. 위 "확인 필요" 2건은 이 지시로 해결
+
+### FT-FEAT-005 · 리바이 C안 / FT-FEAT-006 · 다음 핸드 참여 (+ FT-BUG-004, FT-FEAT-003 보완)
+- 우선순위: P1 · 상태: IMPLEMENTED · 담당: Claude Code · 브랜치 `feature/seat-management`(미커밋) · 시작 2026-11-24 22:55 KST · 사용자 직접 지시
+- 관련 파일: `packages/shared/src/index.ts`, `apps/server/src/{rebuy.ts(신규),lobby.ts,config.ts}`, `apps/mobile/src/components/{RebuyPanel.tsx(신규),SeatPanel.tsx}`, `apps/mobile/src/{services/RoomClient.ts,hooks/useRoom.ts,screens/LobbyScreen.tsx}`, `apps/mobile/App.tsx`, 테스트 `apps/server/test/{reconnect-turn.test.ts,rebuy.test.ts,support/seat-harness.ts}`(신규)·`lobby.test.ts`·`seats.test.ts`·`multiplayer.test.ts`·`apps/mobile/test/{rebuy-panel.test.cjs(신규),seat-panel.test.cjs,browser/game-e2e-fixture.jsx}`·`scripts/test-seat-e2e.cjs`
+- 구현 범위: [좌석 관리 설계](seat-management.md) 10절. 리바이 요청(양의 정수, 상한 1,000,000,000)·취소·방장 승인/거절, 요청자당 1건·결정 1회, 핸드 참여 중 승인분은 그 핸드 정산 후 반영(`pendingRebuy`), 지급 내역(`rebuyLog`), 좌석과 독립(착석 중·미착석 모두 가능, 칩 추가 없는 재착석 허용), 체크포인트 저장. 다음 핸드 참여는 착석·리바이·일어서기·끊김이 같은 핸드에 겹쳐도 핸드 경계에서 정리
+- 범위 밖(변경 안 함): `hand.ts`(규칙·정산·환불), 인증 RPC, 방 생성·초대 코드 규칙, 운영 설정·배포
+- 기존 테스트 변경(정책 변경 반영, 5건): `lobby.test.ts` 공개 필드에 `pendingChips` / 같은 파일 "in-game disconnect…"는 차례인 끊긴 플레이어가 즉시 폴드되도록 기대값 변경(이름 변경) / `seats.test.ts` 다른 로그인의 같은 방 입장은 멤버십 인계(요청 유지·이전 세션 4003) / `multiplayer.test.ts` "authenticated reload…"는 상대 차례에 새로고침하도록 앞에 콜 1회 추가(복구 검증 내용 불변) / 같은 파일 "new login replaces…"는 새 로그인이 방을 돌려받는 것으로 기대값 변경(이전 세션 중지 검증 유지)
+- 검증 결과(2026-11-24 23:5x KST):
+  - 사용자 PC VM 사본 Node 22.23.5: 서버 **255/255**(기존 233 + 재접속·턴 11 + 리바이 11), 모바일 **68/68**(+7), `tsc --noEmit` shared·server·mobile 오류 0
+  - 클라우드 Linux **Node 24.22.3**: 서버 255/255 ×3회 연속, 모바일 68/68
+  - 브라우저(Chrome headless, 로컬 127.0.0.1, 운영 접속 0): `test-seat-e2e.cjs` **28/28**(기존 19 + 리바이 입력·방장 화면 표시·게임 중 승인 보류·칩 총합=시작+지급·거절 시 불변·다른 기기 복구·이전 세션 4003·차례 중 이탈 즉시 처리 83 ms·재접속 후 좌석 유지), 스크린샷 18장. 기존 4인 E2E `test-game-e2e.cjs` 통과(결과 순서 16/16)
+  - 미검증: Windows Node 24, 실기기·모바일 브라우저·네이티브(키보드가 실제로 입력창을 가리는지 포함), Preview/테스트 서버 배포, 실제 3분 대기, 재시작 후 30초 복구 구간이 끝난 뒤의 자동 처리(코드 경로만, 30초 대기 테스트 없음), 빈 좌석을 건너뛰는 딜러 순환 전용 테스트
+- 확인 필요(구현은 기본값으로 진행): ~~리바이 상한~~(23:25 방 설정으로 해결), ~~리바이 횟수·빈도 제한(없음)~~(2026-11-25 "제한 없음"으로 확정, 기본 한도 = 시작 칩도 확정), ~~방장 본인 리바이 승인 방식~~(23:25 즉시 지급으로 해결), ~~새로고침 시 즉시 체크/폴드~~(23:25 2초 유예로 완화)
+- 변경 이력 2026-11-24 23:25 KST (사용자 확정 정책 3건): ① 연결 끊김 2초 유예(FT-BUG-004 블록) ② 방 설정 `maxRebuy`: 방장이 리바이 1회 최대 수량 지정(설정 편집기 5단계), 서버가 초과 요청 거부, 설정 변경 시 대기 요청 재검증(초과분 사유와 함께 취소), 재시작 후 유지, 미설정 방은 시작 칩이 한도, 한도만 바꾸면 칩 초기화 없음(그 외 변경은 기존대로 초기화, 장부는 `chipRevision`으로 판단) ③ 방장 본인 리바이: 승인 없이 즉시 지급(핸드 참여 중이면 핸드 후), 같은 한도, 다른 플레이어 목록에 미표시 ④ 요청 ID(`clientRequestId`, UUID)로 재전송 중복 지급·중복 요청 방지
+- 검증 결과 3 (2026-11-24 23:55 KST): 서버 **271/271**(+16 `grace-limit.test.ts`) — VM Node 22 1회, 클라우드 Node 24 3회 연속. 모바일 **72/72**(+4). tsc 3개 오류 0. 좌석 브라우저 E2E **29/29**(+방장 칩 추가, 2초 유예 반영). 기존 4인 E2E 통과(16/16). 기존 테스트 변경 2건: `lobby.test.ts` "in-game disconnect…" 기대 시점을 2초 후로, `rebuy.test.ts` 재시작 테스트에서 방장 요청을 B의 대기 요청 + 방장 즉시 지급(보류)으로 교체(이번 브랜치에서 추가한 테스트)
+- 관련 파일(23:25 추가분): `packages/shared/src/{settings.ts,index.ts}`, `apps/server/src/{lobby.ts,rebuy.ts}`, `apps/mobile/src/components/{RebuyPanel.tsx,RoomSettingsEditor.tsx}`, `apps/mobile/src/services/RoomClient.ts`, 테스트 `apps/server/test/grace-limit.test.ts`(신규)·`lobby.test.ts`·`rebuy.test.ts`·`support/seat-harness.ts`·`apps/mobile/test/rebuy-panel.test.cjs`·`scripts/test-seat-e2e.cjs`
+- 관련 커밋/보고서: 미커밋. [좌석 관리 설계](seat-management.md) 10절, [결정 기록](decisions.md) 리바이 정책은 사용자 확정 C안(희망 수량 직접 입력 → 방장 승인, 기존 칩 + 승인 칩 합산, 중복 승인·지급 방지, 추가 칩 없이 재착석 허용)
+
+### FT-OPS-008 · 좌석 진단 로그·칩 총합 감사 (배포 전 관측성)
+- 우선순위: P1 · 상태: IMPLEMENTED · 담당: Claude Code · 브랜치 `feature/seat-management`(미커밋) · 2026-11-25 사용자 승인
+- 관련 파일: `apps/server/src/{seatEvents.ts(신규),lobby.ts,config.ts,index.ts}`, 테스트 `apps/server/test/seat-events.test.ts`(신규)
+- 구현 범위: [좌석 관리](seat-management.md) 12.1·12.2절. 이벤트 6종(`seat_hold`·`seat_released`·`auto_action`·`membership_takeover`·`rebuy`·`chip_audit`), 해시 식별자만, `SEAT_EVENT_LOG`(기본 켜짐, `0`으로 끔), 방당 분당 120건 상한, 핸드 정산마다 칩 총합 감사(초과·부족 감지, 관측 전용)
+- 완료 조건: 이벤트·필드·민감 정보 배제·상한·감사(정상·초과·부족·기준 설정)를 자동 테스트로 고정, 테스트 서버 로그에서 실제 출력 확인
+- 검증 결과(2026-11-25): `seat-events.test.ts` 6/6(연속 2회), 서버 전체 277/277(VM Node 22, 클라우드 Node 24), 좌석 E2E 29/29·4인 E2E 통과(클라우드, 로그 켠 최종 코드). 테스트 서버 로그 확인은 미실시(배포 전)
+
+### FT-TEST-012 · 좌석·재접속·리바이 실기기·Preview 검증
+- 우선순위: P1 · 상태: BACKLOG · 담당: 사용자(실기기) / Claude Code·Codex(배포 준비) · 선행: 테스트 배포 별도 승인(AGENTS.md 6절)
+- 절차·항목: [좌석 실사용 테스트 체크리스트](seat-playtest-checklist.md)(2인·4인·6인, 2026-11-25). 아래 범위 요약은 작성 당시 기록
+- 범위: 테스트 Railway·Cloudflare Preview에서 실제 기기 2대 이상으로 ① 좌석 선택·승인 ② 연결 끊김 2초 유예와 자동 체크/폴드(새로고침·앱 백그라운드·네트워크 끊김) ③ 3분 이내 같은 기기·다른 기기 복구 ④ 3분 경과 후 핸드 종료 뒤 해제 ⑤ 일어서기·재착석 ⑥ 리바이 요청·승인·거절, 방장 즉시 리바이, 방 설정 리바이 최대 수량 ⑦ 모바일 키보드가 칩 추가 입력창·방 설정 입력을 가리지 않는지
+- 완료 조건: 위 항목 실기기 확인 기록, 오류 로그 0, 칩 총합 이상 없음
+- 검증 결과: 미착수
+
+---
+
 ## 8. 작업 이력 (최신이 위, 덮어쓰지 않고 추가)
 
 | 일시 (KST) | 작업자 | 내용 | 커밋 |
 | --- | --- | --- | --- |
+| 2026-11-25 14:30 | Claude Code(클라우드 세션 + 사용자 PC VM) | 배포 전 점검: FT-OPS-008(진단 로그·칩 감사) 구현, Windows Node 24 1차 결과 수집(4인 E2E 절전 중단), 이전↔새 SQLite 호환성 실험(테스트 DB 사본), 문서 갱신(room-lifecycle·web-device-checklist·PROJECT_STATUS·decisions·seat-management·testing·HANDOFF 추가), 실사용 체크리스트 추가. 서버 277·모바일 72·E2E 통과 | 미커밋 |
+| 2026-11-25 00:30 | Claude Code(클라우드 세션 + 사용자 PC VM) | 추가 정책 3건 구현: 끊김 2초 유예, 방 설정 리바이 최대 수량, 방장 본인 즉시 리바이(+요청 ID 중복 방지). 서버 271·모바일 72·tsc 0, Node 24 서버 271×3, 좌석 E2E 29/29·4인 E2E 통과. FT-TEST-012 등록. 문서 5종 갱신(HANDOFF는 추가만) | 미커밋 |
+| 2026-11-24 23:55 | Claude Code(클라우드 세션 + 사용자 PC VM) | FT-FEAT-005·006, FT-BUG-004 구현, FT-FEAT-003 보완(다른 기기 인계·이전 세션 무효화·RECONNECT_MS 하한·핸드 중 멤버십 만료 지연). 서버 255·모바일 68·tsc 0(Node 22), Node 24 서버 255×3·모바일 68, 좌석 E2E 28/28·4인 E2E 통과. 기존 assertion 5건 정책 변경 반영. HANDOFF는 미수정(다른 작업 미커밋 변경) | 미커밋 |
+| 2026-11-24 17:30 | Claude Code(클라우드 세션 + 사용자 PC VM) | FT-FEAT-003·004 구현(IMPLEMENTED): 3분 좌석 보존·핸드 후 해제·자발적 일어서기·계정별 잔액 장부·체크포인트. 서버 233(신규 12)·모바일 61(신규 4)·tsc 0(Node 22 VM), Node 24 서버·모바일 동일 통과, 좌석 E2E 19/19·4인 E2E 통과. 기존 assertion 2건 정책 변경 반영. HANDOFF는 다른 작업의 미커밋 변경이 있어 수정하지 않음 | 미커밋 |
+| 2026-11-24 14:20 | Claude Code(클라우드 세션) | FT-FEAT-001·002 정책 보완(방장 직접 선택, `seating.ts` 분리, 좌석/리바이 분리), FT-BUG-008 등록·수정, 좌석 브라우저 E2E 추가, 기존 E2E 갱신. Linux Node 24 서버 221×8·모바일 57, 브라우저 12/12. Windows Node 24 미실행(사용자 실행 대기) | 미커밋 |
+| 2026-11-24 11:00 | Claude Code(클라우드 세션, 사용자 PC VM) | `feature/seat-management` 생성(`fix/multiplayer-stability` `e230511`에서 분기, 미커밋 HANDOFF·007 보존). FT-FEAT-001~006 등록, 001·002 구현(IMPLEMENTED). 서버 220(신규 11, 기존 1건 간헐 실패 기록)·모바일 56·tsc 통과(Node 22 사본). HANDOFF는 다른 작업의 미커밋 변경이 있어 수정하지 않음 | 미커밋 |
 | 2026-11-23 17:45 | Claude Code(클라우드 세션) | 문서 신설. 기존 인계·현황·테스트 문서를 조사해 Phase 1~4 항목 등록(FT-TEST 001–011, FT-BUG 001–007, FT-OPS 001–007, FT-UI 001–008, FT-ANIM 001–016, FT-SOCIAL 001–013). 기존 HANDOFF 3절 #1–#7을 각각 FT-BUG-003·001·002·004·005·006, FT-UI-001로 대응(HANDOFF는 미커밋 변경이 있어 수정하지 않음, 원문 보존). AGENTS.md·CLAUDE.md·DEVELOPMENT_WORKFLOW·docs/README·PROJECT_STATUS에 참조 추가. 코드 변경 없음, 테스트 미실행(문서만) | 이 문서를 추가한 커밋(`git log -- docs/DEVELOPMENT_CHECKLIST.md`) |

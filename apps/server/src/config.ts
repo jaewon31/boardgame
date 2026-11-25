@@ -1,5 +1,7 @@
 import { isIP } from 'node:net';
 import { parseOrigins } from './origins.ts';
+/** The seat hold is 3 minutes (lobby.ts seatHoldMs); membership must last at least as long. */
+export const MIN_RECONNECT_MS = 180_000;
 export function serverConfig(env: NodeJS.ProcessEnv) {
   const integer = (key: string, fallback: number, min: number, max: number) => {
     const value = env[key] === undefined ? fallback : Number(env[key]);
@@ -13,10 +15,14 @@ export function serverConfig(env: NodeJS.ProcessEnv) {
   return {
     allowedOrigins:parseOrigins(env.WEB_ALLOWED_ORIGINS,production),
     port:integer('PORT',3000,1,65535), host:env.HOST ?? '0.0.0.0', statePath:env.STATE_DB_PATH,
-    trustedProxies, reconnectMs:integer('RECONNECT_MS',300000,30000,1800000),
+    // Membership grace after a disconnect. Never below the 3-minute seat hold (FT-FEAT-003): a lower
+    // value is raised to 180000 rather than rejected, so an existing deployment still starts.
+    trustedProxies, reconnectMs:Math.max(integer('RECONNECT_MS',300000,30000,1800000), MIN_RECONNECT_MS),
     maxRooms:integer('MAX_ROOMS',100,1,1000), maxConnections:integer('MAX_CONNECTIONS',240,2,6000),
     maxConnectionsPerIp:integer('MAX_CONNECTIONS_PER_IP',24,2,6000),
     // Opt-in diagnostics only: game progression timing logs (see gameTiming.ts).
     gameTimingLog:env.GAME_TIMING_LOG==='1',
+    // Seat/reconnect/rebuy/chip-audit events: low volume (rate-limited per room), on unless SEAT_EVENT_LOG=0.
+    seatEventLog:env.SEAT_EVENT_LOG!=='0',
   };
 }

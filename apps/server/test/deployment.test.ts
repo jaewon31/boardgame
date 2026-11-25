@@ -59,7 +59,7 @@ class Peer {
 }
 async function start(path:string) {
   const store=new SqliteStateStore(path), server=createAppServer();
-  const lobby=attachLobby(server,{store,nextHandMs:50});
+  const lobby=attachLobby(server,{store,nextHandMs:50,autoSeat:true}); // Legacy auto-seat; approval path: seats.test.ts
   server.listen(0,'127.0.0.1'); await once(server,'listening');
   const peers:Peer[]=[]; let closed=false;
   return {

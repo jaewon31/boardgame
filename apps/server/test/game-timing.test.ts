@@ -4,7 +4,8 @@ import type { AddressInfo } from 'node:net';
 import { createHash } from 'node:crypto';
 import { test, type TestContext } from 'node:test';
 import { WebSocket } from 'ws';
-import type { HoldemView, ServerMessage } from '@boardgame/shared';
+import type { Card, HoldemView, ServerMessage } from '@boardgame/shared';
+import { shuffledDeck } from '../src/holdem/cards.ts';
 import { createAppServer } from '../src/http.ts';
 import { attachLobby } from '../src/lobby.ts';
 import { serverConfig } from '../src/config.ts';
@@ -31,9 +32,9 @@ class Peer {
     });
   }
 }
-async function setup(t: TestContext, gameTiming?: (e: GameTimingEntry) => void, turnMs?: number) {
+async function setup(t: TestContext, gameTiming?: (e: GameTimingEntry) => void, turnMs?: number, deck?: Card[]) {
   const server = createAppServer();
-  const lobby = attachLobby(server, { runoutMs: 20, riverSqueezeMs: 20, nextHandMs: 60_000, gameTiming, turnMs,
+  const lobby = attachLobby(server, { runoutMs: 20, riverSqueezeMs: 20, nextHandMs: 60_000, gameTiming, turnMs, autoSeat: true, deck: deck ? () => deck : undefined,
     authorize: async token => token.startsWith('PRIVATE_TOKEN_') ? { accountId: `PRIVATE_ACCOUNT_${token}`, sessionId: `PRIVATE_SESSION_${token}` } : null });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const url = `ws://127.0.0.1:${(server.address() as AddressInfo).port}/lobby`;
@@ -42,8 +43,8 @@ async function setup(t: TestContext, gameTiming?: (e: GameTimingEntry) => void, 
   return { async connect(token: string) { const p = new Peer(url, token); peers.push(p); await once(p.socket, 'open'); return p; } };
 }
 /** Plays one heads-up hand by calling/checking preflop, then going all-in on the flop. */
-async function script(t: TestContext, gameTiming?: (e: GameTimingEntry) => void) {
-  const app = await setup(t, gameTiming);
+async function script(t: TestContext, gameTiming?: (e: GameTimingEntry) => void, deck?: Card[]) {
+  const app = await setup(t, gameTiming, undefined, deck);
   const a = await app.connect('PRIVATE_TOKEN_A'), b = await app.connect('PRIVATE_TOKEN_B');
   a.send({ type: 'create', nickname: 'PRIVATE_A', game: 'holdem' });
   const created = await a.next('joined') as Joined;
@@ -113,8 +114,11 @@ test('timing logs follow one action through auth, apply, street change and broad
 });
 
 test('enabling timing does not change the messages players receive', async t => {
-  const plain = await script(t);
-  const timed = await script(t, () => {});
+  // Compare the same deal with timing off and on. Two independent random deals differ ~3% of the
+  // time (a tied turn skips the river squeeze), which is not a timing effect.
+  const deck = shuffledDeck();
+  const plain = await script(t, undefined, deck);
+  const timed = await script(t, () => {}, deck);
   assert.deepEqual(timed.states, plain.states);
 });
 

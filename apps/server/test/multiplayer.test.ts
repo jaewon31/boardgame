@@ -32,7 +32,7 @@ async function setup(t: TestContext) {
   const logs: ConnectionDiagnostic[] = [];
   const lobby = attachLobby(server, {
     authorize: accountAuthorizer('https://test.supabase.co', 'sb_publishable_test'),
-    heartbeatMs: 100, seatRetentionMs: 3000, nextHandMs: 10000,
+    heartbeatMs: 100, seatRetentionMs: 3000, nextHandMs: 10000, autoSeat: true,
     diagnostic: entry => logs.push(entry),
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -116,6 +116,9 @@ test('authenticated reload and browser resume restore private cards, chips and t
   a.connection.enter({type:'create',game:'holdem',nickname:'A'});await until(()=>a.state?.status==='connected');
   b.connection.enter({type:'join',code:a.state!.room!.code,nickname:'B'});await until(()=>a.state?.room?.players.length===2);
   a.connection.startHand();await until(()=>!!a.state?.room?.holdem&&!!b.state?.room?.holdem);
+  // Reload during the other player's turn: a confirmed disconnect on one's own turn is auto-played
+  // (checked or folded) since FT-BUG-004, covered in seat-hold.test.ts.
+  if(a.state!.room!.holdem!.actorId===a.state!.playerId){a.connection.act('call');await until(()=>a.state!.room!.holdem!.actorId!==a.state!.playerId);}
   const before=a.state!.room!.holdem!,seat=a.state!.playerId;
   const me=before.players.find(p=>p.id===seat)!;
   assert.equal(me.cards?.length,2);assert.equal(before.players.find(p=>p.id!==seat)!.cards,null);
@@ -144,15 +147,18 @@ test('simultaneous independent creates never share a room or overwrite membershi
   assert.equal(returning.state!.room!.players.length, 1);
 });
 
-test('new login replaces only its own account with 4003; automatic foreground stays stopped', async t => {
+test('new login replaces only its own account with 4003 and takes the membership over; automatic foreground stays stopped', async t => {
   const app = await setup(t), a = app.client(tokenA), b = app.client(tokenB);
   a.connection.enter({type:'create', game:'holdem', nickname:'A'});
   b.connection.enter({type:'create', game:'holdem', nickname:'B'});
   await until(() => a.state?.status === 'connected' && b.state?.status === 'connected');
+  const originalId = a.state!.playerId;
   const fresh = jwt(userA, '20000000-0000-4000-8000-000000000001');
   app.identities.delete(tokenA); app.identities.set(fresh, userA);
   const replacement = app.client(fresh); await replacement.connection.restore();
-  await until(() => a.state?.status === 'error' && replacement.state?.status === 'idle');
+  // Same account on another device gets its room back (FT-FEAT-003); the old login is stopped.
+  await until(() => a.state?.status === 'error' && replacement.state?.status === 'connected');
+  assert.equal(replacement.state!.playerId, originalId);
   assert.ok(app.logs.some(e => e.event === 'ws_replaced' && e.code === 4003));
   const attempts = a.diagnostics.filter(e => e.event === 'client_connect').length;
   a.connection.refresh(true);
