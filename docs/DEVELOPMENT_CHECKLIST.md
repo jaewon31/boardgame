@@ -77,6 +77,20 @@
 
 ---
 
+### 1.7 실사용 테스트 환경 고정 (2026-11-25 23:21 사용자 결정, 근거 [decisions.md](decisions.md))
+
+- 고정 환경(이 조합만 실사용 테스트에 사용):
+  - 웹: `https://fix-multiplayer-stability.friends-table-staging.pages.dev`(Cloudflare Pages `friends-table-staging`, Preview 브랜치 `fix-multiplayer-stability`)
+  - 서버: Railway 프로젝트 `friends-table-mp-test`, 서비스 `boardgame-server-test`(테스트 프로젝트 내부 환경 `production`)
+  - 인증·친구: 기존 테스트 Supabase(`lahnhofedtomephzmoty`) 유지
+  - 저장소: 기존 Railway Volume `boardgame-server-test-volume`(`/data`)과 `STATE_DB_PATH=/data/boardgame.sqlite`·`STATS_DB_PATH=/data/stats.sqlite` 유지
+- 데이터 보존: 친구들과 계속 쓰는 실사용 환경이므로 이후 배포에서도 기존 계정(테스트 Supabase)·친구 목록·경기 전적(`stats.sqlite`)·방 상태를 보존한다. 배포 전 방 0개 확인과 SQLite 백업(해시 2회 일치·`integrity_check`)을 매번 한다([좌석 관리](seat-management.md) 12.5).
+- 재사용: 신규 기능·새 브랜치도 실사용 테스트 배포는 이 환경에 한다(Preview 브랜치명·URL 그대로, 다른 Pages 브랜치·Railway 서비스·Supabase 프로젝트를 새로 만들지 않음).
+- 금지(사용자 명시 승인 없이): DB 초기화·SQLite 파일 덮어쓰기·삭제, Volume 삭제·교체, Supabase 프로젝트 변경, 테스트 URL(Preview 브랜치명) 변경, 경로 변수 변경. 복구가 필요해도 임의로 하지 않고 보고한다(복구 방식은 새 경로 + 경로 변수 전환, 12.5).
+- 호환성: 저장 형식(체크포인트 JSON·`stats.sqlite` 스키마)이나 Supabase 스키마를 바꾸는 변경은 기존 데이터를 그대로 읽는지 테스트 DB 사본으로 먼저 검증하고, 테스트 Supabase 마이그레이션 적용은 별도 승인.
+- 자동화 테스트 격리: 자동 테스트·E2E는 실제 테스트 사용자 데이터에 접근하지 않는다. 현재 서버 테스트는 임시/메모리 DB와 가짜 Supabase 주소, 브라우저 E2E(`scripts/test-seat-e2e.cjs`·`test-game-e2e.cjs`)는 `127.0.0.1` 서버·메모리 로비·테스트 토큰을 쓰고, 게임 E2E는 번들에 `supabase.co`·`railway.app`·`pages.dev`가 있으면 실패한다. 새 자동화도 이 격리를 따른다(테스트 서버·테스트 Supabase를 대상으로 하는 자동 스크립트 금지).
+- 배포 후 확인(스모크)은 기존 테스트 계정으로 최소 동작만 하고, 만든 방은 나가서 닫는다. 핸드를 진행하면 전적이 기록되므로 필요한 경우에만 한다.
+
 ## 2. 현재 프로젝트 상태 (2026-11-23 17:45 KST)
 
 ### 2.1 확인된 구현 상태
@@ -153,6 +167,7 @@
 | [ ] | FT-OPS-005 | Codex의 AGENTS.md 실제 로딩 확인 | P2 | BLOCKED | Codex | 2026-11-25 이후 사용량 |
 | [ ] | FT-OPS-006 | npm 감사 권고 분류·호환 수정안 | P3 | BACKLOG | 미지정 | — |
 | [ ] | FT-OPS-007 | PROJECT_STATUS 현황표 갱신 | P3 | READY | 미지정 | — |
+| [x] | FT-OPS-010 | 실사용 테스트 환경 고정·데이터 보존 정책 기록 | P1 | DONE | Claude Code | — |
 | [ ] | FT-UI-001 | 액션 버튼–게임 로직 연결 분석·UI 변경 범위 결정 | P1 | BACKLOG | 미지정 | Phase 1 게이트 |
 | [ ] | FT-UI-002 | 디자인 방향·색상·토큰 정의(독자 디자인) | P1 | BACKLOG | 미지정 | FT-UI-001 |
 | [ ] | FT-UI-003 | 세로형 테이블·최대 6인 좌석 배치 | P1 | BACKLOG | 미지정 | FT-UI-002 |
@@ -547,6 +562,12 @@
 - 완료 조건: 이벤트·필드·민감 정보 배제·상한·감사(정상·초과·부족·기준 설정)를 자동 테스트로 고정, 테스트 서버 로그에서 실제 출력 확인
 - 검증 결과(2026-11-25): `seat-events.test.ts` 6/6(연속 2회), 서버 전체 277/277(VM Node 22, 클라우드 Node 24), 좌석 E2E 29/29·4인 E2E 통과(클라우드, 로그 켠 최종 코드). 테스트 서버 로그 확인은 미실시(배포 전)
 
+### FT-OPS-010 · 실사용 테스트 환경 고정·데이터 보존 정책
+- 우선순위: P1 · 상태: DONE(문서) · 담당: Claude Code · 2026-11-25 23:21 사용자 결정
+- 범위: 실사용 테스트 웹·Railway·Supabase·Volume 고정, 배포 시 계정·친구·전적 보존, 금지 작업, 자동화 테스트 격리. 정책 본문은 1.7절
+- 결과: decisions.md·본 체크리스트·HANDOFF에 기록. 배포 환경 변경·재배포 없음
+- 후속: 이후 모든 실사용 테스트 배포 절차는 1.7절을 선행 조건으로 확인
+
 ### FT-TEST-012 · 좌석·재접속·리바이 실기기·Preview 검증
 - 우선순위: P1 · 상태: BACKLOG · 담당: 사용자(실기기) / Claude Code·Codex(배포 준비) · 선행: 테스트 배포 별도 승인(AGENTS.md 6절)
 - 절차·항목: [좌석 실사용 테스트 체크리스트](seat-playtest-checklist.md)(2인·4인·6인, 2026-11-25). 아래 범위 요약은 작성 당시 기록
@@ -560,6 +581,7 @@
 
 | 일시 (KST) | 작업자 | 내용 | 커밋 |
 | --- | --- | --- | --- |
+| 2026-11-25 23:25 | Claude Code | FT-OPS-010 실사용 테스트 환경 고정 정책 기록(1.7절, decisions.md, HANDOFF). 환경 변경·재배포 없음 | 문서 미커밋 |
 | 2026-11-25 14:30 | Claude Code(클라우드 세션 + 사용자 PC VM) | 배포 전 점검: FT-OPS-008(진단 로그·칩 감사) 구현, Windows Node 24 1차 결과 수집(4인 E2E 절전 중단), 이전↔새 SQLite 호환성 실험(테스트 DB 사본), 문서 갱신(room-lifecycle·web-device-checklist·PROJECT_STATUS·decisions·seat-management·testing·HANDOFF 추가), 실사용 체크리스트 추가. 서버 277·모바일 72·E2E 통과 | 미커밋 |
 | 2026-11-25 00:30 | Claude Code(클라우드 세션 + 사용자 PC VM) | 추가 정책 3건 구현: 끊김 2초 유예, 방 설정 리바이 최대 수량, 방장 본인 즉시 리바이(+요청 ID 중복 방지). 서버 271·모바일 72·tsc 0, Node 24 서버 271×3, 좌석 E2E 29/29·4인 E2E 통과. FT-TEST-012 등록. 문서 5종 갱신(HANDOFF는 추가만) | 미커밋 |
 | 2026-11-24 23:55 | Claude Code(클라우드 세션 + 사용자 PC VM) | FT-FEAT-005·006, FT-BUG-004 구현, FT-FEAT-003 보완(다른 기기 인계·이전 세션 무효화·RECONNECT_MS 하한·핸드 중 멤버십 만료 지연). 서버 255·모바일 68·tsc 0(Node 22), Node 24 서버 255×3·모바일 68, 좌석 E2E 28/28·4인 E2E 통과. 기존 assertion 5건 정책 변경 반영. HANDOFF는 미수정(다른 작업 미커밋 변경) | 미커밋 |

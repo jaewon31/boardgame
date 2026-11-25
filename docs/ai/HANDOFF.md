@@ -6,6 +6,8 @@
 
 갱신: 2026-11-22 22:57 KST (테스트 환경 재사용 정책 반영) · 작성: Claude Code
 
+> **실사용 테스트 환경 고정(2026-11-25 23:21 KST 사용자 결정)**: 웹 `https://fix-multiplayer-stability.friends-table-staging.pages.dev` + Railway `friends-table-mp-test`/`boardgame-server-test` + 기존 테스트 Supabase + 기존 Volume `/data`·SQLite 경로. 이후 모든 실사용 테스트 배포는 이 환경을 재사용하고 계정·친구·전적을 보존한다. DB 초기화·Volume 삭제·Supabase 변경·URL 변경 금지, 자동화 테스트는 실데이터와 격리. 상세 [체크리스트](../DEVELOPMENT_CHECKLIST.md) 1.7절, [decisions.md](../decisions.md).
+
 | 항목 | 값 |
 | --- | --- |
 | 작업본 | `C:\Users\jwseo\Desktop\boardgame` |
@@ -19,6 +21,11 @@
 
 ## 2. 현재 상태와 진행 중 작업
 
+- **실사용 테스트 환경 고정 정책 기록 (2026-11-25 23:25 KST, Claude Code, `FT-OPS-010`, 문서만 — 환경 변경·재배포 없음)**
+  - 현재 배포 상태 그대로 유지: Railway `e6a6ab8b`(`3a28b09`), Preview `e35d3e5e`
+  - 다음 실사용 배포 전 필수: 체크리스트 1.7절 확인 → 방 0개 → SQLite 백업 2회 해시·`integrity_check` → 같은 프로젝트·서비스·Preview 브랜치에만 배포(좌석 관리 12.3·12.6 절차)
+  - 자동화 격리 현황: 서버 테스트(임시/메모리 DB·가짜 Supabase 주소), 브라우저 E2E(127.0.0.1·메모리 로비·테스트 토큰, 게임 E2E는 원격 URL 포함 시 실패) — 실데이터 접근 없음
+  - 참고: 18:00 배포 후 확인은 기존 테스트 계정(테스트A)으로 방 생성·착석·리바이 500·나가기만 했고 핸드는 진행하지 않아 전적 변화 없음
 - **운영 방침 변경(2026-11-22 사용자 결정, 문서 반영만)**: "멀티플레이 검증 후 테스트 서버·관련 리소스 삭제" 계획 **철회**. 테스트 환경은 반복 개발·배포 검증용 재사용 환경으로 유지(Production: 기존 Pages 운영 배포+Railway+Supabase+SQLite / Preview·Staging: 별도 Railway 프로젝트+별도 Supabase+별도 SQLite 볼륨+기존 Pages Preview 별칭, 테스트 서버는 `main` 자동 배포 미연결). 장기 원칙은 [AGENTS.md](../../AGENTS.md) 6절, 절차·체크리스트·중지/재시작·자동화 계획은 [반복 배포 절차](../deployment-workflow.md). 아래 사전 점검 기록 중 "이번 검증 한정 예외", "Delete after test", "정리: 삭제"는 이 결정으로 대체된다.
 - **테스트 환경 구축 상태(2026-11-22 22:57 기준, 완료 아님)**:
   - 생성됨: Railway 프로젝트 `friends-table-mp-test`(서비스 `boardgame-server-test`, 소스 미연결, 빈 볼륨 `/data`, 도메인, 변수 8개), Supabase 프로젝트 `friends-table-mp-test`(001~006 적용·운영과 정책/함수 대조 완료)

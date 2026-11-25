@@ -37,3 +37,17 @@
 - 좌석 진단 로그 6종(`seat_hold`·`seat_released`·`auto_action`·`membership_takeover`·`rebuy`·`chip_audit`) 추가 승인. 계정·방은 해시 식별자만, 닉네임·방 코드·토큰·세션·카드 기록 금지. 기본 켜짐(`SEAT_EVENT_LOG=0`으로 끔), 방당 분당 120건 상한. 이유: 실사용 테스트에서 재접속·자동 행동·리바이·정산을 로그로 추적할 수단이 없었다.
 - 칩 총합 감사: 핸드 정산마다 "기대 총액(초기 칩 + 승인된 리바이 + 정상 조정)"과 실제 총액을 비교해 초과(중복 지급 등)·부족(정산 누락)을 `level:error`로 기록. 게임 진행은 막지 않는다(관측 전용).
 - 롤백: 이전 서버(`290cb8a`·`595cd676`)는 새 체크포인트를 읽고 동작하지만 새 상태(보류 리바이, 떠난 계정 잔액, 리바이 한도·요청, 관전자 구분)는 잃는다(테스트 DB 사본으로 확인). 따라서 롤백은 방 0개일 때 하거나 배포 전 백업으로 되돌린다.
+
+2026-11-25 23:21 KST 실사용 테스트 환경 고정(사용자 결정). 2026-11-22 "재사용 테스트 환경" 결정을 구체화한다:
+- 고정 환경(이 조합만 실사용 테스트에 사용):
+  - 웹: `https://fix-multiplayer-stability.friends-table-staging.pages.dev`(Cloudflare Pages `friends-table-staging`, Preview 브랜치 `fix-multiplayer-stability`)
+  - 서버: Railway 프로젝트 `friends-table-mp-test`, 서비스 `boardgame-server-test`(테스트 프로젝트 내부 환경 `production`)
+  - 인증·친구: 기존 테스트 Supabase(`lahnhofedtomephzmoty`) 유지
+  - 저장소: 기존 Railway Volume `boardgame-server-test-volume`(`/data`)과 `STATE_DB_PATH=/data/boardgame.sqlite`·`STATS_DB_PATH=/data/stats.sqlite` 유지
+- 데이터 보존: 친구들과 계속 쓰는 실사용 환경이므로 이후 배포에서도 기존 계정(테스트 Supabase)·친구 목록·경기 전적(`stats.sqlite`)·방 상태를 보존한다. 배포 전 방 0개 확인과 SQLite 백업(해시 2회 일치·`integrity_check`)을 매번 한다([좌석 관리](seat-management.md) 12.5).
+- 재사용: 신규 기능·새 브랜치도 실사용 테스트 배포는 이 환경에 한다(Preview 브랜치명·URL 그대로, 다른 Pages 브랜치·Railway 서비스·Supabase 프로젝트를 새로 만들지 않음).
+- 금지(사용자 명시 승인 없이): DB 초기화·SQLite 파일 덮어쓰기·삭제, Volume 삭제·교체, Supabase 프로젝트 변경, 테스트 URL(Preview 브랜치명) 변경, 경로 변수 변경. 복구가 필요해도 임의로 하지 않고 보고한다(복구 방식은 새 경로 + 경로 변수 전환, 12.5).
+- 호환성: 저장 형식(체크포인트 JSON·`stats.sqlite` 스키마)이나 Supabase 스키마를 바꾸는 변경은 기존 데이터를 그대로 읽는지 테스트 DB 사본으로 먼저 검증하고, 테스트 Supabase 마이그레이션 적용은 별도 승인.
+- 자동화 테스트 격리: 자동 테스트·E2E는 실제 테스트 사용자 데이터에 접근하지 않는다. 현재 서버 테스트는 임시/메모리 DB와 가짜 Supabase 주소, 브라우저 E2E(`scripts/test-seat-e2e.cjs`·`test-game-e2e.cjs`)는 `127.0.0.1` 서버·메모리 로비·테스트 토큰을 쓰고, 게임 E2E는 번들에 `supabase.co`·`railway.app`·`pages.dev`가 있으면 실패한다. 새 자동화도 이 격리를 따른다(테스트 서버·테스트 Supabase를 대상으로 하는 자동 스크립트 금지).
+- 배포 후 확인(스모크)은 기존 테스트 계정으로 최소 동작만 하고, 만든 방은 나가서 닫는다. 핸드를 진행하면 전적이 기록되므로 필요한 경우에만 한다.
+- 이유: 친구들과 지속적으로 실사용 테스트를 하므로 계정·친구·전적이 배포마다 사라지면 안 되고, 테스트 주소가 바뀌면 친구들이 따라올 수 없다. 운영 환경은 이 정책과 무관하게 기존대로 변경 금지.
