@@ -313,3 +313,53 @@ ChipLedgerEntry.extra?: number    방을 떠날 때 남은 pendingRebuy
 
 - stats DB(`stats.sqlite`) 스키마는 바뀌지 않았다. 방 상태 DB는 테이블 구조 변경 없이 JSON 한 행(`checkpoint.payload`)이라 마이그레이션이 필요 없다.
 - 운영 DB는 읽지도 바꾸지도 않았다. 실험 파일은 사용자 PC VM 임시 폴더의 사본이다.
+
+### 12.5 SQLite 백업·복구 리허설과 Railway 복구 절차 (2026-11-25 17:15 KST, 테스트 환경)
+
+리허설은 테스트 Railway(`friends-table-mp-test`/`boardgame-server-test`)의 `/data`를 **내려받기만** 하고, 복원·서버 실행은 사용자 PC VM의 격리된 임시 폴더에서 `3a28b09` 서버 코드로 했다. Railway DB 파일·변수·배포는 바꾸지 않았다.
+
+**저장 방식(코드 기준, `stateStore.ts`·`FriendStatsStore.ts`)**
+
+| DB | journal_mode | 잠금 | 서버 실행 중 다른 연결 |
+| --- | --- | --- | --- |
+| `boardgame.sqlite`(방 체크포인트) | DELETE | `locking_mode=EXCLUSIVE`(시작 시 `BEGIN EXCLUSIVE`로 획득, 종료까지 유지) | 읽기·백업 API·`VACUUM INTO` 모두 `database is locked` |
+| `stats.sqlite`(친구 전적) | DELETE(기본) | 일반 | 읽기·백업 API·`VACUUM INTO` 가능(`busy_timeout`) |
+
+- WAL을 쓰지 않으므로 `-wal`·`-shm` 파일은 생기지 않는다. 테스트 `/data`(17:00 무렵): `boardgame.sqlite`·`boardgame.sqlite-journal`·`stats.sqlite`·`lost+found/`만 있음. EXCLUSIVE 모드에서는 커밋 뒤에도 저널 파일이 남지만 헤더가 0으로 지워진다(받은 저널 첫 8바이트 `00…00` = 미완료 트랜잭션 없음).
+- 서버는 **시작할 때와 SIGTERM 종료 때 체크포인트를 다시 저장**한다(`index.ts` `shutdown` → `lobby.close()` → `persist()`). 방이 없으면 그 사이에는 쓰지 않는다(테스트 파일 수정 시각이 11-23 그대로).
+
+**백업 방법 검증(격리 VM, 실제 서버 저장소 코드로 DB를 연 상태에서 별도 프로세스로 시도)**
+
+- 체크포인트: 백업 API·`VACUUM INTO` 불가(잠금). **방 0개·파일 미변경 상태의 파일 복사**만 가능 → 두 번 복사 해시 동일·`integrity_check` ok 확인.
+- 전적: 백업 API(6페이지)·`VACUUM INTO` 모두 성공, 결과 `integrity_check` ok. 실행 중 백업이 필요하면 이 방법이 우선(Railway에서는 컨테이너 셸 명령 = 별도 승인).
+- 실행 중 파일을 **제자리에서 덮어쓰면 손상**: 서버 실행 중 체크포인트 파일 위에 다른 백업을 복사하고 종료하자 `database disk image is malformed`. → 복구는 항상 **새 경로에 두고 경로 변수를 바꾸는 방식**.
+
+**실제 테스트 DB 리허설 결과**
+
+| 단계 | 결과 |
+| --- | --- |
+| 백업 시점 | `server_stats` 16:38~16:40 `rooms 0 · connections 0`, 파일 11-23 이후 미변경 |
+| 내려받기(Files 브라우저 Download, 각 2회) | `boardgame.sqlite` 90,112 B `4e10c0a3e60faa95958062407e856dbb521af739eca5d7e445b3990a70410845`(2회 동일) · `stats.sqlite` 73,728 B `bf4bc263253653e19a5dd86e7d73678b98c449eaa6d7c81432a1efc33c664ef8`(2회 동일) · 사용자 PC 저장본 해시 사용자 확인 일치 |
+| 격리 복원(VM 임시 폴더로 복사, 원본 `.qa-web/db-rehearsal` 읽기만) | 전체 SHA-256 일치, `integrity_check` 둘 다 ok, journal_mode delete |
+| 내용(개수만) | 체크포인트 version 1·방 0(payload 48 B, 11-23 10:07 UTC 저장) · 전적 `recorded_hands` 58·`account_results` 176·계정 14 |
+| 새 서버(`3a28b09`)로 시작 | `NODE_ENV=production`, `STATE_DB_PATH`·`STATS_DB_PATH`=복원 사본 → `server_started durable:true`, `/health` ok, 복원 체크포인트에 배타 잠금 걸림·두 파일 모두 서버 프로세스가 엶·기본 경로 파일 생성 없음 → **두 경로 변수가 실제 적용됨**, error 로그 0 |
+| SIGTERM 종료 후 | 두 DB `integrity_check` ok, 체크포인트 다시 저장(방 0 유지), 전적 파일 **바이트 동일**(해시 불변)·개수 동일, 서버 코드 `FriendStatsStore.compare`로 읽기 정상 |
+| 경로 변수(테스트 Railway 읽기) | `STATE_DB_PATH=/data/boardgame.sqlite`, `STATS_DB_PATH=/data/stats.sqlite`(볼륨 Mount `/data`) |
+
+같은 스크립트로 진행 중 핸드가 있는 이전 형식 사본도 시작·종료 후 방·핸드 유지 확인(12.4와 같은 사본).
+
+**Railway 복구 절차(필요할 때만, 각 원격 단계 별도 승인)**
+
+1. 판단: 새 코드가 데이터를 망가뜨렸을 때만 복구한다. 단순 코드 롤백은 12.3의 7(이전 서버 재배포)로 충분하다(12.4: 이전 서버가 새 체크포인트를 읽음).
+2. 현재 상태 보존: `server_stats`로 방 수 확인. 방 0개면 현재 `/data` 파일도 내려받아 둔다(사고 분석용, 삭제 금지).
+3. 업로드: Files 브라우저 Upload로 백업을 **새 이름**으로 올린다. 예 `/data/restore-YYYYMMDD-HHMM/boardgame.sqlite`·`stats.sqlite`(폴더를 만들 수 없으면 `/data/boardgame.restore-YYYYMMDD-HHMM.sqlite` 형식). 기존 파일을 덮어쓰거나 지우지 않는다. 올린 파일을 다시 내려받아 SHA-256이 백업과 같은지 확인한다(Upload의 바이트 보존은 아직 미검증 → 첫 사용 때 확인).
+4. 경로 전환: 테스트 서비스 변수 `STATE_DB_PATH`·`STATS_DB_PATH`를 새 경로로 바꾼다. 재배포 소스가 분명하도록 `railway variable set … --skip-deploys`로 바꾼 뒤 같은 커밋 worktree에서 `railway up`으로 다시 띄우는 것을 기본으로 한다(대시보드 staged "Deploy"의 재빌드 소스는 미확인).
+5. 확인: `server_started durable:true`, `/health` 200, error 로그 0, Files 브라우저에서 새 경로 체크포인트 수정 시각이 시작 시각으로 바뀌고 옛 파일은 그대로인지.
+6. 되돌리기: 문제가 있으면 변수를 원래 `/data/boardgame.sqlite`·`/data/stats.sqlite`로 돌리고 같은 방식으로 재시작(옛 파일은 손대지 않았으므로 그대로 복귀).
+7. 정리: 옛 파일·복구 폴더 삭제는 안정화 뒤 별도 승인.
+
+**서비스 중단 범위**
+
+- 볼륨이 붙은 서비스는 배포가 겹치지 않으므로 재시작 동안 서버 전체가 멈춘다. 빌드는 이전 컨테이너가 돌아가는 동안 진행되고, 중단은 이전 컨테이너 종료 → 새 컨테이너 시작 → healthcheck 통과까지다. 시간은 아직 측정하지 않았다(첫 실제 배포에서 로그 시각으로 측정·기록).
+- 그동안 모든 WebSocket이 끊기고 클라이언트는 재연결한다. 방·핸드는 복원한 체크포인트 시점으로 돌아가며, 그 뒤 생긴 방·칩 변화와 그 뒤 기록된 전적 핸드는 사라진다(방 0개일 때 받은 백업이면 방 손실 없음). 재시작 직후 30초 복구 창 동안 자동 체크/폴드는 하지 않는다.
+- Supabase(계정·로그인)와 Cloudflare 웹은 영향 없음.

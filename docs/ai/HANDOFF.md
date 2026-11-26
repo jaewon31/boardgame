@@ -46,6 +46,13 @@
   - 다음 실사용 배포 전 필수: 체크리스트 1.7절 확인 → 방 0개 → SQLite 백업 2회 해시·`integrity_check` → 같은 프로젝트·서비스·Preview 브랜치에만 배포(좌석 관리 12.3·12.6 절차)
   - 자동화 격리 현황: 서버 테스트(임시/메모리 DB·가짜 Supabase 주소), 브라우저 E2E(127.0.0.1·메모리 로비·테스트 토큰, 게임 E2E는 원격 URL 포함 시 실패) — 실데이터 접근 없음
   - 참고: 18:00 배포 후 확인은 기존 테스트 계정(테스트A)으로 방 생성·착석·리바이 500·나가기만 했고 핸드는 진행하지 않아 전적 변화 없음
+- **SQLite 백업·복구 리허설 (2026-11-25 17:15 KST, Claude Code, `FT-OPS-009` DONE — Railway DB·변수·배포 변경 없음)**: 상세 [좌석 관리](../seat-management.md) 12.5
+  - 체크포인트 DB = DELETE + EXCLUSIVE 잠금 → 실행 중 백업 API·`VACUUM INTO` 불가, 방 0개일 때 파일 복사. 전적 DB = DELETE 일반 잠금 → 실행 중 백업 API·`VACUUM INTO` 가능. `/data`에 WAL/SHM 없음, 저널 헤더 0
+  - 테스트 `/data` 내려받기(16:4x, 방 0개, 각 2회 해시 동일): `boardgame.sqlite` `4e10c0a3…0845`·`stats.sqlite` `bf4bc263…4ef8`. 사용자가 `.qa-web/db-rehearsal/`(git 무시)로 복사·해시 확인. 저널 1회·중복 내려받기는 사용자 Downloads에 남음
+  - VM 격리 복원(`~/ft/rehearsal/restore-ePTp`) → 해시 일치·`integrity_check` ok → `3a28b09` 서버를 복원 경로로 시작(`durable:true`, 잠금·fd로 경로 변수 적용 확인) → SIGTERM → integrity ok, 전적 바이트 동일(58핸드·176결과·14계정), 체크포인트 방 0 유지
+  - 실행 중 제자리 덮어쓰기 = DB 손상 재현 → 복구는 새 경로 업로드 + `STATE_DB_PATH`·`STATS_DB_PATH` 전환 재시작으로 확정(decisions.md)
+  - 미검증: Railway Files Upload 바이트 보존, Railway에서 경로 전환 재시작, 재시작 중단 시간
+  - 다음: 사용자 승인 시 배포 계획(위 16:35 블록·좌석 관리 12.3) 실행. 배포 직전 다시 방 0개·백업 해시 확인
 - **좌석 관리 브랜치 배포 전 점검 (2026-11-25 14:30 KST, Claude Code, 전부 미커밋·미배포)**
   - 추가 구현: 좌석 진단 로그 6종·칩 총합 감사(`FT-OPS-008`, `apps/server/src/seatEvents.ts`). 리바이 정책(기본 한도 = 시작 칩, 횟수 제한 없음 등) 사용자 확정
   - 검증: 서버 277/277(VM Node 22·클라우드 Node 24), 모바일 72/72, tsc 0(VM), 좌석 E2E 29/29·4인 E2E 통과(클라우드). Windows Node 24.19.0 1차: 타입·서버 271·모바일 72·좌석 E2E 통과, 4인 E2E는 PC 절전으로 중단(종료 1) → **최종 코드로 Windows 재실행 필요**(`.qa-web/seat-check/run-windows-checks-ft007.cmd`를 PC 깨운 상태에서 실행)

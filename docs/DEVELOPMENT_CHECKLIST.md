@@ -186,6 +186,7 @@
 | [ ] | FT-OPS-005 | Codex의 AGENTS.md 실제 로딩 확인 | P2 | BLOCKED | Codex | 2026-11-25 이후 사용량 |
 | [ ] | FT-OPS-006 | npm 감사 권고 분류·호환 수정안 | P3 | BACKLOG | 미지정 | — |
 | [ ] | FT-OPS-007 | PROJECT_STATUS 현황표 갱신 | P3 | READY | 미지정 | — |
+| [x] | FT-OPS-009 | 테스트 SQLite 백업·복구 리허설(배포 전) | P1 | DONE | Claude Code | — |
 | [x] | FT-OPS-010 | 실사용 테스트 환경 고정·데이터 보존 정책 기록 | P1 | DONE | Claude Code | — |
 | [x] | FT-OPS-011 | Git push와 배포 분리(자동 배포 끄기·정책 기록) | P1 | DONE | 사용자(설정)·Claude Code(기록·확인) | — |
 | [ ] | FT-UI-001 | 액션 버튼–게임 로직 연결 분석·UI 변경 범위 결정 | P1 | BACKLOG | 미지정 | Phase 1 게이트 |
@@ -582,6 +583,12 @@
 - 완료 조건: 이벤트·필드·민감 정보 배제·상한·감사(정상·초과·부족·기준 설정)를 자동 테스트로 고정, 테스트 서버 로그에서 실제 출력 확인
 - 검증 결과(2026-11-25): `seat-events.test.ts` 6/6(연속 2회), 서버 전체 277/277(VM Node 22, 클라우드 Node 24), 좌석 E2E 29/29·4인 E2E 통과(클라우드, 로그 켠 최종 코드). 테스트 서버 로그 확인은 미실시(배포 전)
 
+### FT-OPS-009 · 테스트 SQLite 백업·복구 리허설 (배포 전)
+- 우선순위: P1 · 상태: DONE · 담당: Claude Code · 2026-11-25 사용자 요청(스테이징 배포 승인 전 선행)
+- 범위: journal_mode·WAL/SHM 확인, 실행 중 백업 방법(백업 API·`VACUUM INTO`) 검증, 테스트 Railway DB 백업 → 격리 복원 → `integrity_check` → `3a28b09` 서버로 시작·종료·데이터 보존, 경로 변수 적용, Railway 복구 절차·중단 범위
+- 결과: 전부 통과. 상세 [좌석 관리](seat-management.md) 12.5, [테스트](testing.md). Railway DB·변수·배포 변경 없음
+- 남은 일: Railway Files Upload 바이트 보존·경로 전환 재시작·중단 시간 측정은 실제 복구 또는 배포 때 확인
+
 ### FT-OPS-010 · 실사용 테스트 환경 고정·데이터 보존 정책
 - 우선순위: P1 · 상태: DONE(문서) · 담당: Claude Code · 2026-11-25 23:21 사용자 결정
 - 범위: 실사용 테스트 웹·Railway·Supabase·Volume 고정, 배포 시 계정·친구·전적 보존, 금지 작업, 자동화 테스트 격리. 정책 본문은 1.7절
@@ -609,6 +616,7 @@
 | --- | --- | --- | --- |
 | 2026-11-26 00:20 | Claude Code | FT-OPS-011 Git push와 배포 분리 정책·기준 배포 ID 기록(1.8절, decisions.md, HANDOFF). 설정 변경은 사용자, 재배포 없음 | 정책 문서 커밋 |
 | 2026-11-25 23:25 | Claude Code | FT-OPS-010 실사용 테스트 환경 고정 정책 기록(1.7절, decisions.md, HANDOFF). 환경 변경·재배포 없음 | 문서 미커밋 |
+| 2026-11-25 17:15 | Claude Code(클라우드 세션 + 사용자 PC VM) | FT-OPS-009 SQLite 백업·복구 리허설 통과(테스트 DB 사본, `3a28b09` 서버). 복구 = 새 경로 + 경로 변수 전환으로 확정. Railway·Cloudflare 변경 없음 | 미커밋 문서 |
 | 2026-11-25 14:30 | Claude Code(클라우드 세션 + 사용자 PC VM) | 배포 전 점검: FT-OPS-008(진단 로그·칩 감사) 구현, Windows Node 24 1차 결과 수집(4인 E2E 절전 중단), 이전↔새 SQLite 호환성 실험(테스트 DB 사본), 문서 갱신(room-lifecycle·web-device-checklist·PROJECT_STATUS·decisions·seat-management·testing·HANDOFF 추가), 실사용 체크리스트 추가. 서버 277·모바일 72·E2E 통과 | 미커밋 |
 | 2026-11-25 00:30 | Claude Code(클라우드 세션 + 사용자 PC VM) | 추가 정책 3건 구현: 끊김 2초 유예, 방 설정 리바이 최대 수량, 방장 본인 즉시 리바이(+요청 ID 중복 방지). 서버 271·모바일 72·tsc 0, Node 24 서버 271×3, 좌석 E2E 29/29·4인 E2E 통과. FT-TEST-012 등록. 문서 5종 갱신(HANDOFF는 추가만) | 미커밋 |
 | 2026-11-24 23:55 | Claude Code(클라우드 세션 + 사용자 PC VM) | FT-FEAT-005·006, FT-BUG-004 구현, FT-FEAT-003 보완(다른 기기 인계·이전 세션 무효화·RECONNECT_MS 하한·핸드 중 멤버십 만료 지연). 서버 255·모바일 68·tsc 0(Node 22), Node 24 서버 255×3·모바일 68, 좌석 E2E 28/28·4인 E2E 통과. 기존 assertion 5건 정책 변경 반영. HANDOFF는 미수정(다른 작업 미커밋 변경) | 미커밋 |

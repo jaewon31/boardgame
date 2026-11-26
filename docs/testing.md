@@ -62,6 +62,13 @@ node scripts/test-game-e2e.cjs
 
 `apps/server/test/seats.test.ts`(좌석 선택·승인), `seat-hold.test.ts`(3분 보존·칩 잔액), `reconnect-turn.test.ts`(다른 기기 인계·늦은 메시지 차단·끊긴 차례 즉시 처리·`RECONNECT_MS` 하한), `rebuy.test.ts`(리바이 C안·다음 핸드 참여), `grace-limit.test.ts`(연결 끊김 2초 유예·재접속 경쟁·재시작, 방 설정 리바이 최대 수량, 방장 본인 리바이, 요청 ID 중복 방지), `seat-events.test.ts`(좌석 진단 로그 6종·민감 정보 배제·상한·칩 총합 감사). 공용 하네스 `test/support/seat-harness.ts`는 `test/*.test.ts` 패턴에 포함되지 않는다. 서버 전체 명령(`node --test test/*.test.ts`)에 함께 실행된다.
 
+### SQLite 백업·복구 리허설 (2026-11-25 17:15 KST, 테스트 Railway DB 사본, 대상 코드 `3a28b09`)
+
+- 방법·절차·중단 범위 상세: [좌석 관리](seat-management.md) 12.5. Railway DB·변수·배포 변경 없음, 복원·서버 실행은 사용자 PC VM 격리 임시 폴더.
+- 통과: 백업 2회 해시 동일(`boardgame.sqlite` `4e10c0a3…0845`, `stats.sqlite` `bf4bc263…4ef8`) · 사용자 PC 저장본 해시 일치 · 격리 복원 전체 SHA-256 일치 · `integrity_check` ok(시작 전·종료 후) · `3a28b09` 서버가 `STATE_DB_PATH`·`STATS_DB_PATH`의 복원 사본을 실제로 엶(배타 잠금·fd 확인, 기본 경로 파일 없음) · `/health` ok · error 0 · 종료 후 전적 파일 바이트 동일(58핸드·176결과·14계정)·체크포인트 방 0 유지 · 서버 코드로 전적 읽기 정상
+- 백업 방법: 전적 DB는 실행 중 백업 API·`VACUUM INTO` 가능, 체크포인트 DB는 배타 잠금으로 불가 → 방 0개일 때 파일 복사. 실행 중 제자리 덮어쓰기는 DB 손상 재현(금지)
+- 미검증: Railway Files Upload의 바이트 보존, 경로 변수 변경 후 Railway 재시작 실제 동작, 재시작 중단 시간(첫 배포에서 측정)
+
 ### 배포 전 점검 결과 (2026-11-25 14:30 KST, `feature/seat-management` 미커밋)
 
 | 실행 | 환경 | 결과 |
