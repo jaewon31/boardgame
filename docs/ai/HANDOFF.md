@@ -10,6 +10,8 @@
 
 > **Git push와 배포 분리(2026-11-26 00:13 KST 사용자 결정)**: push는 어떤 브랜치든 배포를 일으키지 않는다. Cloudflare Pages Production·Preview 자동 배포 끔, Railway 운영 자동 배포 끔, 테스트 Railway는 CLI 수동. 배포는 승인 후 `wrangler pages deploy … --branch <고정 브랜치>`·`railway up`(ID 명시)만. 상세 [체크리스트](../DEVELOPMENT_CHECKLIST.md) 1.8절.
 
+> **현재 작업 브랜치(2026-11-25 00:30 KST 추가, Claude Code)**: `feature/seat-management` — `fix/multiplayer-stability` `e230511`에서 분기, ~~커밋 없음(모든 변경 미커밋)~~ → 2026-11-25 `3a28b09` 커밋, 2026-11-26 문서 커밋과 함께 `origin/feature/seat-management`로 push. 아래 표는 2026-11-22 기준 기록으로 그대로 둔다. 좌석·재접속·리바이 작업의 현재 상태는 2절 맨 위 블록과 [좌석 관리](../seat-management.md), [체크리스트](../DEVELOPMENT_CHECKLIST.md) 7A절.
+
 | 항목 | 값 |
 | --- | --- |
 | 작업본 | `C:\Users\jwseo\Desktop\boardgame` |
@@ -44,6 +46,19 @@
   - 다음 실사용 배포 전 필수: 체크리스트 1.7절 확인 → 방 0개 → SQLite 백업 2회 해시·`integrity_check` → 같은 프로젝트·서비스·Preview 브랜치에만 배포(좌석 관리 12.3·12.6 절차)
   - 자동화 격리 현황: 서버 테스트(임시/메모리 DB·가짜 Supabase 주소), 브라우저 E2E(127.0.0.1·메모리 로비·테스트 토큰, 게임 E2E는 원격 URL 포함 시 실패) — 실데이터 접근 없음
   - 참고: 18:00 배포 후 확인은 기존 테스트 계정(테스트A)으로 방 생성·착석·리바이 500·나가기만 했고 핸드는 진행하지 않아 전적 변화 없음
+- **좌석 관리 브랜치 배포 전 점검 (2026-11-25 14:30 KST, Claude Code, 전부 미커밋·미배포)**
+  - 추가 구현: 좌석 진단 로그 6종·칩 총합 감사(`FT-OPS-008`, `apps/server/src/seatEvents.ts`). 리바이 정책(기본 한도 = 시작 칩, 횟수 제한 없음 등) 사용자 확정
+  - 검증: 서버 277/277(VM Node 22·클라우드 Node 24), 모바일 72/72, tsc 0(VM), 좌석 E2E 29/29·4인 E2E 통과(클라우드). Windows Node 24.19.0 1차: 타입·서버 271·모바일 72·좌석 E2E 통과, 4인 E2E는 PC 절전으로 중단(종료 1) → **최종 코드로 Windows 재실행 필요**(`.qa-web/seat-check/run-windows-checks-ft007.cmd`를 PC 깨운 상태에서 실행)
+  - SQLite: 이전→새 정상, 새→이전(롤백) 동작하나 새 상태 손실 → 롤백은 방 0개일 때 또는 백업 복원([좌석 관리](../seat-management.md) 12.3·12.4)
+  - **커밋 대상(사용자 승인 대기)**: `apps/mobile/{App.tsx, src/hooks/useRoom.ts, src/screens/GameScreen.tsx, src/screens/LobbyScreen.tsx, src/services/RoomClient.ts, src/components/{RoomSettingsEditor,SeatPanel,RebuyPanel}.tsx, test/{seat-panel,rebuy-panel}.test.cjs, test/browser/game-e2e-fixture.jsx}`, `apps/server/src/{config,index,lobby,seating,rebuy,seatEvents}.ts`, `apps/server/test/{deployment,game-timing,lobby,multiplayer,seats,seat-hold,reconnect-turn,rebuy,grace-limit,seat-events}.test.ts`, `apps/server/test/support/seat-harness.ts`, `packages/shared/src/{index,settings}.ts`, `scripts/{test-game-e2e,test-seat-e2e}.cjs`, `docs/{DEVELOPMENT_CHECKLIST,testing,decisions,PROJECT_STATUS,room-lifecycle,web-device-checklist,seat-management,seat-playtest-checklist}.md`
+  - **커밋 제외**: `docs/ai/HANDOFF.md`(11-22~23 다른 작업의 미커밋 기록과 섞여 있음 — 별도 커밋 여부는 사용자 결정), `supabase/migrations/007_friend_stats_permission.sql`(친구 전적 RPC, 좌석과 무관), git 무시 파일(`.qa-web/**` 검증 묶음·결과, `.env*`, SQLite)
+- **좌석 관리 브랜치 `feature/seat-management` (2026-11-25 00:30 KST, Claude Code, 전부 미커밋)**
+  - 구현 완료·자동 검증 통과(실기기·Preview 미검증): 6좌석 선택·방장 승인(FT-FEAT-001·002), 3분 좌석 보존·같은 계정 다른 기기 복구·이전 세션 무효화·`RECONNECT_MS` < 180000 → 180000(003), 좌석 해제 후 칩 잔액 보존·일어서기(004), 리바이 C안·방 설정 리바이 최대 수량·방장 본인 즉시 리바이·요청 ID 중복 방지(005), 다음 핸드 참여(006), 연결 끊김 2초 유예 후 체크/폴드(FT-BUG-004)
+  - 정책 확정·미구현: 없음. 확인 필요(기본값 구현): `maxRebuy` 미설정 방 한도 = 시작 칩, 리바이 횟수 제한 없음
+  - 검증: 서버 271/271(Node 22 VM 1회, Node 24 클라우드 3회), 모바일 72/72, tsc 오류 0, 좌석 브라우저 E2E 29/29, 기존 4인 E2E 통과. 명령·범위는 [testing](../testing.md) "좌석·재접속·리바이 검증 결과"
+  - 미검증·다음 작업: Windows Node 24(`.qa-web/seat-check/run-windows-checks.cmd`), 실기기·Preview(`FT-TEST-012`, 테스트 배포는 별도 승인), 실제 3분 대기, 딜러 순환 전용 테스트, 커밋(사용자 승인 필요)
+  - 주의: ① 테스트 하네스 `apps/server/test/support/seat-harness.ts`는 `offlineGraceMs: 20`이 기본(실제 기본 2000은 `grace-limit.test.ts`가 따로 검증) ② 이 브랜치가 저장한 체크포인트를 이전 서버가 읽으면 미착석 멤버·보류 리바이·리바이 한도가 사라지거나 잘못 해석될 수 있음 → 롤백·배포는 방 0개 상태에서 ③ 구버전 네이티브 앱은 새 서버에서 좌석 UI가 없어 착석 불가(웹은 함께 배포) ④ 다른 작업의 미커밋 변경(이 문서의 11-22~23 기록, `GameScreen.tsx`, `deployment.test.ts`, `game-timing.test.ts`, `scripts/test-game-e2e.cjs`, `supabase/migrations/007…`)은 보존 중 — 덮어쓰지 말 것 ⑤ 검증용 묶음·임시 파일은 git 무시 폴더 `.qa-web/seat-check/`
+
 - **운영 방침 변경(2026-11-22 사용자 결정, 문서 반영만)**: "멀티플레이 검증 후 테스트 서버·관련 리소스 삭제" 계획 **철회**. 테스트 환경은 반복 개발·배포 검증용 재사용 환경으로 유지(Production: 기존 Pages 운영 배포+Railway+Supabase+SQLite / Preview·Staging: 별도 Railway 프로젝트+별도 Supabase+별도 SQLite 볼륨+기존 Pages Preview 별칭, 테스트 서버는 `main` 자동 배포 미연결). 장기 원칙은 [AGENTS.md](../../AGENTS.md) 6절, 절차·체크리스트·중지/재시작·자동화 계획은 [반복 배포 절차](../deployment-workflow.md). 아래 사전 점검 기록 중 "이번 검증 한정 예외", "Delete after test", "정리: 삭제"는 이 결정으로 대체된다.
 - **테스트 환경 구축 상태(2026-11-22 22:57 기준, 완료 아님)**:
   - 생성됨: Railway 프로젝트 `friends-table-mp-test`(서비스 `boardgame-server-test`, 소스 미연결, 빈 볼륨 `/data`, 도메인, 변수 8개), Supabase 프로젝트 `friends-table-mp-test`(001~007 적용·운영과 정책/함수 대조 완료)
@@ -208,6 +223,23 @@
 - 검수 요청 사항 (상대 AI가 확인할 지점):
 - 승인 대기:
 ```
+
+### 2026-11-25 14:30 KST · Claude Code(클라우드 세션 + 사용자 PC VM) · 점검(테스트 배포 사전 점검) + 구현(FT-OPS-008)
+- 브랜치/HEAD/dirty: `feature/seat-management` / `e230511` / dirty(좌석 작업 전체 + 다른 작업의 이 문서 기록·`007`)
+- 한 일 (변경 파일): 신규 `apps/server/src/seatEvents.ts`·`apps/server/test/seat-events.test.ts`·`docs/seat-playtest-checklist.md`, 수정 `apps/server/src/{lobby,config,index}.ts`, 문서 `room-lifecycle`·`web-device-checklist`·`PROJECT_STATUS`·`decisions`·`seat-management`(12절)·`DEVELOPMENT_CHECKLIST`·`testing`·본 문서(추가만). Windows 확인용 `.qa-web/seat-check/run-windows-checks-ft007.cmd`(사용자 검토 후 실행 승인)
+- 실행한 테스트와 결과: 서버 277/277(VM·클라우드), 모바일 72/72, tsc 0, 좌석 E2E 29/29, 4인 E2E 통과(클라우드). Windows 1차: 타입 0·서버 271·모바일 72·좌석 E2E 29/29, 4인 E2E 종료 1(절전 중단). SQLite 호환성 실험(테스트 DB 사본, 이전 서버 `290cb8a`·`595cd676`을 `git archive`로 꺼내 실행)
+- 미실행·실패·미검증: Windows 최종 코드 재실행(PC 잠김), 테스트 서버 로그 실제 출력, 실기기·Preview(FT-TEST-012), 실제 3분·30초 대기
+- 검수 요청 사항: 칩 감사의 기대 총액 갱신 지점(`expectChips`·`rebaseChips`·`auditChips`)이 모든 정상 칩 이동을 포함하는지, 로그에 민감 정보가 없는지(`seat-events.test.ts` 2번), 커밋 대상·제외 목록
+- 승인 대기: 커밋(대상 목록은 2절), 테스트 Railway·Preview 배포, `HANDOFF.md`·`007` 처리
+
+### 2026-11-25 00:30 KST · Claude Code(클라우드 세션 + 사용자 PC VM) · 구현(좌석 관리 1~6단계 + 추가 정책)
+- 브랜치/HEAD/dirty: `feature/seat-management` / `e230511`(분기점, 이 브랜치 커밋 없음) / dirty(코드·테스트·문서, 다른 작업의 미커밋 변경 포함·보존)
+- 한 일 (변경 파일): 서버 `apps/server/src/{lobby.ts,seating.ts,rebuy.ts,config.ts}`, 공통 `packages/shared/src/{index.ts,settings.ts}`, 웹 `apps/mobile/src/components/{SeatPanel.tsx,RebuyPanel.tsx,RoomSettingsEditor.tsx}`·`services/RoomClient.ts`·`hooks/useRoom.ts`·`screens/LobbyScreen.tsx`·`App.tsx`, 테스트 `apps/server/test/{seats,seat-hold,reconnect-turn,rebuy,grace-limit}.test.ts`·`support/seat-harness.ts`·기존 `lobby/multiplayer` 일부, `apps/mobile/test/{seat-panel,rebuy-panel}.test.cjs`·`browser/game-e2e-fixture.jsx`, `scripts/test-seat-e2e.cjs`, 문서 `docs/{seat-management,decisions,DEVELOPMENT_CHECKLIST,testing}.md`·본 문서(추가만)
+- 실행한 테스트와 결과: 서버 271/271(VM Node 22), 271/271×3(클라우드 Node 24), 모바일 72/72, tsc 3개 오류 0, `test-seat-e2e.cjs` 29/29, `test-game-e2e.cjs` 통과
+- 미실행·실패·미검증: Windows Node 24, 실기기·모바일·네이티브, Preview/테스트 서버 배포, 실제 3분·30초 대기, 딜러 순환 전용 테스트, 설정 편집기 브라우저 조작
+- 검수 요청 사항: `lobby.ts`의 `takeOver`(다른 기기 인계)와 늦은 메시지 차단 경로, `settledHandId`(정산 후 잔액 덮어쓰기 방지), `autoActOffline`/`scheduleOfflineGrace`, `chipRevision`과 장부 호환, 기존 테스트 assertion 변경 9건(3회 작업 2+5+2, 일부는 같은 테스트의 재변경. 목록은 체크리스트 FT-FEAT-003·FT-FEAT-005 블록)이 정책 변경에 맞는지
+- 승인 대기: 커밋, 테스트 Railway·Cloudflare Preview 배포(FT-TEST-012), 확인 필요 2건(`maxRebuy` 기본값, 리바이 횟수 제한)
+- 비고: 5절 "최근 3개만 유지" 규칙에 따르면 가장 오래된 기록을 지워야 하나, 다른 작업의 미커밋 내용이므로 지우지 않음
 
 ### 2026-11-22 22:57 KST · Claude Code(클라우드 세션) · 문서(테스트 환경 재사용 정책)
 - 브랜치/HEAD/dirty: `fix/multiplayer-stability` / `290cb8a` / dirty(Markdown만, 기존 본 문서 미커밋 변경 보존)
