@@ -25,6 +25,18 @@
 
 ## 2. 현재 상태와 진행 중 작업
 
+- **배포 환경 정리 마무리 (2026-11-26 11:40 KST, Claude Code — 재배포·DB·변수 변경 없음)**
+  - Windows 최종 자동화 테스트(11:30, Node 24.19.0): 타입·서버 277/277·모바일 72/72·좌석 E2E 29/29·4인 E2E 7핸드 모두 통과([테스트](../testing.md))
+  - Cloudflare 자동 배포 끄기 = **간접 검증 상태**(대시보드 미확인), Railway 운영 = 직접 확인. Pages `ce80ecf0`(Idle) 기록 삭제 안 함
+  - 실기기 플레이테스트: `FT-TEST-012` → `FT-TEST-013`(최대 인원 확장 `FT-FEAT-007`·UI 개선 후 통합 테스트)으로 이관, `FT-FEAT-007` 등록(목표 인원 확인 필요)
+  - 미커밋 문서는 목적별로 커밋·push(작업 이력 참조). `supabase/migrations/007_friend_stats_permission.sql`은 미추적 그대로(커밋하지 않음)
+  - 배포 worktree `C:\Users\jwseo\Desktop\boardgame-seat-3a28b09`: 정리 전 확인 — HEAD 정확히 `3a28b09`(detached, reflog에 다른 커밋 없음), 추적·미추적 변경 0, 무시 대상 생성물만(`node_modules/`·`apps/server/node_modules/`·`apps/mobile/dist-web/`·`apps/mobile/.expo/`). `git worktree remove`(force 없음) exit 0 → git worktree 목록에서 제거됨. 단 폴더가 남아 있음(Windows가 생성물 일부를 지우지 못한 것으로 보임, 보존할 내용 없음) → 사용자가 폴더를 직접 지워도 됨. `railway link` 기록(사용자 Railway CLI 설정)은 그대로. 이전 worktree `boardgame-mp-test`(`290cb8a`)는 손대지 않음
+- **push·배포 분리 검증 완료 (2026-11-26 11:15 KST, Claude Code, `FT-OPS-011` DONE — 배포·설정 변경 없음)**
+  - 커밋: `26f90fa`(실사용 환경 고정 정책), `48fa536`(push·배포 분리 정책). `git push -u origin feature/seat-management` 성공, 원격 `48fa536`(신규 브랜치, force 없음)
+  - 배포 ID 무변화: Railway 운영 `31138bb5`(`e230511`)·테스트 `e6a6ab8b`(`3a28b09`), Pages 운영 `8c79e8b3`·실사용 Preview `e35d3e5e`
+  - Pages 목록에 `ce80ecf0`(`feature/seat-management`, `48fa536`, Idle) 기록이 생겼지만 "Deployment Not Found"(404)·별칭 없음·GitHub 체크 실행 0건 → 브랜치 제어로 빌드 건너뜀. 정리(삭제) 필요 없음, 삭제는 별도 승인
+  - 미커밋 유지: `docs/{DEVELOPMENT_CHECKLIST,decisions,seat-management,testing}.md`, `docs/ai/HANDOFF.md`(11-22~25 기록), `supabase/migrations/007_friend_stats_permission.sql`(미추적)
+  - 남은 일: FT-TEST-012 실기기 플레이테스트, Windows 최종 코드 테스트 재실행, 배포 worktree `boardgame-seat-3a28b09` 정리(승인), 미커밋 문서 커밋 여부 결정
 - **Git push와 배포 분리 적용 (2026-11-26 00:20 KST, Claude Code, `FT-OPS-011` — 재배포·DB·변수 변경 없음)**
   - 사용자가 Cloudflare Pages(Production 자동 배포 끔·Preview None)와 Railway 운영(자동 배포 끔)을 변경. Railway 운영 화면 "Auto deploy is disabled" 확인, Cloudflare는 대시보드 로그인 실패로 직접 확인 못 함(사용자 보고)
   - 기준 배포 ID:

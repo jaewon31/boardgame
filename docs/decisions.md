@@ -72,3 +72,7 @@
   | Railway 실사용 테스트 `friends-table-mp-test`/`boardgame-server-test` | `e6a6ab8b-b39f-462e-aea1-cee2f46befbc` | `3a28b09` | CLI `railway up`(2026-11-25 17:55) |
   | Pages 운영 `friends-table-staging.pages.dev`(브랜치 `deploy/web-staging`) | `8c79e8b3-8dd9-4e96-ac1d-3d282d3ab5fb` | `e230511` | 2026-11-23 |
   | Pages 실사용 Preview `fix-multiplayer-stability` | `e35d3e5e-34f0-4013-ab45-a76977942beb` | `3a28b09` | `wrangler pages deploy --branch fix-multiplayer-stability`(2026-11-25 17:59) |
+
+2026-11-26 11:40 KST 배포 환경 정리 마무리(사용자 결정):
+- Cloudflare Pages 자동 배포 끄기는 **간접 검증 상태**로 기록한다(대시보드 설정 화면 미확인, push 후 배포 목록·GitHub 체크 실행·URL 응답으로 판단). Railway 운영 자동 배포 끄기는 설정 화면으로 직접 확인. Pages 목록의 `ce80ecf0`(Idle) 기록은 삭제하지 않는다.
+- 실기기 플레이테스트 이관: 좌석·재접속·리바이 실기기 검증(`FT-TEST-012`)은 최대 인원 확장(`FT-FEAT-007`)과 UI 개선 이후 통합 테스트(`FT-TEST-013`)에서 한 번에 한다. 이유: 좌석 배치·인원이 바뀌면 같은 실기기 테스트를 다시 해야 하므로 한 번에 묶는다.

@@ -101,6 +101,7 @@
 - 배포 전후 기록: 배포 전 현재 배포 ID를 확인하고, 배포 후 새 ID·커밋을 HANDOFF와 체크리스트에 남긴다. 자동 배포 설정을 다시 켜는 것은 별도 승인.
 - 이유: 개발 브랜치를 자유롭게 push(백업·리뷰)하면서도 운영과 친구들이 쓰는 실사용 테스트 환경이 의도치 않게 바뀌지 않게 한다. 특히 Git 브랜치 `fix/multiplayer-stability`의 자동 Preview 빌드는 실사용 테스트 URL과 같은 별칭(`fix-multiplayer-stability`)을 써서 덮어쓸 수 있었다(2026-11-23 `563519fd` 사례).
 - 확인 한계: Cloudflare 대시보드는 에이전트 브라우저 로그인 실패로 직접 읽지 못했다. 설정은 사용자 보고 기준이며, 2026-11-26 `feature/seat-management` push 뒤 Pages 배포 목록에 새 배포가 없는지로 간접 확인한다.
+- 검증 상태(2026-11-26 11:40): Cloudflare 자동 배포 끄기는 **간접 검증 상태**(`FT-OPS-011` 검증 결과 참조). Railway 운영은 설정 화면으로 직접 확인
 - 기준 배포 ID(정책 적용 시점):
 
   | 대상 | 배포 ID | 코드 | 방식 |
@@ -178,7 +179,8 @@
 | [ ] | FT-BUG-006 | 재접속 교체 경쟁(4001) | P0 | IMPLEMENTED | — | — |
 | [ ] | FT-BUG-007 | 앱 화면 클릭 중 OS 클립보드 쓰기 경고 | P2 | BACKLOG | 미지정 | 재현 |
 | [ ] | FT-TEST-011 | 친구 전적 비교 실제 JWT E2E | P2 | BACKLOG | 미지정 | FT-OPS-002 |
-| [ ] | FT-TEST-012 | 좌석·재접속·리바이(FT-FEAT-001~006, FT-BUG-004) 실기기·Preview 검증 | P1 | BACKLOG | 사용자 | 커밋·테스트 배포 별도 승인 |
+| [ ] | FT-TEST-012 | 좌석·재접속·리바이(FT-FEAT-001~006, FT-BUG-004) 실기기·Preview 검증 | P1 | BLOCKED | 사용자 | FT-TEST-013으로 이관(2026-11-26 사용자 결정: 최대 인원 확장·UI 개선 후 통합 테스트) |
+| [ ] | FT-TEST-013 | 통합 실기기 플레이테스트(좌석·재접속·리바이 + 최대 인원 확장 + UI 개선) | P1 | BACKLOG | 사용자 | FT-FEAT-007, FT-UI-001~006 |
 | [ ] | FT-OPS-001 | 테스트 환경 중지·재시작 데이터 보존 검증 | P2 | BACKLOG | 미지정 | — |
 | [ ] | FT-OPS-002 | 007 마이그레이션 정식 등록·draft 경로 정리 | P2 | BLOCKED | 미지정 | 사용자 승인 |
 | [ ] | FT-OPS-003 | GitHub 원격 백업 push | P2 | BLOCKED | 사용자 | 사용자 결정(보류) |
@@ -233,6 +235,7 @@
 | [ ] | FT-FEAT-004 | 좌석 해제 후 칩 잔액 보존·자발적 일어서기 | P1 | IMPLEMENTED | Claude Code | FT-FEAT-002 |
 | [ ] | FT-FEAT-005 | 리바이 C안(희망 수량 요청 → 방장 승인, 기존 칩 + 승인 칩) | P1 | IMPLEMENTED | Claude Code | FT-FEAT-004 |
 | [ ] | FT-FEAT-006 | 게임 중 착석 시 다음 핸드부터 참여(자리 해제·재착석 포함) | P1 | IMPLEMENTED | Claude Code | FT-FEAT-004 |
+| [ ] | FT-FEAT-007 | 최대 인원 확장(**확인 필요**: 목표 인원·좌석 배치) | P1 | BACKLOG | 미지정 | 요구사항 확정 |
 
 ---
 
@@ -599,7 +602,10 @@
 - 우선순위: P1 · 상태: DONE · 담당: 사용자(Cloudflare·Railway 설정 변경) / Claude Code(점검·기록·push 후 확인) · 2026-11-26 00:13 사용자 결정
 - 범위: Cloudflare Pages Production·Preview 자동 배포 끄기, Railway 운영 자동 배포 끄기, 테스트 Railway CLI 수동 유지, 정책·기준 배포 ID 기록(1.8절)
 - 확인: Railway 운영 설정 "Auto deploy is disabled"(00:13). Cloudflare 설정은 사용자 보고 기준(대시보드 직접 확인 불가), `feature/seat-management` push 후 Pages·Railway 배포 목록 무변화로 확인 — 결과는 HANDOFF·작업 이력
-- 후속: 운영 반영 절차(Railway 수동 배포 방법) 문서화는 첫 운영 배포 승인 때
+- 검증 결과(2026-11-26 11:15, 완료): 커밋 `48fa536` push 성공(`origin/feature/seat-management` 신규, `3a28b09`·`26f90fa`·`48fa536`). Railway 운영 `31138bb5`·테스트 `e6a6ab8b` 그대로, 새 배포 없음. Pages 운영 `8c79e8b3`·실사용 Preview `e35d3e5e` 그대로(운영 번들 `index-4aff6450…`, 실사용 `index-444bd7d0…` 응답 동일). Pages 목록에 `feature/seat-management`용 기록 `ce80ecf0`(상태 Idle)이 생겼으나 URL은 "Deployment Not Found"(404), 별칭 없음, GitHub 커밋에 Cloudflare 체크 실행 0건(자동 배포 전 `e230511`은 Cloudflare Pages·Railway 체크 있음) → 브랜치 제어로 빌드가 건너뛰어진 기록으로 판단. 미커밋 변경 보존
+- 후속: 운영 반영 절차(Railway 수동 배포 방법) 문서화는 첫 운영 배포 승인 때. Cloudflare 대시보드 설정 화면은 에이전트가 직접 보지 못함(필요 시 사용자 확인)
+- 검증 상태(2026-11-26 11:40 명시): Railway 운영 자동 배포 끔 = **직접 확인**(설정 화면). Cloudflare Pages Production·Preview 자동 배포 끔 = **간접 검증**(대시보드 설정 화면 미확인; push 후 배포 목록·체크 실행·URL 응답으로 판단). 대시보드 직접 확인 전까지 간접 검증 상태로 둔다
+- 배포 worktree 정리(2026-11-26 11:33): `boardgame-seat-3a28b09` — HEAD `3a28b09`·변경 0 확인 후 `git worktree remove`(force 없음) 성공, 남은 폴더(생성물만)는 사용자가 직접 삭제 가능
 
 ### FT-TEST-012 · 좌석·재접속·리바이 실기기·Preview 검증
 - 우선순위: P1 · 상태: READY(2026-11-25 18:00 테스트 배포 완료: Railway `e6a6ab8b`, Preview `e35d3e5e`, 커밋 `3a28b09`) · 담당: 사용자(실기기) / Claude Code·Codex(배포 준비) · 이전 선행: 테스트 배포 별도 승인(AGENTS.md 6절)
@@ -607,7 +613,18 @@
 - 범위: 테스트 Railway·Cloudflare Preview에서 실제 기기 2대 이상으로 ① 좌석 선택·승인 ② 연결 끊김 2초 유예와 자동 체크/폴드(새로고침·앱 백그라운드·네트워크 끊김) ③ 3분 이내 같은 기기·다른 기기 복구 ④ 3분 경과 후 핸드 종료 뒤 해제 ⑤ 일어서기·재착석 ⑥ 리바이 요청·승인·거절, 방장 즉시 리바이, 방 설정 리바이 최대 수량 ⑦ 모바일 키보드가 칩 추가 입력창·방 설정 입력을 가리지 않는지
 - 완료 조건: 위 항목 실기기 확인 기록, 오류 로그 0, 칩 총합 이상 없음
 - 검증 결과: 1인 기본 동작만 Preview에서 확인(방 생성·착석·한도 초과 차단·방장 리바이·일어나기, 서버 로그 error 0 — [테스트](testing.md)). 2인 이상·실기기 항목 미착수
+- 이관(2026-11-26 11:40, 사용자 결정): 실기기 플레이테스트는 최대 인원 확장(`FT-FEAT-007`)과 UI 개선(`FT-UI-001~006`) 이후 통합 테스트 `FT-TEST-013`에서 함께 한다. 상태 `BLOCKED`(사유: 이관). 위 범위·체크리스트([좌석 실사용 테스트](seat-playtest-checklist.md))는 FT-TEST-013의 일부로 유지. 그동안 실사용 테스트 환경은 [1.7절](#17-실사용-테스트-환경-고정-2026-11-25-2321-사용자-결정-근거-decisionsmd) 정책대로 친구들과 자유 사용 가능
+
+
+### FT-TEST-013 · 통합 실기기 플레이테스트 (최대 인원 확장·UI 개선 후)
+- 우선순위: P1 · 상태: BACKLOG · 담당: 사용자(실기기) / Claude Code·Codex(배포 준비) · 선행: `FT-FEAT-007`, `FT-UI-001~006`, 실사용 테스트 배포 별도 승인
+- 범위: `FT-TEST-012`의 좌석·재접속·리바이 항목([좌석 실사용 테스트](seat-playtest-checklist.md)) + 확장된 최대 인원 + 개선된 UI를 실기기 여러 대로 한 번에 검증. 환경은 1.7절 고정 실사용 테스트 환경
+- 완료 조건: 체크리스트 항목 실기기 기록, 서버 error 0, 칩 감사 이상 없음, 계정·친구·전적 보존 확인
 - 검증 결과: 미착수
+
+### FT-FEAT-007 · 최대 인원 확장
+- 우선순위: P1 · 상태: BACKLOG(**확인 필요**) · 담당: 미지정 · 2026-11-26 사용자 언급(통합 테스트 선행 조건)
+- 확인 필요: 목표 최대 인원(현재 6인 고정 좌석), 테이블 배치, 저장 형식·좌석 번호 호환(실사용 데이터 보존 — 1.7절)
 
 ---
 
@@ -615,6 +632,8 @@
 
 | 일시 (KST) | 작업자 | 내용 | 커밋 |
 | --- | --- | --- | --- |
+| 2026-11-26 11:40 | Claude Code(클라우드 세션 + 사용자 PC Windows·VM) | 배포 환경 정리 마무리: Windows 최종 자동화 테스트, 미커밋 문서 목적별 커밋·push, Cloudflare 간접 검증 명시, FT-TEST-012→FT-TEST-013 이관(FT-FEAT-007 등록), 배포 worktree 정리 | 마무리 문서 커밋 |
+| 2026-11-26 11:15 | Claude Code | FT-OPS-011 검증 완료: `48fa536` push, Railway·Pages 운영/실사용 배포 ID 무변화, `feature/seat-management` 자동 빌드 건너뜀(`ce80ecf0` Idle·404·체크 없음) | `48fa536`(push), 기록 미커밋 |
 | 2026-11-26 00:20 | Claude Code | FT-OPS-011 Git push와 배포 분리 정책·기준 배포 ID 기록(1.8절, decisions.md, HANDOFF). 설정 변경은 사용자, 재배포 없음 | 정책 문서 커밋 |
 | 2026-11-25 23:25 | Claude Code | FT-OPS-010 실사용 테스트 환경 고정 정책 기록(1.7절, decisions.md, HANDOFF). 환경 변경·재배포 없음 | 문서 미커밋 |
 | 2026-11-25 18:00 | Claude Code(클라우드 세션 + 사용자 PC Windows·VM) | `3a28b09` 테스트 환경 배포(사용자 승인): Railway `e6a6ab8b`, Cloudflare Preview `e35d3e5e`. 서버·Origin·인증·웹 결과물·Preview 기본 동작 확인, FT-TEST-012 READY | `3a28b09`(배포), 문서 미커밋 |

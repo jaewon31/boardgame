@@ -62,6 +62,14 @@ node scripts/test-game-e2e.cjs
 
 `apps/server/test/seats.test.ts`(좌석 선택·승인), `seat-hold.test.ts`(3분 보존·칩 잔액), `reconnect-turn.test.ts`(다른 기기 인계·늦은 메시지 차단·끊긴 차례 즉시 처리·`RECONNECT_MS` 하한), `rebuy.test.ts`(리바이 C안·다음 핸드 참여), `grace-limit.test.ts`(연결 끊김 2초 유예·재접속 경쟁·재시작, 방 설정 리바이 최대 수량, 방장 본인 리바이, 요청 ID 중복 방지), `seat-events.test.ts`(좌석 진단 로그 6종·민감 정보 배제·상한·칩 총합 감사). 공용 하네스 `test/support/seat-harness.ts`는 `test/*.test.ts` 패턴에 포함되지 않는다. 서버 전체 명령(`node --test test/*.test.ts`)에 함께 실행된다.
 
+### Windows 최종 자동화 테스트 (2026-11-26 11:30~11:31 KST, 사용자 PC Windows·Node 24.19.0·npm 12.2.1, `feature/seat-management` `48fa536` = 코드 `3a28b09`)
+
+- 실행기: `.qa-web/seat-check/run-windows-checks-final.cmd`(검토·승인된 `run-windows-checks-ft007.cmd`와 같은 명령, 결과 파일 이름만 다름), 결과 `windows-results-final-20261126.txt`(git 무시)
+- 결과: 타입 검사 통과(exit 0) · 서버 277/277 · 모바일 72/72 · 좌석 브라우저 E2E 29/29 PASS · 4인 게임 브라우저 E2E 7핸드 통과(콘솔 오류 0·페이지 오류 0, 사운드 ON 상태→공개 p50 5.1 ms·max 9.4 ms). 모든 단계 exit 0
+- 경고: Node `MODULE_TYPELESS_PACKAGE_JSON` 안내(모바일 테스트가 `.ts`를 직접 불러올 때, 실패 아님)만
+- 11-25 1차 Windows 실행에서 PC 절전으로 중단됐던 4인 E2E를 포함해 최종 코드 전 단계 통과 → "Windows 최종 코드 재실행 필요" 항목 해소
+- 실기기 검증(`FT-TEST-012`)은 2026-11-26 사용자 결정으로 최대 인원 확장·UI 개선 후 통합 테스트(`FT-TEST-013`)로 이관
+
 ### 테스트 환경 배포 검증 (2026-11-25 18:00 KST, `3a28b09`, 상세 [좌석 관리](seat-management.md) 12.6)
 
 - 배포 전: `server_stats` 17:50~17:52 방 0·연결 0, `/data` 파일 11-23 이후 미변경, 백업 SHA-256 일치·`integrity_check` ok
