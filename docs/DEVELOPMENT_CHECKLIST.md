@@ -91,6 +91,25 @@
 - 자동화 테스트 격리: 자동 테스트·E2E는 실제 테스트 사용자 데이터에 접근하지 않는다. 현재 서버 테스트는 임시/메모리 DB와 가짜 Supabase 주소, 브라우저 E2E(`scripts/test-seat-e2e.cjs`·`test-game-e2e.cjs`)는 `127.0.0.1` 서버·메모리 로비·테스트 토큰을 쓰고, 게임 E2E는 번들에 `supabase.co`·`railway.app`·`pages.dev`가 있으면 실패한다. 새 자동화도 이 격리를 따른다(테스트 서버·테스트 Supabase를 대상으로 하는 자동 스크립트 금지).
 - 배포 후 확인(스모크)은 기존 테스트 계정으로 최소 동작만 하고, 만든 방은 나가서 닫는다. 핸드를 진행하면 전적이 기록되므로 필요한 경우에만 한다.
 
+### 1.8 Git push와 배포 분리 (2026-11-26 00:13 사용자 결정, 근거 [decisions.md](decisions.md))
+
+- 원칙: Git commit·push는 어떤 브랜치든 배포와 독립이다. push는 배포를 일으키지 않으며, 실제 서비스 배포는 명시적 승인 후 정해진 명령으로만 한다.
+- Cloudflare Pages `friends-table-staging`: Git 연결은 유지(끊으면 다시 연결 불가, Direct Upload 전환도 불가)하고 Branch control에서 **Production 자동 배포 끔**, **Preview 브랜치 None**(사용자 설정, 2026-11-26 00:13 이전). 배포는 `wrangler pages deploy <dist> --project-name friends-table-staging --branch <고정 브랜치>`만 사용: 실사용 테스트 `fix-multiplayer-stability`, 운영 `deploy/web-staging`(운영은 별도 승인). `--branch` 생략 금지.
+- Railway 운영 `@boardgame/server`: 저장소(`main`) 연결은 유지, **자동 배포 끔**(2026-11-26 00:13 확인 "Auto deploy is disabled"). `main` 병합·push만으로는 운영이 바뀌지 않으므로 운영 반영은 별도 승인 후 수동 배포(방법은 실행 전 확인·기록).
+- Railway 실사용 테스트 `boardgame-server-test`: 소스 연결 없음, 기존처럼 깨끗한 worktree에서 ID를 명시한 `railway up`(승인 후)만.
+- PR 환경은 두 Railway 프로젝트 모두 꺼짐 유지. GitHub Actions(`check.yml`·`server-image.yml`)는 검사만 하며 배포하지 않는다.
+- 배포 전후 기록: 배포 전 현재 배포 ID를 확인하고, 배포 후 새 ID·커밋을 HANDOFF와 체크리스트에 남긴다. 자동 배포 설정을 다시 켜는 것은 별도 승인.
+- 이유: 개발 브랜치를 자유롭게 push(백업·리뷰)하면서도 운영과 친구들이 쓰는 실사용 테스트 환경이 의도치 않게 바뀌지 않게 한다. 특히 Git 브랜치 `fix/multiplayer-stability`의 자동 Preview 빌드는 실사용 테스트 URL과 같은 별칭(`fix-multiplayer-stability`)을 써서 덮어쓸 수 있었다(2026-11-23 `563519fd` 사례).
+- 확인 한계: Cloudflare 대시보드는 에이전트 브라우저 로그인 실패로 직접 읽지 못했다. 설정은 사용자 보고 기준이며, 2026-11-26 `feature/seat-management` push 뒤 Pages 배포 목록에 새 배포가 없는지로 간접 확인한다.
+- 기준 배포 ID(정책 적용 시점):
+
+  | 대상 | 배포 ID | 코드 | 방식 |
+  | --- | --- | --- | --- |
+  | Railway 운영 `Friends Table`/`@boardgame/server` | `31138bb5-8c6f-4026-a324-5b876b510be1` | `e230511` | GitHub 자동 배포(2026-11-23, 자동 배포 끄기 전) |
+  | Railway 실사용 테스트 `friends-table-mp-test`/`boardgame-server-test` | `e6a6ab8b-b39f-462e-aea1-cee2f46befbc` | `3a28b09` | CLI `railway up`(2026-11-25 17:55) |
+  | Pages 운영 `friends-table-staging.pages.dev`(브랜치 `deploy/web-staging`) | `8c79e8b3-8dd9-4e96-ac1d-3d282d3ab5fb` | `e230511` | 2026-11-23 |
+  | Pages 실사용 Preview `fix-multiplayer-stability` | `e35d3e5e-34f0-4013-ab45-a76977942beb` | `3a28b09` | `wrangler pages deploy --branch fix-multiplayer-stability`(2026-11-25 17:59) |
+
 ## 2. 현재 프로젝트 상태 (2026-11-23 17:45 KST)
 
 ### 2.1 확인된 구현 상태
@@ -168,6 +187,7 @@
 | [ ] | FT-OPS-006 | npm 감사 권고 분류·호환 수정안 | P3 | BACKLOG | 미지정 | — |
 | [ ] | FT-OPS-007 | PROJECT_STATUS 현황표 갱신 | P3 | READY | 미지정 | — |
 | [x] | FT-OPS-010 | 실사용 테스트 환경 고정·데이터 보존 정책 기록 | P1 | DONE | Claude Code | — |
+| [x] | FT-OPS-011 | Git push와 배포 분리(자동 배포 끄기·정책 기록) | P1 | DONE | 사용자(설정)·Claude Code(기록·확인) | — |
 | [ ] | FT-UI-001 | 액션 버튼–게임 로직 연결 분석·UI 변경 범위 결정 | P1 | BACKLOG | 미지정 | Phase 1 게이트 |
 | [ ] | FT-UI-002 | 디자인 방향·색상·토큰 정의(독자 디자인) | P1 | BACKLOG | 미지정 | FT-UI-001 |
 | [ ] | FT-UI-003 | 세로형 테이블·최대 6인 좌석 배치 | P1 | BACKLOG | 미지정 | FT-UI-002 |
@@ -568,6 +588,12 @@
 - 결과: decisions.md·본 체크리스트·HANDOFF에 기록. 배포 환경 변경·재배포 없음
 - 후속: 이후 모든 실사용 테스트 배포 절차는 1.7절을 선행 조건으로 확인
 
+### FT-OPS-011 · Git push와 배포 분리
+- 우선순위: P1 · 상태: DONE · 담당: 사용자(Cloudflare·Railway 설정 변경) / Claude Code(점검·기록·push 후 확인) · 2026-11-26 00:13 사용자 결정
+- 범위: Cloudflare Pages Production·Preview 자동 배포 끄기, Railway 운영 자동 배포 끄기, 테스트 Railway CLI 수동 유지, 정책·기준 배포 ID 기록(1.8절)
+- 확인: Railway 운영 설정 "Auto deploy is disabled"(00:13). Cloudflare 설정은 사용자 보고 기준(대시보드 직접 확인 불가), `feature/seat-management` push 후 Pages·Railway 배포 목록 무변화로 확인 — 결과는 HANDOFF·작업 이력
+- 후속: 운영 반영 절차(Railway 수동 배포 방법) 문서화는 첫 운영 배포 승인 때
+
 ### FT-TEST-012 · 좌석·재접속·리바이 실기기·Preview 검증
 - 우선순위: P1 · 상태: BACKLOG · 담당: 사용자(실기기) / Claude Code·Codex(배포 준비) · 선행: 테스트 배포 별도 승인(AGENTS.md 6절)
 - 절차·항목: [좌석 실사용 테스트 체크리스트](seat-playtest-checklist.md)(2인·4인·6인, 2026-11-25). 아래 범위 요약은 작성 당시 기록
@@ -581,6 +607,7 @@
 
 | 일시 (KST) | 작업자 | 내용 | 커밋 |
 | --- | --- | --- | --- |
+| 2026-11-26 00:20 | Claude Code | FT-OPS-011 Git push와 배포 분리 정책·기준 배포 ID 기록(1.8절, decisions.md, HANDOFF). 설정 변경은 사용자, 재배포 없음 | 정책 문서 커밋 |
 | 2026-11-25 23:25 | Claude Code | FT-OPS-010 실사용 테스트 환경 고정 정책 기록(1.7절, decisions.md, HANDOFF). 환경 변경·재배포 없음 | 문서 미커밋 |
 | 2026-11-25 14:30 | Claude Code(클라우드 세션 + 사용자 PC VM) | 배포 전 점검: FT-OPS-008(진단 로그·칩 감사) 구현, Windows Node 24 1차 결과 수집(4인 E2E 절전 중단), 이전↔새 SQLite 호환성 실험(테스트 DB 사본), 문서 갱신(room-lifecycle·web-device-checklist·PROJECT_STATUS·decisions·seat-management·testing·HANDOFF 추가), 실사용 체크리스트 추가. 서버 277·모바일 72·E2E 통과 | 미커밋 |
 | 2026-11-25 00:30 | Claude Code(클라우드 세션 + 사용자 PC VM) | 추가 정책 3건 구현: 끊김 2초 유예, 방 설정 리바이 최대 수량, 방장 본인 즉시 리바이(+요청 ID 중복 방지). 서버 271·모바일 72·tsc 0, Node 24 서버 271×3, 좌석 E2E 29/29·4인 E2E 통과. FT-TEST-012 등록. 문서 5종 갱신(HANDOFF는 추가만) | 미커밋 |

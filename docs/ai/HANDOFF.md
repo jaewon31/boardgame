@@ -8,6 +8,8 @@
 
 > **실사용 테스트 환경 고정(2026-11-25 23:21 KST 사용자 결정)**: 웹 `https://fix-multiplayer-stability.friends-table-staging.pages.dev` + Railway `friends-table-mp-test`/`boardgame-server-test` + 기존 테스트 Supabase + 기존 Volume `/data`·SQLite 경로. 이후 모든 실사용 테스트 배포는 이 환경을 재사용하고 계정·친구·전적을 보존한다. DB 초기화·Volume 삭제·Supabase 변경·URL 변경 금지, 자동화 테스트는 실데이터와 격리. 상세 [체크리스트](../DEVELOPMENT_CHECKLIST.md) 1.7절, [decisions.md](../decisions.md).
 
+> **Git push와 배포 분리(2026-11-26 00:13 KST 사용자 결정)**: push는 어떤 브랜치든 배포를 일으키지 않는다. Cloudflare Pages Production·Preview 자동 배포 끔, Railway 운영 자동 배포 끔, 테스트 Railway는 CLI 수동. 배포는 승인 후 `wrangler pages deploy … --branch <고정 브랜치>`·`railway up`(ID 명시)만. 상세 [체크리스트](../DEVELOPMENT_CHECKLIST.md) 1.8절.
+
 | 항목 | 값 |
 | --- | --- |
 | 작업본 | `C:\Users\jwseo\Desktop\boardgame` |
@@ -21,6 +23,22 @@
 
 ## 2. 현재 상태와 진행 중 작업
 
+- **Git push와 배포 분리 적용 (2026-11-26 00:20 KST, Claude Code, `FT-OPS-011` — 재배포·DB·변수 변경 없음)**
+  - 사용자가 Cloudflare Pages(Production 자동 배포 끔·Preview None)와 Railway 운영(자동 배포 끔)을 변경. Railway 운영 화면 "Auto deploy is disabled" 확인, Cloudflare는 대시보드 로그인 실패로 직접 확인 못 함(사용자 보고)
+  - 기준 배포 ID:
+  | 대상 | 배포 ID | 코드 | 방식 |
+  | --- | --- | --- | --- |
+  | Railway 운영 `Friends Table`/`@boardgame/server` | `31138bb5-8c6f-4026-a324-5b876b510be1` | `e230511` | GitHub 자동 배포(2026-11-23, 자동 배포 끄기 전) |
+  | Railway 실사용 테스트 `friends-table-mp-test`/`boardgame-server-test` | `e6a6ab8b-b39f-462e-aea1-cee2f46befbc` | `3a28b09` | CLI `railway up`(2026-11-25 17:55) |
+  | Pages 운영 `friends-table-staging.pages.dev`(브랜치 `deploy/web-staging`) | `8c79e8b3-8dd9-4e96-ac1d-3d282d3ab5fb` | `e230511` | 2026-11-23 |
+  | Pages 실사용 Preview `fix-multiplayer-stability` | `e35d3e5e-34f0-4013-ab45-a76977942beb` | `3a28b09` | `wrangler pages deploy --branch fix-multiplayer-stability`(2026-11-25 17:59) |
+  - 이후: 정책 문서 커밋 → `feature/seat-management` 첫 push(`-u origin`) → 배포 목록 무변화 확인(결과는 이 블록 아래 작업 기록·작업 이력)
+- **자동 배포 설정 점검 (2026-11-26 00:00 KST, Claude Code, 읽기 전용 — 설정 변경·재배포·push 없음; 00:13 사용자가 자동 배포를 꺼서 아래 위험은 해소, 이후 블록 참조)**
+  - **위험**: Cloudflare Pages `friends-table-staging`은 Git 연동(Git Provider Yes). Git 브랜치 `fix/multiplayer-stability`의 자동 Preview 빌드(`563519fd`, 11-23)가 실사용 테스트 URL과 **같은 별칭** `fix-multiplayer-stability`를 씀(슬래시→하이픈). 자동 배포를 끄기 전에는 이 브랜치를 push하지 말 것
+  - Pages 배포 기록(wrangler 목록): Production `deploy/web-staging` `8c79e8b3`(`e230511`, 11-23), Preview 자동 빌드 `main`·`fix/multiplayer-stability`(11-23) → 운영 외 브랜치 자동 빌드 켜진 것으로 보임. 브랜치 제어·Git 빌드 환경변수는 대시보드 로그인 실패로 미확인
+  - Railway 운영 `@boardgame/server`: 저장소 `jaewon31/boardgame` `main` 연결, push 자동 배포 켜짐, Wait for CI 꺼짐, watch paths 있음, 실행 중 `e230511`(11-23 via GitHub). 테스트 `boardgame-server-test`: 소스 연결 없음. 두 프로젝트 PR 환경 꺼짐. GitHub Actions는 검사만
+  - Cloudflare 문서: Git 연동 프로젝트는 Direct Upload로 전환 불가지만, Branch control에서 Production 자동 배포를 끄고 Preview를 None으로 하면 push가 빌드를 만들지 않고 Wrangler 수동 배포는 계속 가능
+  - 사용자 목표 정책(승인 대기): Pages Production·Preview 자동 배포 끄기, Railway 운영 자동 배포 끄기, 테스트 Railway는 CLI 수동 유지, push와 배포 분리
 - **실사용 테스트 환경 고정 정책 기록 (2026-11-25 23:25 KST, Claude Code, `FT-OPS-010`, 문서만 — 환경 변경·재배포 없음)**
   - 현재 배포 상태 그대로 유지: Railway `e6a6ab8b`(`3a28b09`), Preview `e35d3e5e`
   - 다음 실사용 배포 전 필수: 체크리스트 1.7절 확인 → 방 0개 → SQLite 백업 2회 해시·`integrity_check` → 같은 프로젝트·서비스·Preview 브랜치에만 배포(좌석 관리 12.3·12.6 절차)
