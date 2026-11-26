@@ -363,3 +363,11 @@ ChipLedgerEntry.extra?: number    방을 떠날 때 남은 pendingRebuy
 - 볼륨이 붙은 서비스는 배포가 겹치지 않으므로 재시작 동안 서버 전체가 멈춘다. 빌드는 이전 컨테이너가 돌아가는 동안 진행되고, 중단은 이전 컨테이너 종료 → 새 컨테이너 시작 → healthcheck 통과까지다. 시간은 아직 측정하지 않았다(첫 실제 배포에서 로그 시각으로 측정·기록).
 - 그동안 모든 WebSocket이 끊기고 클라이언트는 재연결한다. 방·핸드는 복원한 체크포인트 시점으로 돌아가며, 그 뒤 생긴 방·칩 변화와 그 뒤 기록된 전적 핸드는 사라진다(방 0개일 때 받은 백업이면 방 손실 없음). 재시작 직후 30초 복구 창 동안 자동 체크/폴드는 하지 않는다.
 - Supabase(계정·로그인)와 Cloudflare 웹은 영향 없음.
+
+### 12.6 테스트 환경 배포 기록 (2026-11-25 17:52 사용자 승인, 커밋 `3a28b09`)
+
+- 대상: Railway `friends-table-mp-test` / 환경 `production`(테스트 프로젝트 내부) / `boardgame-server-test`, Cloudflare Pages `friends-table-staging` Preview 브랜치 `fix-multiplayer-stability`. 운영 Railway·운영 Pages 별칭·운영 Supabase·Railway 변수·Supabase 설정 변경 없음, Git push 없음.
+- 결과: 테스트 Railway 배포 `e6a6ab8b-b39f-462e-aea1-cee2f46befbc`(CLI, 17:55:35 KST 업로드, 17:56:03 `server_started durable:true`), Cloudflare Preview 배포 `e35d3e5e`(별칭 `https://fix-multiplayer-stability.friends-table-staging.pages.dev`, 번들 `index-444bd7d0…js`).
+- 방법: 깨끗한 worktree `C:\Users\jwseo\Desktop\boardgame-seat-3a28b09`(detached `3a28b09`, 미커밋 문서·007 미포함) → `railway link`(ID 명시)·`railway status` 확인 → `railway up --project/--environment/--service`(ID 명시, `--ci`) → 같은 worktree에서 `npm ci`·`node --env-file=<원본>/apps/mobile/.env.preview.local scripts/build-pages.cjs` → 결과물 검사 → `wrangler@4.166.0 pages deploy … --branch fix-multiplayer-stability --commit-hash 3a28b09…`. 실행은 사용자 PC에서 `.qa-web/deploy-3a28b09/{1-prepare,2-server-deploy,3-web-build,4-web-deploy}.cmd`(로그 `*.txt`).
+- 중단 시간: 이전 컨테이너 `Stopping Container` 17:56:01 → 새 `server_started` 17:56:03(약 2초, 방 0개라 영향 없음). 빌드는 이전 컨테이너가 동작하는 동안 진행.
+- 인증 정책 기록 정정: 토큰 없는 요청은 `AUTH_REQUIRED`(`recoverable:false`) 후 **4003으로 연결 종료**(`290cb8a`와 같은 코드). 이전 문서의 "연결 유지" 표현은 부정확했다.

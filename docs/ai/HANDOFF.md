@@ -46,6 +46,13 @@
   - 다음 실사용 배포 전 필수: 체크리스트 1.7절 확인 → 방 0개 → SQLite 백업 2회 해시·`integrity_check` → 같은 프로젝트·서비스·Preview 브랜치에만 배포(좌석 관리 12.3·12.6 절차)
   - 자동화 격리 현황: 서버 테스트(임시/메모리 DB·가짜 Supabase 주소), 브라우저 E2E(127.0.0.1·메모리 로비·테스트 토큰, 게임 E2E는 원격 URL 포함 시 실패) — 실데이터 접근 없음
   - 참고: 18:00 배포 후 확인은 기존 테스트 계정(테스트A)으로 방 생성·착석·리바이 500·나가기만 했고 핸드는 진행하지 않아 전적 변화 없음
+- **테스트 환경 배포 완료 (2026-11-25 18:00 KST, Claude Code, 사용자 승인 17:52 — 운영·push·변수·Supabase 변경 없음)**: 상세 [좌석 관리](../seat-management.md) 12.6, [테스트](../testing.md)
+  - 서버: Railway `friends-table-mp-test`/`production`/`boardgame-server-test` 배포 `e6a6ab8b-b39f-462e-aea1-cee2f46befbc`(`3a28b09`, CLI) Active, `durable:true`, `/health` 200, 중단 약 2초(17:56:01→03). 이전 배포 `6c7b4f77`(`290cb8a`)은 Removed — 이미지 보존 시한(약 11-26 14:17) 안에는 대시보드 Rollback 가능
+  - 웹: Cloudflare Preview `e35d3e5e`, 별칭 `https://fix-multiplayer-stability.friends-table-staging.pages.dev`, 번들 `index-444bd7d0…`. 테스트 WSS·Supabase만, `/join/*` 200
+  - 확인: Origin(Preview 허용·운영/임의 거부), 무토큰 `AUTH_REQUIRED`→4003 종료(기존과 동일, 이전 "연결 유지" 기록 정정), 1인 Preview 동작(방 생성·착석·한도 차단·방장 리바이·일어나기·나가기), 로그 `rebuy`·`seat_released` 해시만, error·warn 0
+  - 워크트리 `C:\Users\jwseo\Desktop\boardgame-seat-3a28b09`(detached `3a28b09`, `node_modules`·`dist-web` 생성됨, railway link 됨) — 삭제는 별도 승인. 실행 스크립트·로그 `.qa-web/deploy-3a28b09/`
+  - 관찰: 운영 Pages(`friends-table-staging.pages.dev`) 번들이 11-23 기록(`794ef1a5…`)이 아니라 `index-4aff6450…`(= 11-22 `290cb8a` 운영 값 빌드, 운영 WSS·운영 Supabase, 좌석 기능 없음)로 바뀌어 있음 → 이 세션 밖에서 운영 웹 배포가 있었던 것으로 보임(이번 작업과 무관, 확인 필요). 기존 워크트리 `boardgame-mp-test`는 prunable
+  - 다음: `FT-TEST-012` 실기기 2인 이상 플레이테스트([체크리스트](../seat-playtest-checklist.md)), Windows 최종 코드 테스트 재실행
 - **SQLite 백업·복구 리허설 (2026-11-25 17:15 KST, Claude Code, `FT-OPS-009` DONE — Railway DB·변수·배포 변경 없음)**: 상세 [좌석 관리](../seat-management.md) 12.5
   - 체크포인트 DB = DELETE + EXCLUSIVE 잠금 → 실행 중 백업 API·`VACUUM INTO` 불가, 방 0개일 때 파일 복사. 전적 DB = DELETE 일반 잠금 → 실행 중 백업 API·`VACUUM INTO` 가능. `/data`에 WAL/SHM 없음, 저널 헤더 0
   - 테스트 `/data` 내려받기(16:4x, 방 0개, 각 2회 해시 동일): `boardgame.sqlite` `4e10c0a3…0845`·`stats.sqlite` `bf4bc263…4ef8`. 사용자가 `.qa-web/db-rehearsal/`(git 무시)로 복사·해시 확인. 저널 1회·중복 내려받기는 사용자 Downloads에 남음
@@ -53,6 +60,14 @@
   - 실행 중 제자리 덮어쓰기 = DB 손상 재현 → 복구는 새 경로 업로드 + `STATE_DB_PATH`·`STATS_DB_PATH` 전환 재시작으로 확정(decisions.md)
   - 미검증: Railway Files Upload 바이트 보존, Railway에서 경로 전환 재시작, 재시작 중단 시간
   - 다음: 사용자 승인 시 배포 계획(위 16:35 블록·좌석 관리 12.3) 실행. 배포 직전 다시 방 0개·백업 해시 확인
+- **테스트 환경 배포 준비 점검 (2026-11-25 16:35 KST, Claude Code, 읽기 전용 — 업로드·배포·push·변수·DB 변경 없음)**: 대상 커밋 `3a28b09`(`feature/seat-management`, 로컬 커밋, 미푸시)
+  - Railway 테스트: 프로젝트 `friends-table-mp-test` `c40d19c2-837c-46d0-adab-c1c38932f26c`, 서비스 `boardgame-server-test` `31afe494-f210-420d-ab07-23d561d5e27e`, 환경 `production`(테스트 프로젝트 안의 기본 환경 이름, 운영 아님) `bef23aac-a586-499e-8dec-3236c31a2cae`. 소스 연결 없음(CLI 전용). 활성 배포 `6c7b4f77`(= `290cb8a`, 11-23 14:17 CLI). 변수 10개(이름만 확인, staged 없음), 새 커밋에 필요한 신규 변수 없음(`SEAT_EVENT_LOG` 기본 켜짐)
+  - 볼륨 `boardgame-server-test-volume` `52bb0bfa-…` Mount `/data`(5 GB). `/data`: `boardgame.sqlite` 88.0 KB·`-journal` 16.5 KB(11-23 19:07), `stats.sqlite` 72.0 KB(11-23 18:59). 볼륨 백업 0개·Hobby 플랜 생성 불가 → Files 브라우저 다운로드로 백업
+  - 활성 방: `server_stats` 16:31·16:32 KST `rooms 0 · connections 0`. `/health` 200 ok
+  - Cloudflare Preview: 별칭 `fix-multiplayer-stability.friends-table-staging.pages.dev` 번들 `index-f3657254…`(= `290cb8a` 빌드), 테스트 WSS·테스트 Supabase, 좌석/리바이 코드 없음, `/join/*` 200. Cloudflare 대시보드는 내장 브라우저에 로그인 안 돼 있어 배포 목록 미확인
+  - Preview env `apps/mobile/.env.preview.local`: 테스트 WSS·테스트 Supabase URL·키(값 미출력)·`CF_PAGES_URL`=Preview 별칭
+  - `290cb8a..3a28b09`: 서버 17·웹 11·shared 2 파일 변경 → 서버·웹 모두 재배포 필요. Dockerfile·package·lock·`.dockerignore`·`build-pages.cjs`·`public/` 변경 없음. 기존 worktree `boardgame-mp-test`는 prunable(폴더 없음)
+  - 주의: 이전 이미지 Railway Rollback은 Hobby 보존 72시간 → `6c7b4f77`은 약 11-26 14:17 KST까지만 가능(이후 `290cb8a` worktree 재빌드)
 - **좌석 관리 브랜치 배포 전 점검 (2026-11-25 14:30 KST, Claude Code, 전부 미커밋·미배포)**
   - 추가 구현: 좌석 진단 로그 6종·칩 총합 감사(`FT-OPS-008`, `apps/server/src/seatEvents.ts`). 리바이 정책(기본 한도 = 시작 칩, 횟수 제한 없음 등) 사용자 확정
   - 검증: 서버 277/277(VM Node 22·클라우드 Node 24), 모바일 72/72, tsc 0(VM), 좌석 E2E 29/29·4인 E2E 통과(클라우드). Windows Node 24.19.0 1차: 타입·서버 271·모바일 72·좌석 E2E 통과, 4인 E2E는 PC 절전으로 중단(종료 1) → **최종 코드로 Windows 재실행 필요**(`.qa-web/seat-check/run-windows-checks-ft007.cmd`를 PC 깨운 상태에서 실행)
@@ -144,7 +159,7 @@
   - 남음: ① ~~Supabase Anonymous Sign-Ins 활성화~~ 완료(11-23 확인) ② ~~테스트 Railway Supabase 변수~~ 완료(11-23 13:23) ③ ~~첫 배포~~ 완료(14:17) ④ ~~health·Origin·WS 검증~~ 완료(14:30) ⑤ ~~Preview env·재빌드·검사~~ 완료 ⑥ ~~Cloudflare Preview 배포~~ 완료(사용자) ⑦ 2인·4인 E2E 완료(위) → 실기기 테스트 대기 / (원 계획) Preview env 파일을 **테스트 서버 WSS·테스트 Supabase 값**으로 다시 준비(현재 `.env.preview.local`은 운영 값) → 재빌드·결과물 검사 ⑥ Cloudflare Preview 배포 ⑦ 다중 브라우저 테스트 ⑧ 중지·재시작 검증([절차](../deployment-workflow.md) 6절, 검증 전 실행 금지)
   - 결정(2026-11-22 사용자): 테스트 환경은 삭제하지 않고 재사용. Preview 별칭은 `fix-multiplayer-stability` 유지(브랜치명·URL 변경 없음). Railway 테스트 프로젝트 설명의 "Delete after test" → "Reusable Preview/Staging environment" 변경 승인·**완료**(아래 시각 정리 참조, 운영 프로젝트 미변경)
   - 남은 결정: draft 007을 정식 migration으로 승격할지(파일 이동 별도 승인)
-  - 마지막 테스트 배포 커밋: 서버 없음 / 웹 없음(아직 배포 안 함)
+  - 마지막 테스트 배포 커밋: ~~서버 없음 / 웹 없음~~ → 2026-11-25 18:00 서버·웹 모두 `3a28b09`(아래 2절 맨 위 블록)
 
 - **완료**: AI 교대 개발 문서(`e3d5992`), C1 운영 환경 접근 정책(`903a7dd`, `AGENTS.md` 제목 계층·끝 줄바꿈만 정리), C2 기존 Railway·Supabase 재사용 계획(`a1505a2`, CI·env 예시·runbook·문서 링크, runbook 검증 결과는 "로컬 검증 미실행"). 이전 미커밋 6개는 모두 C1·C2에 원문대로 포함됨.
 - **이 브랜치의 정리 커밋**: 본 문서 갱신, CI push 트리거에 `claude/**`·`fix/**`·`feat/**`·`refactor/**` 추가(기존 `main`, `codex/**` 유지, 검사 로직 변경 없음). CI 추가 전에는 `fix/**` push에 CI가 돌지 않았다.

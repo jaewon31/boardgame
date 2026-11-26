@@ -602,10 +602,11 @@
 - 후속: 운영 반영 절차(Railway 수동 배포 방법) 문서화는 첫 운영 배포 승인 때
 
 ### FT-TEST-012 · 좌석·재접속·리바이 실기기·Preview 검증
-- 우선순위: P1 · 상태: BACKLOG · 담당: 사용자(실기기) / Claude Code·Codex(배포 준비) · 선행: 테스트 배포 별도 승인(AGENTS.md 6절)
+- 우선순위: P1 · 상태: READY(2026-11-25 18:00 테스트 배포 완료: Railway `e6a6ab8b`, Preview `e35d3e5e`, 커밋 `3a28b09`) · 담당: 사용자(실기기) / Claude Code·Codex(배포 준비) · 이전 선행: 테스트 배포 별도 승인(AGENTS.md 6절)
 - 절차·항목: [좌석 실사용 테스트 체크리스트](seat-playtest-checklist.md)(2인·4인·6인, 2026-11-25). 아래 범위 요약은 작성 당시 기록
 - 범위: 테스트 Railway·Cloudflare Preview에서 실제 기기 2대 이상으로 ① 좌석 선택·승인 ② 연결 끊김 2초 유예와 자동 체크/폴드(새로고침·앱 백그라운드·네트워크 끊김) ③ 3분 이내 같은 기기·다른 기기 복구 ④ 3분 경과 후 핸드 종료 뒤 해제 ⑤ 일어서기·재착석 ⑥ 리바이 요청·승인·거절, 방장 즉시 리바이, 방 설정 리바이 최대 수량 ⑦ 모바일 키보드가 칩 추가 입력창·방 설정 입력을 가리지 않는지
 - 완료 조건: 위 항목 실기기 확인 기록, 오류 로그 0, 칩 총합 이상 없음
+- 검증 결과: 1인 기본 동작만 Preview에서 확인(방 생성·착석·한도 초과 차단·방장 리바이·일어나기, 서버 로그 error 0 — [테스트](testing.md)). 2인 이상·실기기 항목 미착수
 - 검증 결과: 미착수
 
 ---
@@ -616,6 +617,7 @@
 | --- | --- | --- | --- |
 | 2026-11-26 00:20 | Claude Code | FT-OPS-011 Git push와 배포 분리 정책·기준 배포 ID 기록(1.8절, decisions.md, HANDOFF). 설정 변경은 사용자, 재배포 없음 | 정책 문서 커밋 |
 | 2026-11-25 23:25 | Claude Code | FT-OPS-010 실사용 테스트 환경 고정 정책 기록(1.7절, decisions.md, HANDOFF). 환경 변경·재배포 없음 | 문서 미커밋 |
+| 2026-11-25 18:00 | Claude Code(클라우드 세션 + 사용자 PC Windows·VM) | `3a28b09` 테스트 환경 배포(사용자 승인): Railway `e6a6ab8b`, Cloudflare Preview `e35d3e5e`. 서버·Origin·인증·웹 결과물·Preview 기본 동작 확인, FT-TEST-012 READY | `3a28b09`(배포), 문서 미커밋 |
 | 2026-11-25 17:15 | Claude Code(클라우드 세션 + 사용자 PC VM) | FT-OPS-009 SQLite 백업·복구 리허설 통과(테스트 DB 사본, `3a28b09` 서버). 복구 = 새 경로 + 경로 변수 전환으로 확정. Railway·Cloudflare 변경 없음 | 미커밋 문서 |
 | 2026-11-25 14:30 | Claude Code(클라우드 세션 + 사용자 PC VM) | 배포 전 점검: FT-OPS-008(진단 로그·칩 감사) 구현, Windows Node 24 1차 결과 수집(4인 E2E 절전 중단), 이전↔새 SQLite 호환성 실험(테스트 DB 사본), 문서 갱신(room-lifecycle·web-device-checklist·PROJECT_STATUS·decisions·seat-management·testing·HANDOFF 추가), 실사용 체크리스트 추가. 서버 277·모바일 72·E2E 통과 | 미커밋 |
 | 2026-11-25 00:30 | Claude Code(클라우드 세션 + 사용자 PC VM) | 추가 정책 3건 구현: 끊김 2초 유예, 방 설정 리바이 최대 수량, 방장 본인 즉시 리바이(+요청 ID 중복 방지). 서버 271·모바일 72·tsc 0, Node 24 서버 271×3, 좌석 E2E 29/29·4인 E2E 통과. FT-TEST-012 등록. 문서 5종 갱신(HANDOFF는 추가만) | 미커밋 |

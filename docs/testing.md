@@ -62,6 +62,16 @@ node scripts/test-game-e2e.cjs
 
 `apps/server/test/seats.test.ts`(좌석 선택·승인), `seat-hold.test.ts`(3분 보존·칩 잔액), `reconnect-turn.test.ts`(다른 기기 인계·늦은 메시지 차단·끊긴 차례 즉시 처리·`RECONNECT_MS` 하한), `rebuy.test.ts`(리바이 C안·다음 핸드 참여), `grace-limit.test.ts`(연결 끊김 2초 유예·재접속 경쟁·재시작, 방 설정 리바이 최대 수량, 방장 본인 리바이, 요청 ID 중복 방지), `seat-events.test.ts`(좌석 진단 로그 6종·민감 정보 배제·상한·칩 총합 감사). 공용 하네스 `test/support/seat-harness.ts`는 `test/*.test.ts` 패턴에 포함되지 않는다. 서버 전체 명령(`node --test test/*.test.ts`)에 함께 실행된다.
 
+### 테스트 환경 배포 검증 (2026-11-25 18:00 KST, `3a28b09`, 상세 [좌석 관리](seat-management.md) 12.6)
+
+- 배포 전: `server_stats` 17:50~17:52 방 0·연결 0, `/data` 파일 11-23 이후 미변경, 백업 SHA-256 일치·`integrity_check` ok
+- 서버: 테스트 Railway 배포 `e6a6ab8b-b39f-462e-aea1-cee2f46befbc`(CLI, 17:55:35 KST 업로드, 17:56:03 `server_started durable:true`). Active, `/health` 200, `durable:true`, 볼륨 `/data` 연결 유지
+- Origin·인증: Preview 별칭 Origin → WS 열림·토큰 없는 `currentRoom`에 `AUTH_REQUIRED` 후 4003 종료 / 운영 Pages Origin·테스트 서버 자체 Origin → 업그레이드 거부(1006). 운영 Origin 검사는 정적 파일(`/favicon.ico`)에서만 실행(운영 앱 미실행)
+- 웹 결과물: 22파일, `checkPages` 통과, 테스트 WSS·테스트 Supabase URL·키만 포함(운영 값 0), 기능 코드(`standUp`·`requestRebuy`·`resolveRebuyRequest`·`maxRebuy`) 포함, E2E 식별자 0, `sb_secret_`·`localhost:9999`는 Supabase 라이브러리 상수
+- Preview 실제 동작(내장 브라우저, 테스트 계정 1개): 초기화·익명 세션(테스트 Supabase)·WSS "연결됨" → 방 생성 → 1번 좌석 착석 → 칩 추가 1,500은 "1회 최대 1,000칩" 안내로 차단 → 500 방장 즉시 지급(보유 1,500) → 일어나기(칩 1,500 유지) → 방 나가기. `/join/<코드>` 200(앱 반환), 없는 자산 404. 브라우저 콘솔 오류 0
+- 서버 로그: `rebuy`(phase host_granted, amount 500)·`seat_released`(reason voluntary, stack 1500) 출력, 해시 식별자만(방 코드·닉네임 없음), error·warn 0
+- 미검증: 2인 이상(좌석 승인·리바이 승인·재접속·2초 유예 자동 처리·다른 기기 인계·칩 감사 정산), 실기기 → `FT-TEST-012`
+
 ### SQLite 백업·복구 리허설 (2026-11-25 17:15 KST, 테스트 Railway DB 사본, 대상 코드 `3a28b09`)
 
 - 방법·절차·중단 범위 상세: [좌석 관리](seat-management.md) 12.5. Railway DB·변수·배포 변경 없음, 복원·서버 실행은 사용자 PC VM 격리 임시 폴더.
